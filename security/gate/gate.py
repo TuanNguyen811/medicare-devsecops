@@ -3,9 +3,14 @@
 Reads the SARIF files written by the scanners (and, in ai-assisted mode, the AI agent's
 report.json) and decides whether the PR is blocked. Contract: roadmap "Hợp đồng 2".
 
-    python security/gate/gate.py --sarif-dir sarif --changed-files changed.txt \
+    python security/gate/gate.py --sarif-dir sarif (--base SHA --head SHA | --changed-files F) \
         --mode traditional|ai-assisted [--report out/report.json] [--agent-exit N] \
         [--labels a,b] [--workspace DIR] [--summary FILE]
+
+--base/--head: changed files = git diff from the merge base (run inside the repo).
+--changed-files: one path per line, or NUL-separated (git diff --name-only -z).
+Gitleaks findings skip the changed-file filter, so Gitleaks must scan the PR's commits only
+(git mode with --log-opts BASE..HEAD), never the whole tree, when a filter is used.
 
 Exit code 1 = blocked, 0 = pass.
 """
@@ -14,9 +19,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import unquote
 
 SEVERITIES = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
 BLOCKING = {"HIGH", "CRITICAL"}
@@ -24,6 +32,18 @@ REVIEWED_LABEL = "security-reviewed"
 AGENT_CONFIDENCE = 0.7
 _LEVELS = {"error": "HIGH", "warning": "MEDIUM", "note": "LOW", "none": "LOW"}
 _WORKSPACE_PREFIXES = ("/github/workspace/",)
+# Tools that scan the PR's commits (not the tree): the path is the one of the commit that added
+# the finding, which a later commit may rename or delete, so the tree diff must not filter it.
+COMMIT_SCOPED = frozenset({"gitleaks"})
+_TF_SUFFIXES = (".tf", ".tfvars", ".tf.json")
+# Changing these needs the security-reviewed label: scanner config, the gate, the workflows,
+# and every ignore file a scanner would honour.
+SENSITIVE_PREFIXES = (".github/", "security/")
+SUPPRESSION_FILES = frozenset({
+    ".semgrepignore", ".trivyignore", ".trivyignore.yaml", "trivy.yaml", "trivy.yml",
+    ".gitleaksignore", ".gitleaks.toml", ".checkov.yaml", ".checkov.yml", ".bandit",
+    "zizmor.yml", "zizmor.yaml",
+})
 
 
 class SarifError(ValueError):
@@ -37,6 +57,8 @@ class Finding:
     severity: str
     file: str
     line: int
+    # Other files on the finding (related locations, code-flow steps); not part of the id.
+    related: tuple[str, ...] = field(default=(), compare=False, repr=False)
 
     @property
     def id(self) -> str:
@@ -53,7 +75,7 @@ class Decision:
 
 def normalize_path(uri: str, workspace: str | None) -> str:
     path = uri.replace("\\", "/")
-    path = path.removeprefix("file://")
+    path = unquote(path.removeprefix("file://"))  # SARIF uris are percent-encoded
     prefixes = list(_WORKSPACE_PREFIXES)
     if workspace:
         prefixes.insert(0, workspace.replace("\\", "/").rstrip("/") + "/")
@@ -129,6 +151,16 @@ def _location(result: dict, workspace: str | None) -> tuple[str, int]:
     return "", 0
 
 
+def _related_files(result: dict, workspace: str | None) -> set[str]:
+    physical = [(loc or {}).get("physicalLocation") for loc in result.get("relatedLocations") or []]
+    for flow in result.get("codeFlows") or []:
+        for thread in (flow or {}).get("threadFlows") or []:
+            for step in (thread or {}).get("locations") or []:
+                physical.append(((step or {}).get("location") or {}).get("physicalLocation"))
+    uris = (((p or {}).get("artifactLocation") or {}).get("uri") for p in physical)
+    return {normalize_path(uri, workspace) for uri in uris if uri}
+
+
 def load_sarif(path: Path, tool: str, workspace: str | None) -> list[Finding]:
     try:
         doc = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -141,7 +173,9 @@ def load_sarif(path: Path, tool: str, workspace: str | None) -> list[Finding]:
         for result in run.get("results") or []:
             rule_id, rule = _rule_for(result, tool_meta)
             file, line = _location(result, workspace)
-            findings.append(Finding(tool, rule_id, severity_of(result, rule, tool), file, line))
+            related = tuple(sorted(_related_files(result, workspace) - {file}))
+            findings.append(Finding(tool, rule_id, severity_of(result, rule, tool), file, line,
+                                    related))
     return findings
 
 
@@ -158,9 +192,50 @@ def load_all(sarif_dir: Path, workspace: str | None) -> tuple[list[Finding], lis
     return findings, errors
 
 
+def changed_from_git(base: str, head: str, repo: str | Path = ".") -> set[str]:
+    """Files the PR changed: diff from the merge base of base and head (three dots), so commits
+    that landed on main after the PR branched are not counted. Renames count as both paths."""
+    if base.startswith("-") or head.startswith("-"):
+        raise ValueError("base/head must be commits, not options")
+    out = subprocess.run(
+        ["git", "-C", str(repo), "-c", "core.quotePath=false", "diff", "--name-only",
+         "--no-renames", "-z", f"{base}...{head}"],
+        check=True, capture_output=True,
+    ).stdout
+    return {p for p in out.decode("utf-8").split("\0") if p}
+
+
+def _read_changed(path: str) -> set[str]:
+    raw = Path(path).read_text(encoding="utf-8")
+    names = raw.split("\0") if "\0" in raw else [x.strip() for x in raw.splitlines()]
+    return {x.replace("\\", "/") for x in names if x}
+
+
+def _tf_dir(path: str) -> str | None:
+    return posixpath.dirname(path) if path.endswith(_TF_SUFFIXES) else None
+
+
 def filter_changed(findings: list[Finding], changed: set[str]) -> list[Finding]:
-    """Keep findings in files the PR touched; location-less findings always stay."""
-    return [x for x in findings if x.file == "" or x.file in changed]
+    """Keep the findings the PR can have caused:
+    - location-less findings, and findings of commit-scoped tools (Gitleaks);
+    - any location (primary, related, code-flow step) in a changed file;
+    - a Terraform finding when any file of the same module directory changed (Checkov
+      evaluates variables, so editing variables.tf surfaces findings in main.tf)."""
+    tf_dirs = {d for d in map(_tf_dir, changed) if d is not None}
+
+    def keep(x: Finding) -> bool:
+        if x.file == "" or x.tool in COMMIT_SCOPED:
+            return True
+        if x.file in changed or any(p in changed for p in x.related):
+            return True
+        return _tf_dir(x.file) in tf_dirs
+
+    return [x for x in findings if keep(x)]
+
+
+def sensitive_paths(changed: set[str]) -> list[str]:
+    return sorted(p for p in changed if p.startswith(SENSITIVE_PREFIXES)
+                  or posixpath.basename(p) in SUPPRESSION_FILES)
 
 
 def _traditional(findings: list[Finding], mode_used: str) -> Decision:
@@ -176,6 +251,7 @@ def decide(
     labels: set[str],
     agent_exit: int | None,
     errors: list[str],
+    changed: set[str] | None = None,
 ) -> Decision:
     if mode != "ai-assisted":
         decision = _traditional(findings, "traditional")
@@ -186,6 +262,15 @@ def decide(
     if errors:
         decision.block = True
         decision.notes.append("Không đọc được SARIF: " + ", ".join(errors))
+    sensitive = sensitive_paths(changed or set())
+    if sensitive and REVIEWED_LABEL in labels:
+        decision.notes.append(f"PR sửa cấu hình bảo mật/pipeline, đã có label `{REVIEWED_LABEL}`: "
+                              + ", ".join(sensitive))
+    elif sensitive:
+        decision.block = True
+        decision.blocking += [f"policy:{p}" for p in sensitive]
+        decision.notes.append(f"PR sửa cấu hình bảo mật/pipeline: cần label `{REVIEWED_LABEL}` "
+                              "sau khi người review bảo mật đã xem.")
     return decision
 
 
@@ -194,14 +279,16 @@ def _ai_assisted(findings: list[Finding], report: dict, labels: set[str]) -> Dec
     entries = [e for e in report.get("findings") or [] if isinstance(e, dict)]
     for entry in entries:
         for fid in entry.get("finding_ids") or []:
-            verdicts[fid] = entry
+            previous = verdicts.get(fid)
+            if previous is None or previous.get("verdict") == "FP":  # any non-FP verdict wins
+                verdicts[fid] = entry
     decision = Decision(False, "ai-assisted")
     for item in findings:
         if item.severity not in BLOCKING:
             continue
         entry = verdicts.get(item.id)
         verdict = (entry or {}).get("verdict")
-        if entry is None or verdict in ("TP", "NEEDS_REVIEW") or verdict != "FP" or item.severity == "CRITICAL" and REVIEWED_LABEL not in labels:
+        if verdict != "FP" or (item.severity == "CRITICAL" and REVIEWED_LABEL not in labels):
             decision.blocking.append(item.id)
         else:
             decision.notes.append(f"Agent kết luận FP: {item.id}")
@@ -260,6 +347,8 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--sarif-dir", default="sarif")
     p.add_argument("--changed-files")
+    p.add_argument("--base")
+    p.add_argument("--head")
     p.add_argument("--mode", choices=("traditional", "ai-assisted"), default="traditional")
     p.add_argument("--report")
     p.add_argument("--agent-exit", type=int)
@@ -268,17 +357,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--summary")
     args = p.parse_args(argv)
 
+    if bool(args.base) != bool(args.head):
+        p.error("--base and --head go together")
     findings, errors = load_all(Path(args.sarif_dir), args.workspace)
-    if args.changed_files:
-        changed = {
-            line.strip().replace("\\", "/")
-            for line in Path(args.changed_files).read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        }
+    changed = None
+    if args.base:
+        changed = changed_from_git(args.base, args.head)
+    elif args.changed_files:
+        changed = _read_changed(args.changed_files)
+    if changed is not None:
         findings = filter_changed(findings, changed)
     labels = {x.strip() for x in args.labels.split(",") if x.strip()}
     decision = decide(findings, mode=args.mode, report=_read_report(args.report), labels=labels,
-                      agent_exit=args.agent_exit, errors=errors)
+                      agent_exit=args.agent_exit, errors=errors, changed=changed)
     summary = render_summary(decision, findings)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # same bytes on Linux CI and Windows dev

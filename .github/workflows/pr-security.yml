@@ -64,7 +64,8 @@ jobs:
         run: |
           source security/tool-versions.env
           mkdir -p sarif
-          uvx --from "semgrep==${SEMGREP_VERSION}" semgrep scan --metrics off \
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "semgrep==${SEMGREP_VERSION}" semgrep scan \
+            --metrics off --disable-nosem \
             --config p/python --config p/owasp-top-ten --config security/semgrep/medicare.yml \
             --baseline-commit "$BASE_SHA" --sarif --output sarif/semgrep.sarif app
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -96,8 +97,8 @@ jobs:
         run: |
           source security/tool-versions.env
           mkdir -p sarif
-          uvx --from "bandit[sarif]==${BANDIT_VERSION}" bandit -r app/medicare \
-            -f sarif -o sarif/bandit.sarif --exit-zero
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "bandit[sarif]==${BANDIT_VERSION}" \
+            bandit -r app/medicare --ignore-nosec -f sarif -o sarif/bandit.sarif --exit-zero
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sarif-bandit
@@ -164,7 +165,7 @@ jobs:
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ steps.day.outputs.day }}
-      - name: Trivy (dependencies from app/uv.lock)
+      - name: Trivy (every dependency manifest in the repo, e.g. app/uv.lock)
         run: |
           mkdir -p sarif
           "$RUNNER_TEMP/tools/trivy" fs --scanners vuln --skip-dirs .git \
@@ -198,7 +199,7 @@ jobs:
         run: |
           mkdir -p sarif
           "$RUNNER_TEMP/tools/gitleaks" git --log-opts="${BASE_SHA}..${HEAD_SHA}" \
-            --config security/gitleaks.toml --redact --exit-code 0 \
+            --config security/gitleaks.toml --ignore-gitleaks-allow --redact --exit-code 0 \
             --report-format sarif --report-path sarif/gitleaks.sarif .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -229,14 +230,16 @@ jobs:
         run: |
           source security/tool-versions.env
           mkdir -p sarif checkov-out
-          uvx --from "checkov==${CHECKOV_VERSION}" checkov -d . --config-file security/checkov.yaml \
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "checkov==${CHECKOV_VERSION}" \
+            checkov -d . --config-file security/checkov.yaml \
             -o sarif --output-file-path checkov-out --soft-fail --quiet
           mv checkov-out/results_sarif.sarif sarif/checkov.sarif
       - name: zizmor (GitHub Actions workflows)
         run: |
           source security/tool-versions.env
-          # zizmor exits non-zero when it reports findings; the gate decides, not this step.
-          uvx "zizmor==${ZIZMOR_VERSION}" --offline --format sarif .github/workflows \
+          # Run from the repo root so SARIF paths are repo-relative (.github/workflows/x.yml)
+          # and match the files the PR changed. The gate decides, not this step.
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" "zizmor==${ZIZMOR_VERSION}" --offline --format sarif . \
             > sarif/zizmor.sarif || test -s sarif/zizmor.sarif
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -282,13 +285,12 @@ jobs:
               exit 1
             fi
           done
-      - name: Files changed by this PR
-        run: git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed.txt
       - name: Quality gate
         env:
           SECURITY_GATE_MODE: ${{ vars.SECURITY_GATE_MODE || 'traditional' }}
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
-          python3 security/gate/gate.py --sarif-dir sarif --changed-files changed.txt \
+          # Changed files = git diff from the merge base of BASE_SHA and HEAD_SHA.
+          python3 security/gate/gate.py --sarif-dir sarif --base "$BASE_SHA" --head "$HEAD_SHA" \
             --mode "$SECURITY_GATE_MODE" --labels "$PR_LABELS" \
             --workspace "$GITHUB_WORKSPACE" --summary "$GITHUB_STEP_SUMMARY"

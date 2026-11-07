@@ -1,24 +1,426 @@
 {
- "version": "2.1.0",
- "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
- "runs": [
-  {
-   "tool": {
-    "driver": {
-     "fullName": "Trivy Vulnerability Scanner",
-     "informationUri": "https://github.com/aquasecurity/trivy",
-     "name": "Trivy",
-     "rules": [],
-     "version": "0.76.2"
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "fullName": "Trivy Vulnerability Scanner",
+          "informationUri": "https://github.com/aquasecurity/trivy",
+          "name": "Trivy",
+          "rules": [
+            {
+              "id": "CVE-2019-10906",
+              "name": "LanguageSpecificPackageVulnerability",
+              "shortDescription": {
+                "text": "python-jinja2: str.format_map allows sandbox escape"
+              },
+              "fullDescription": {
+                "text": "In Pallets Jinja before 2.10.1, str.format_map allows a sandbox escape."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "helpUri": "https://avd.aquasec.com/nvd/cve-2019-10906",
+              "help": {
+                "text": "Vulnerability CVE-2019-10906\nSeverity: HIGH\nPackage: jinja2\nFixed Version: 2.10.1\nLink: [CVE-2019-10906](https://avd.aquasec.com/nvd/cve-2019-10906)\nIn Pallets Jinja before 2.10.1, str.format_map allows a sandbox escape.",
+                "markdown": "**Vulnerability CVE-2019-10906**\n| Severity | Package | Fixed Version | Link |\n| --- | --- | --- | --- |\n|HIGH|jinja2|2.10.1|[CVE-2019-10906](https://avd.aquasec.com/nvd/cve-2019-10906)|\n\nIn Pallets Jinja before 2.10.1, str.format_map allows a sandbox escape."
+              },
+              "properties": {
+                "cvssv3_baseScore": 8.6,
+                "cvssv3_vector": "CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N",
+                "cvssv40_baseScore": 7.7,
+                "cvssv40_vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:H/SI:N/SA:N",
+                "precision": "very-high",
+                "security-severity": "8.6",
+                "tags": [
+                  "vulnerability",
+                  "security",
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2020-28493",
+              "name": "LanguageSpecificPackageVulnerability",
+              "shortDescription": {
+                "text": "python-jinja2: ReDoS vulnerability in the urlize filter"
+              },
+              "fullDescription": {
+                "text": "This affects the package jinja2 from 0.0.0 and before 2.11.3. The ReDoS vulnerability is mainly due to the `_punctuation_re regex` operator and its use of multiple wildcards. The last wildcard is the most exploitable as it searches for trailing punctuation. This issue can be mitigated by Markdown to format user content instead of the urlize filter, or by implementing request timeouts and limiting process memory."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "helpUri": "https://avd.aquasec.com/nvd/cve-2020-28493",
+              "help": {
+                "text": "Vulnerability CVE-2020-28493\nSeverity: MEDIUM\nPackage: jinja2\nFixed Version: 2.11.3\nLink: [CVE-2020-28493](https://avd.aquasec.com/nvd/cve-2020-28493)\nThis affects the package jinja2 from 0.0.0 and before 2.11.3. The ReDoS vulnerability is mainly due to the `_punctuation_re regex` operator and its use of multiple wildcards. The last wildcard is the most exploitable as it searches for trailing punctuation. This issue can be mitigated by Markdown to format user content instead of the urlize filter, or by implementing request timeouts and limiting process memory.",
+                "markdown": "**Vulnerability CVE-2020-28493**\n| Severity | Package | Fixed Version | Link |\n| --- | --- | --- | --- |\n|MEDIUM|jinja2|2.11.3|[CVE-2020-28493](https://avd.aquasec.com/nvd/cve-2020-28493)|\n\nThis affects the package jinja2 from 0.0.0 and before 2.11.3. The ReDoS vulnerability is mainly due to the `_punctuation_re regex` operator and its use of multiple wildcards. The last wildcard is the most exploitable as it searches for trailing punctuation. This issue can be mitigated by Markdown to format user content instead of the urlize filter, or by implementing request timeouts and limiting process memory."
+              },
+              "properties": {
+                "cvssv3_baseScore": 5.3,
+                "cvssv3_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L",
+                "cvssv40_baseScore": 6.9,
+                "cvssv40_vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N",
+                "precision": "very-high",
+                "security-severity": "5.3",
+                "tags": [
+                  "vulnerability",
+                  "security",
+                  "MEDIUM"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2024-22195",
+              "name": "LanguageSpecificPackageVulnerability",
+              "shortDescription": {
+                "text": "jinja2: HTML attribute injection when passing user input as keys to xmlattr filter"
+              },
+              "fullDescription": {
+                "text": "Jinja is an extensible templating engine. Special placeholders in the template allow writing code similar to Python syntax. It is possible to inject arbitrary HTML attributes into the rendered HTML template, potentially leading to Cross-Site Scripting (XSS). The Jinja `xmlattr` filter can be abused to inject arbitrary HTML attribute keys and values, bypassing the auto escaping mechanism and potentially leading to XSS. It may also be possible to bypass attribute validation checks if they are blacklist-based."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "helpUri": "https://avd.aquasec.com/nvd/cve-2024-22195",
+              "help": {
+                "text": "Vulnerability CVE-2024-22195\nSeverity: MEDIUM\nPackage: jinja2\nFixed Version: 3.1.3\nLink: [CVE-2024-22195](https://avd.aquasec.com/nvd/cve-2024-22195)\nJinja is an extensible templating engine. Special placeholders in the template allow writing code similar to Python syntax. It is possible to inject arbitrary HTML attributes into the rendered HTML template, potentially leading to Cross-Site Scripting (XSS). The Jinja `xmlattr` filter can be abused to inject arbitrary HTML attribute keys and values, bypassing the auto escaping mechanism and potentially leading to XSS. It may also be possible to bypass attribute validation checks if they are blacklist-based.",
+                "markdown": "**Vulnerability CVE-2024-22195**\n| Severity | Package | Fixed Version | Link |\n| --- | --- | --- | --- |\n|MEDIUM|jinja2|3.1.3|[CVE-2024-22195](https://avd.aquasec.com/nvd/cve-2024-22195)|\n\nJinja is an extensible templating engine. Special placeholders in the template allow writing code similar to Python syntax. It is possible to inject arbitrary HTML attributes into the rendered HTML template, potentially leading to Cross-Site Scripting (XSS). The Jinja `xmlattr` filter can be abused to inject arbitrary HTML attribute keys and values, bypassing the auto escaping mechanism and potentially leading to XSS. It may also be possible to bypass attribute validation checks if they are blacklist-based."
+              },
+              "properties": {
+                "cvssv3_baseScore": 5.4,
+                "cvssv3_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N",
+                "precision": "very-high",
+                "security-severity": "5.4",
+                "tags": [
+                  "vulnerability",
+                  "security",
+                  "MEDIUM"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2024-34064",
+              "name": "LanguageSpecificPackageVulnerability",
+              "shortDescription": {
+                "text": "jinja2: accepts keys containing non-attribute characters"
+              },
+              "fullDescription": {
+                "text": "Jinja is an extensible templating engine. The `xmlattr` filter in affected versions of Jinja accepts keys containing non-attribute characters. XML/HTML attributes cannot contain spaces, `/`, `\u003e`, or `=`, as each would then be interpreted as starting a separate attribute. If an application accepts keys (as opposed to only values) as user input, and renders these in pages that other users see as well, an attacker could use this to inject other attributes and perform XSS. The fix for CVE-2024-22195 only addressed spaces but not other characters. Accepting keys as user input is now explicitly considered an unintended use case of the `xmlattr` filter, and code that does so without otherwise validating the input should be flagged as insecure, regardless of Jinja version. Accepting _values_ as user input continues to be safe. This vulnerability is fixed in 3.1.4."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "helpUri": "https://avd.aquasec.com/nvd/cve-2024-34064",
+              "help": {
+                "text": "Vulnerability CVE-2024-34064\nSeverity: MEDIUM\nPackage: jinja2\nFixed Version: 3.1.4\nLink: [CVE-2024-34064](https://avd.aquasec.com/nvd/cve-2024-34064)\nJinja is an extensible templating engine. The `xmlattr` filter in affected versions of Jinja accepts keys containing non-attribute characters. XML/HTML attributes cannot contain spaces, `/`, `\u003e`, or `=`, as each would then be interpreted as starting a separate attribute. If an application accepts keys (as opposed to only values) as user input, and renders these in pages that other users see as well, an attacker could use this to inject other attributes and perform XSS. The fix for CVE-2024-22195 only addressed spaces but not other characters. Accepting keys as user input is now explicitly considered an unintended use case of the `xmlattr` filter, and code that does so without otherwise validating the input should be flagged as insecure, regardless of Jinja version. Accepting _values_ as user input continues to be safe. This vulnerability is fixed in 3.1.4.",
+                "markdown": "**Vulnerability CVE-2024-34064**\n| Severity | Package | Fixed Version | Link |\n| --- | --- | --- | --- |\n|MEDIUM|jinja2|3.1.4|[CVE-2024-34064](https://avd.aquasec.com/nvd/cve-2024-34064)|\n\nJinja is an extensible templating engine. The `xmlattr` filter in affected versions of Jinja accepts keys containing non-attribute characters. XML/HTML attributes cannot contain spaces, `/`, `\u003e`, or `=`, as each would then be interpreted as starting a separate attribute. If an application accepts keys (as opposed to only values) as user input, and renders these in pages that other users see as well, an attacker could use this to inject other attributes and perform XSS. The fix for CVE-2024-22195 only addressed spaces but not other characters. Accepting keys as user input is now explicitly considered an unintended use case of the `xmlattr` filter, and code that does so without otherwise validating the input should be flagged as insecure, regardless of Jinja version. Accepting _values_ as user input continues to be safe. This vulnerability is fixed in 3.1.4."
+              },
+              "properties": {
+                "cvssv3_baseScore": 5.4,
+                "cvssv3_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N",
+                "precision": "very-high",
+                "security-severity": "5.4",
+                "tags": [
+                  "vulnerability",
+                  "security",
+                  "MEDIUM"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2024-56326",
+              "name": "LanguageSpecificPackageVulnerability",
+              "shortDescription": {
+                "text": "jinja2: Jinja has a sandbox breakout through indirect reference to format method"
+              },
+              "fullDescription": {
+                "text": "Jinja is an extensible templating engine. Prior to 3.1.5, An oversight in how the Jinja sandboxed environment detects calls to str.format allows an attacker that controls the content of a template to execute arbitrary Python code. To exploit the vulnerability, an attacker needs to control the content of a template. Whether that is the case depends on the type of application using Jinja. This vulnerability impacts users of applications which execute untrusted templates. Jinja's sandbox does catch calls to str.format and ensures they don't escape the sandbox. However, it's possible to store a reference to a malicious string's format method, then pass that to a filter that calls it. No such filters are built-in to Jinja, but could be present through custom filters in an application. After the fix, such indirect calls are also handled by the sandbox. This vulnerability is fixed in 3.1.5."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "helpUri": "https://avd.aquasec.com/nvd/cve-2024-56326",
+              "help": {
+                "text": "Vulnerability CVE-2024-56326\nSeverity: MEDIUM\nPackage: jinja2\nFixed Version: 3.1.5\nLink: [CVE-2024-56326](https://avd.aquasec.com/nvd/cve-2024-56326)\nJinja is an extensible templating engine. Prior to 3.1.5, An oversight in how the Jinja sandboxed environment detects calls to str.format allows an attacker that controls the content of a template to execute arbitrary Python code. To exploit the vulnerability, an attacker needs to control the content of a template. Whether that is the case depends on the type of application using Jinja. This vulnerability impacts users of applications which execute untrusted templates. Jinja's sandbox does catch calls to str.format and ensures they don't escape the sandbox. However, it's possible to store a reference to a malicious string's format method, then pass that to a filter that calls it. No such filters are built-in to Jinja, but could be present through custom filters in an application. After the fix, such indirect calls are also handled by the sandbox. This vulnerability is fixed in 3.1.5.",
+                "markdown": "**Vulnerability CVE-2024-56326**\n| Severity | Package | Fixed Version | Link |\n| --- | --- | --- | --- |\n|MEDIUM|jinja2|3.1.5|[CVE-2024-56326](https://avd.aquasec.com/nvd/cve-2024-56326)|\n\nJinja is an extensible templating engine. Prior to 3.1.5, An oversight in how the Jinja sandboxed environment detects calls to str.format allows an attacker that controls the content of a template to execute arbitrary Python code. To exploit the vulnerability, an attacker needs to control the content of a template. Whether that is the case depends on the type of application using Jinja. This vulnerability impacts users of applications which execute untrusted templates. Jinja's sandbox does catch calls to str.format and ensures they don't escape the sandbox. However, it's possible to store a reference to a malicious string's format method, then pass that to a filter that calls it. No such filters are built-in to Jinja, but could be present through custom filters in an application. After the fix, such indirect calls are also handled by the sandbox. This vulnerability is fixed in 3.1.5."
+              },
+              "properties": {
+                "cvssv3_baseScore": 7.8,
+                "cvssv3_vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+                "cvssv40_baseScore": 5.4,
+                "cvssv40_vector": "CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+                "precision": "very-high",
+                "security-severity": "7.8",
+                "tags": [
+                  "vulnerability",
+                  "security",
+                  "MEDIUM"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2025-27516",
+              "name": "LanguageSpecificPackageVulnerability",
+              "shortDescription": {
+                "text": "jinja2: Jinja sandbox breakout through attr filter selecting format method"
+              },
+              "fullDescription": {
+                "text": "Jinja is an extensible templating engine. Prior to 3.1.6, an oversight in how the Jinja sandboxed environment interacts with the |attr filter allows an attacker that controls the content of a template to execute arbitrary Python code. To exploit the vulnerability, an attacker needs to control the content of a template. Whether that is the case depends on the type of application using Jinja. This vulnerability impacts users of applications which execute untrusted templates. Jinja's sandbox does catch calls to str.format and ensures they don't escape the sandbox. However, it's possible to use the |attr filter to get a reference to a string's plain format method, bypassing the sandbox. After the fix, the |attr filter no longer bypasses the environment's attribute lookup. This vulnerability is fixed in 3.1.6."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "helpUri": "https://avd.aquasec.com/nvd/cve-2025-27516",
+              "help": {
+                "text": "Vulnerability CVE-2025-27516\nSeverity: MEDIUM\nPackage: jinja2\nFixed Version: 3.1.6\nLink: [CVE-2025-27516](https://avd.aquasec.com/nvd/cve-2025-27516)\nJinja is an extensible templating engine. Prior to 3.1.6, an oversight in how the Jinja sandboxed environment interacts with the |attr filter allows an attacker that controls the content of a template to execute arbitrary Python code. To exploit the vulnerability, an attacker needs to control the content of a template. Whether that is the case depends on the type of application using Jinja. This vulnerability impacts users of applications which execute untrusted templates. Jinja's sandbox does catch calls to str.format and ensures they don't escape the sandbox. However, it's possible to use the |attr filter to get a reference to a string's plain format method, bypassing the sandbox. After the fix, the |attr filter no longer bypasses the environment's attribute lookup. This vulnerability is fixed in 3.1.6.",
+                "markdown": "**Vulnerability CVE-2025-27516**\n| Severity | Package | Fixed Version | Link |\n| --- | --- | --- | --- |\n|MEDIUM|jinja2|3.1.6|[CVE-2025-27516](https://avd.aquasec.com/nvd/cve-2025-27516)|\n\nJinja is an extensible templating engine. Prior to 3.1.6, an oversight in how the Jinja sandboxed environment interacts with the |attr filter allows an attacker that controls the content of a template to execute arbitrary Python code. To exploit the vulnerability, an attacker needs to control the content of a template. Whether that is the case depends on the type of application using Jinja. This vulnerability impacts users of applications which execute untrusted templates. Jinja's sandbox does catch calls to str.format and ensures they don't escape the sandbox. However, it's possible to use the |attr filter to get a reference to a string's plain format method, bypassing the sandbox. After the fix, the |attr filter no longer bypasses the environment's attribute lookup. This vulnerability is fixed in 3.1.6."
+              },
+              "properties": {
+                "cvssv40_baseScore": 5.4,
+                "cvssv40_vector": "CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+                "precision": "very-high",
+                "security-severity": "5.5",
+                "tags": [
+                  "vulnerability",
+                  "security",
+                  "MEDIUM"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2020-14343",
+              "name": "LanguageSpecificPackageVulnerability",
+              "shortDescription": {
+                "text": "PyYAML: incomplete fix for CVE-2020-1747"
+              },
+              "fullDescription": {
+                "text": "A vulnerability was discovered in the PyYAML library in versions before 5.4, where it is susceptible to arbitrary code execution when it processes untrusted YAML files through the full_load method or with the FullLoader loader. Applications that use the library to process untrusted input may be vulnerable to this flaw. This flaw allows an attacker to execute arbitrary code on the system by abusing the python/object/new constructor. This flaw is due to an incomplete fix for CVE-2020-1747."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "helpUri": "https://avd.aquasec.com/nvd/cve-2020-14343",
+              "help": {
+                "text": "Vulnerability CVE-2020-14343\nSeverity: CRITICAL\nPackage: pyyaml\nFixed Version: 5.4\nLink: [CVE-2020-14343](https://avd.aquasec.com/nvd/cve-2020-14343)\nA vulnerability was discovered in the PyYAML library in versions before 5.4, where it is susceptible to arbitrary code execution when it processes untrusted YAML files through the full_load method or with the FullLoader loader. Applications that use the library to process untrusted input may be vulnerable to this flaw. This flaw allows an attacker to execute arbitrary code on the system by abusing the python/object/new constructor. This flaw is due to an incomplete fix for CVE-2020-1747.",
+                "markdown": "**Vulnerability CVE-2020-14343**\n| Severity | Package | Fixed Version | Link |\n| --- | --- | --- | --- |\n|CRITICAL|pyyaml|5.4|[CVE-2020-14343](https://avd.aquasec.com/nvd/cve-2020-14343)|\n\nA vulnerability was discovered in the PyYAML library in versions before 5.4, where it is susceptible to arbitrary code execution when it processes untrusted YAML files through the full_load method or with the FullLoader loader. Applications that use the library to process untrusted input may be vulnerable to this flaw. This flaw allows an attacker to execute arbitrary code on the system by abusing the python/object/new constructor. This flaw is due to an incomplete fix for CVE-2020-1747."
+              },
+              "properties": {
+                "cvssv3_baseScore": 9.8,
+                "cvssv3_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                "cvssv40_baseScore": 9.3,
+                "cvssv40_vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+                "precision": "very-high",
+                "security-severity": "9.8",
+                "tags": [
+                  "vulnerability",
+                  "security",
+                  "CRITICAL"
+                ]
+              }
+            }
+          ],
+          "version": "0.76.2"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CVE-2019-10906",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": {
+            "text": "Package: jinja2\nInstalled Version: 2.10\nVulnerability CVE-2019-10906\nSeverity: HIGH\nFixed Version: 2.10.1\nLink: [CVE-2019-10906](https://avd.aquasec.com/nvd/cve-2019-10906)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/uv.lock",
+                  "uriBaseId": "ROOTPATH"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1,
+                  "endLine": 1,
+                  "endColumn": 1
+                }
+              },
+              "message": {
+                "text": "app/uv.lock: jinja2@2.10"
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2020-28493",
+          "ruleIndex": 1,
+          "level": "warning",
+          "message": {
+            "text": "Package: jinja2\nInstalled Version: 2.10\nVulnerability CVE-2020-28493\nSeverity: MEDIUM\nFixed Version: 2.11.3\nLink: [CVE-2020-28493](https://avd.aquasec.com/nvd/cve-2020-28493)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/uv.lock",
+                  "uriBaseId": "ROOTPATH"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1,
+                  "endLine": 1,
+                  "endColumn": 1
+                }
+              },
+              "message": {
+                "text": "app/uv.lock: jinja2@2.10"
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2024-22195",
+          "ruleIndex": 2,
+          "level": "warning",
+          "message": {
+            "text": "Package: jinja2\nInstalled Version: 2.10\nVulnerability CVE-2024-22195\nSeverity: MEDIUM\nFixed Version: 3.1.3\nLink: [CVE-2024-22195](https://avd.aquasec.com/nvd/cve-2024-22195)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/uv.lock",
+                  "uriBaseId": "ROOTPATH"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1,
+                  "endLine": 1,
+                  "endColumn": 1
+                }
+              },
+              "message": {
+                "text": "app/uv.lock: jinja2@2.10"
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2024-34064",
+          "ruleIndex": 3,
+          "level": "warning",
+          "message": {
+            "text": "Package: jinja2\nInstalled Version: 2.10\nVulnerability CVE-2024-34064\nSeverity: MEDIUM\nFixed Version: 3.1.4\nLink: [CVE-2024-34064](https://avd.aquasec.com/nvd/cve-2024-34064)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/uv.lock",
+                  "uriBaseId": "ROOTPATH"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1,
+                  "endLine": 1,
+                  "endColumn": 1
+                }
+              },
+              "message": {
+                "text": "app/uv.lock: jinja2@2.10"
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2024-56326",
+          "ruleIndex": 4,
+          "level": "warning",
+          "message": {
+            "text": "Package: jinja2\nInstalled Version: 2.10\nVulnerability CVE-2024-56326\nSeverity: MEDIUM\nFixed Version: 3.1.5\nLink: [CVE-2024-56326](https://avd.aquasec.com/nvd/cve-2024-56326)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/uv.lock",
+                  "uriBaseId": "ROOTPATH"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1,
+                  "endLine": 1,
+                  "endColumn": 1
+                }
+              },
+              "message": {
+                "text": "app/uv.lock: jinja2@2.10"
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2025-27516",
+          "ruleIndex": 5,
+          "level": "warning",
+          "message": {
+            "text": "Package: jinja2\nInstalled Version: 2.10\nVulnerability CVE-2025-27516\nSeverity: MEDIUM\nFixed Version: 3.1.6\nLink: [CVE-2025-27516](https://avd.aquasec.com/nvd/cve-2025-27516)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/uv.lock",
+                  "uriBaseId": "ROOTPATH"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1,
+                  "endLine": 1,
+                  "endColumn": 1
+                }
+              },
+              "message": {
+                "text": "app/uv.lock: jinja2@2.10"
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2020-14343",
+          "ruleIndex": 6,
+          "level": "error",
+          "message": {
+            "text": "Package: pyyaml\nInstalled Version: 5.3.1\nVulnerability CVE-2020-14343\nSeverity: CRITICAL\nFixed Version: 5.4\nLink: [CVE-2020-14343](https://avd.aquasec.com/nvd/cve-2020-14343)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/uv.lock",
+                  "uriBaseId": "ROOTPATH"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1,
+                  "endLine": 1,
+                  "endColumn": 1
+                }
+              },
+              "message": {
+                "text": "app/uv.lock: pyyaml@5.3.1"
+              }
+            }
+          ]
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "originalUriBaseIds": {
+        "ROOTPATH": {
+          "uri": "file:///src/"
+        }
+      }
     }
-   },
-   "results": [],
-   "columnKind": "utf16CodeUnits",
-   "originalUriBaseIds": {
-    "ROOTPATH": {
-     "uri": "file:///src/"
-    }
-   }
-  }
- ]
+  ]
 }

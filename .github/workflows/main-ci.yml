@@ -72,18 +72,21 @@ jobs:
           tools="$RUNNER_TEMP/tools"
           mkdir -p sarif checkov-out
           cp codeql-results/python.sarif sarif/codeql.sarif
-          uvx --from "semgrep==${SEMGREP_VERSION}" semgrep scan --metrics off \
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "semgrep==${SEMGREP_VERSION}" semgrep scan \
+            --metrics off --disable-nosem \
             --config p/python --config p/owasp-top-ten --config security/semgrep/medicare.yml \
             --sarif --output sarif/semgrep.sarif app
-          uvx --from "bandit[sarif]==${BANDIT_VERSION}" bandit -r app/medicare \
-            -f sarif -o sarif/bandit.sarif --exit-zero
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "bandit[sarif]==${BANDIT_VERSION}" \
+            bandit -r app/medicare --ignore-nosec -f sarif -o sarif/bandit.sarif --exit-zero
           "$tools/trivy" fs --scanners vuln --skip-dirs .git --format sarif --output sarif/trivy.sarif .
-          "$tools/gitleaks" git --config security/gitleaks.toml --redact --exit-code 0 \
+          "$tools/gitleaks" git --config security/gitleaks.toml --ignore-gitleaks-allow --redact \
+            --exit-code 0 \
             --report-format sarif --report-path sarif/gitleaks.sarif .
-          uvx --from "checkov==${CHECKOV_VERSION}" checkov -d . --config-file security/checkov.yaml \
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "checkov==${CHECKOV_VERSION}" \
+            checkov -d . --config-file security/checkov.yaml \
             -o sarif --output-file-path checkov-out --soft-fail --quiet
           mv checkov-out/results_sarif.sarif sarif/checkov.sarif
-          uvx "zizmor==${ZIZMOR_VERSION}" --offline --format sarif .github/workflows \
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" "zizmor==${ZIZMOR_VERSION}" --offline --format sarif . \
             > sarif/zizmor.sarif || test -s sarif/zizmor.sarif
       - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:

@@ -291,3 +291,26 @@ resource "aws_s3_bucket_policy" "imaging" {
   bucket = aws_s3_bucket.imaging.id
   policy = data.aws_iam_policy_document.imaging_tls_only.json
 }
+
+data "aws_iam_policy_document" "logs_tls_only" {
+  statement {
+    sid       = "DenyInsecureTransport"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.logs.arn, "${aws_s3_bucket.logs.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  policy = data.aws_iam_policy_document.logs_tls_only.json
+}

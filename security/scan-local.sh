@@ -30,20 +30,21 @@ run() { docker run --rm -v "$SRC:/src" -v "$OUT:/out" -w /src "$@"; }
 UV_IMAGE="ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
 
 echo "[1/6] semgrep ${SEMGREP_VERSION}"
-run "semgrep/semgrep:${SEMGREP_VERSION}" semgrep scan --metrics off --quiet \
+run "semgrep/semgrep:${SEMGREP_VERSION}" semgrep scan --metrics off --quiet --disable-nosem \
   --config p/python --config p/owasp-top-ten --config security/semgrep/medicare.yml \
   --sarif --output /out/semgrep.sarif app
 
 echo "[2/6] bandit ${BANDIT_VERSION}"
-run "$UV_IMAGE" uvx --quiet --from "bandit[sarif]==${BANDIT_VERSION}" \
-  bandit -q -r app/medicare -f sarif -o /out/bandit.sarif --exit-zero
+run "$UV_IMAGE" uvx --quiet --exclude-newer "$TOOLS_EXCLUDE_NEWER" \
+  --from "bandit[sarif]==${BANDIT_VERSION}" \
+  bandit -q -r app/medicare --ignore-nosec -f sarif -o /out/bandit.sarif --exit-zero
 
 echo "[3/6] trivy ${TRIVY_VERSION}"
 run "aquasec/trivy:${TRIVY_VERSION}" fs --quiet --scanners vuln \
   --format sarif --output /out/trivy.sarif .
 
 echo "[4/6] gitleaks ${GITLEAKS_VERSION} (files of the tree)"
-run "zricethezav/gitleaks:v${GITLEAKS_VERSION}" dir --config security/gitleaks.toml \
+run "zricethezav/gitleaks:v${GITLEAKS_VERSION}" dir --config security/gitleaks.toml --ignore-gitleaks-allow \
   --redact --exit-code 0 --no-banner --report-format sarif --report-path /out/gitleaks.sarif .
 
 echo "[5/6] checkov ${CHECKOV_VERSION}"
@@ -53,7 +54,8 @@ mv "$out/checkov-raw/results_sarif.sarif" "$out/checkov.sarif"
 rm -rf "$out/checkov-raw"
 
 echo "[6/6] zizmor ${ZIZMOR_VERSION}"
-run "$UV_IMAGE" sh -c "uvx --quiet zizmor==${ZIZMOR_VERSION} --offline --format sarif \
-  .github/workflows > /out/zizmor.sarif || test -s /out/zizmor.sarif"
+run "$UV_IMAGE" sh -c "uvx --quiet --exclude-newer ${TOOLS_EXCLUDE_NEWER} \
+  zizmor==${ZIZMOR_VERSION} --offline --format sarif . > /out/zizmor.sarif \
+  || test -s /out/zizmor.sarif"
 
 echo "SARIF written to $out"
