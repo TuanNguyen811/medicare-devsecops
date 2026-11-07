@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Hóa đơn{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Hóa đơn viện phí</h1>
+{% if is_reception %}
+<div class="card mc-card mb-3">
+  <div class="card-header">Chờ lập hóa đơn</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead><tr><th>Phiếu khám</th><th>Bệnh nhân</th><th>Ngày khám</th><th>Bác sĩ</th><th class="text-end"></th></tr></thead>
+      <tbody>
+        {% for r in pending %}
+        <tr>
+          <td>#{{ r.id }}</td>
+          <td>{{ r.patient.code }} - {{ r.patient.full_name }}</td>
+          <td>{{ r.visit_date | date_vn }}</td>
+          <td>{{ r.doctor.full_name }}</td>
+          <td class="text-end">
+            <form method="post" action="/records/{{ r.id }}/invoice">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-primary btn-sm" type="submit">Lập hóa đơn</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-secondary py-3">Không có phiếu khám chờ lập hóa đơn</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+<div class="card mc-card">
+  <div class="card-header">Danh sách hóa đơn</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead><tr><th>Số HĐ</th><th>Bệnh nhân</th><th>Ngày lập</th><th class="text-end">Tổng tiền</th><th class="text-end">BHYT chi trả</th><th class="text-end">Người bệnh trả</th><th>Trạng thái</th></tr></thead>
+      <tbody>
+        {% for inv in invoices %}
+        {% set label, color = status_labels[inv.status.value] %}
+        <tr>
+          <td><a href="/invoices/{{ inv.id }}">#{{ inv.id }}</a></td>
+          <td>{{ inv.patient.code }} - {{ inv.patient.full_name }}</td>
+          <td>{{ inv.created_at | datetime_vn }}</td>
+          <td class="text-end">{{ inv.total_amount | vnd }}</td>
+          <td class="text-end">{{ inv.insurance_amount | vnd }}</td>
+          <td class="text-end">{{ inv.patient_amount | vnd }}</td>
+          <td><span class="badge text-bg-{{ color }}">{{ label }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-secondary py-3">Chưa có hóa đơn</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

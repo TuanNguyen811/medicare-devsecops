@@ -6,6 +6,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from medicare.appointment.router import router as appointment_router
 from medicare.auth.router import router as auth_router
+from medicare.billing.router import router as billing_router
 from medicare.common.errors import CatchAllErrorsMiddleware, register_error_handlers
 from medicare.config import Settings
 from medicare.db import create_db
@@ -41,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(appointment_router)
     app.include_router(record_router)
     app.include_router(prescription_router)
+    app.include_router(billing_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:

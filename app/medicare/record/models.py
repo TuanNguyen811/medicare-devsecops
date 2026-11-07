@@ -8,6 +8,7 @@ from medicare.db import Base
 
 if TYPE_CHECKING:
     from medicare.auth.models import User
+    from medicare.patient.models import Patient
 
 
 class MedicalRecord(Base):
@@ -29,3 +30,4 @@ class MedicalRecord(Base):
     )
 
     doctor: Mapped["User"] = relationship(lazy="joined")
+    patient: Mapped["Patient"] = relationship(lazy="joined")

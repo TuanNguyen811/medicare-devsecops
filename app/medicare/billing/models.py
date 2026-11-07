@@ -3,9 +3,10 @@ from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from medicare.db import Base, str_enum
+from medicare.patient.models import Patient
 
 
 class InvoiceStatus(StrEnum):
@@ -31,3 +32,5 @@ class Invoice(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+    patient: Mapped[Patient] = relationship(lazy="joined")
