@@ -23,6 +23,39 @@
 - Không ghi PII vào log: CCCD, mã BHYT, chẩn đoán, ghi chú bệnh án, mật khẩu.
 - Lỗi không bắt được → trang lỗi chung "Đã có lỗi xảy ra. Vui lòng thử lại sau." với mã 500, không có stack trace.
 - Giao diện tiếng Việt. Tên biến, hàm và bảng bằng tiếng Anh.
+- **Phong cách giao diện:** đơn giản, chuyên nghiệp, giống hệ thống HIS thực tế ở bệnh viện, không màu mè (không gradient, không hiệu ứng động, không ảnh minh họa). Chi tiết ở mục "Thiết kế giao diện" bên dưới.
+
+## Thiết kế giao diện
+
+- **Màu sắc:** khai báo biến CSS trong `app/medicare/static/css/app.css` và ghi đè biến Bootstrap: `--mc-primary: #0b5cad` (xanh dương y tế), `--mc-primary-dark: #084a8c` (thanh trên cùng), `--mc-bg: #f4f6f9` (nền trang), `--mc-border: #dde3ea`. Màu trạng thái dùng màu chuẩn của Bootstrap ở mức nhạt (`text-bg-*-subtle`).
+- **Font:** system font stack (Segoe UI, Roboto, Helvetica, Arial), cỡ 14px. Không tải web font.
+- **Bố cục** (sau khi đăng nhập):
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│ ✚ MediCare  Bệnh viện Đa khoa MediCare     BS. Trần Văn B (Khoa Nội) ▾│ ← thanh trên, nền --mc-primary-dark
+├──────────────┬────────────────────────────────────────────────────┤
+│ ▸ Trang chủ  │ Trang chủ / Bệnh nhân / BN000012                   │ ← breadcrumb
+│ ▸ Bệnh nhân  │ Hồ sơ bệnh nhân                  [Thêm bệnh án]    │ ← tiêu đề + nút chính
+│ ▸ Lịch hẹn   │ ┌────────────────────────────────────────────────┐ │
+│ ▸ Bệnh án    │ │ Thông tin hành chính        (card, viền mảnh)  │ │
+│ ▸ Hóa đơn    │ └────────────────────────────────────────────────┘ │
+│ ─ Quản trị ─ │ ┌────────────────────────────────────────────────┐ │
+│ ▸ Tài khoản  │ │ Bảng dữ liệu: table-sm, table-hover, viền mảnh │ │
+│ ▸ Nhật ký    │ └────────────────────────────────────────────────┘ │
+├──────────────┴────────────────────────────────────────────────────┤
+│ ⚠ MÔI TRƯỜNG DEMO: toàn bộ dữ liệu là dữ liệu giả       v0.1.0     │ ← footer
+└───────────────────────────────────────────────────────────────────┘
+```
+
+- **Menu bên trái theo vai trò:** chỉ hiện mục mà vai trò đó dùng được. Nhóm "Quản trị" chỉ có ở ADMIN.
+- **Trang đăng nhập:** một card ở giữa màn hình, logo chữ thập kèm "Bệnh viện Đa khoa MediCare", dòng phụ "Hệ thống quản lý bệnh viện", form và dòng chú thích "Chỉ dành cho nhân viên và bệnh nhân đã được cấp tài khoản".
+- **Bảng dữ liệu:** dày thông tin, tiêu đề cột nền xám nhạt, cột số căn phải. Có ô tìm kiếm phía trên bảng.
+- **Badge trạng thái:** lịch hẹn Chờ duyệt (warning), Đã xác nhận (primary), Hoàn thành (success), Đã hủy (secondary); hóa đơn Chưa thanh toán (warning), Đã thanh toán (success).
+- **Định dạng:** ngày `dd/mm/yyyy`, ngày giờ `dd/mm/yyyy HH:mm`, tiền `230.000 ₫`. Cài thành filter Jinja `date_vn`, `datetime_vn`, `vnd` trong `common/templating.py`.
+- **Icon:** Bootstrap Icons qua CDN jsDelivr (có SRI), dùng tiết chế, chỉ ở menu và nút.
+- **Thông báo:** flash message dạng `alert` mỏng ở đầu nội dung, ví dụ "Đã lưu bệnh án".
+- **Responsive:** trên màn hình hẹp, menu trái gập lại thành nút ☰.
 - Mật khẩu dùng chung cho mọi user trong test: `Passw0rd!` (hằng `TEST_PASSWORD` trong `tests/factories.py`).
 
 ## Review Focus
@@ -288,7 +321,7 @@ def test_404_page_generic(client):
 ```
 
 - [ ] **Step 3: Chạy** `uv run pytest tests/test_auth.py tests/test_errors.py -v`. Kỳ vọng: FAIL.
-- [ ] **Step 4: Cài đặt** các module trong `common/`, `auth/router.py` và các template nền. Giao diện dùng Bootstrap 5 qua CDN jsDelivr, có thuộc tính `integrity` (SRI) và `crossorigin="anonymous"`.
+- [ ] **Step 4: Cài đặt** các module trong `common/`, `auth/router.py` và các template nền theo mục "Thiết kế giao diện": `base.html` (thanh trên, menu trái theo vai trò, breadcrumb, khu flash message, footer DEMO), `login.html`, `error.html`, `home.html`, cùng `static/css/app.css` (mount `/static`) và các filter `date_vn`, `datetime_vn`, `vnd`. Bootstrap 5 và Bootstrap Icons tải qua CDN jsDelivr, có `integrity` (SRI) và `crossorigin="anonymous"`. Thêm test `test_vnd_filter`: `vnd(Decimal("230000")) == "230.000 ₫"` và `test_date_vn_filter`: `date_vn(date(2026, 1, 5)) == "05/01/2026"`.
 - [ ] **Step 5: Chạy** `uv run pytest -v`. Kỳ vọng: tất cả PASS.
 - [ ] **Step 6: Commit** `feat(app): xác thực session, CSRF, khóa tài khoản, xử lý lỗi chung`
 
