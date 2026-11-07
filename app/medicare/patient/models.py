@@ -1,9 +1,14 @@
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from medicare.db import Base
+from medicare.department.models import Department
+
+if TYPE_CHECKING:
+    from medicare.auth.models import User
 
 
 class Patient(Base):
@@ -26,4 +31,9 @@ class Patient(Base):
     attending_doctor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    department: Mapped[Department | None] = relationship(lazy="joined")
+    attending_doctor: Mapped["User | None"] = relationship(
+        foreign_keys=[attending_doctor_id], lazy="joined"
     )

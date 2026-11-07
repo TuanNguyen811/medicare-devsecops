@@ -8,6 +8,7 @@ from medicare.auth.router import router as auth_router
 from medicare.common.errors import CatchAllErrorsMiddleware, register_error_handlers
 from medicare.config import Settings
 from medicare.db import create_db
+from medicare.patient.router import router as patient_router
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -33,6 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_error_handlers(app)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(auth_router)
+    app.include_router(patient_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:

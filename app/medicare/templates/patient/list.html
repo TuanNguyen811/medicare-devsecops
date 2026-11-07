@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Bệnh nhân{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h5 mb-0">Danh sách bệnh nhân</h1>
+  {% if can_create %}<a class="btn btn-primary btn-sm" href="/patients/new"><i class="bi bi-person-plus"></i> Tiếp nhận bệnh nhân</a>{% endif %}
+</div>
+<div class="card mc-card">
+  <div class="card-body pb-0">
+    <form class="row g-2 mb-3" method="get" action="/patients" role="search">
+      <div class="col-sm-6 col-lg-4">
+        <input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" maxlength="100" placeholder="Tìm theo mã hoặc họ tên">
+      </div>
+      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-search"></i> Tìm</button></div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Mã BN</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>CCCD</th><th>Khoa</th><th>BS phụ trách</th></tr>
+      </thead>
+      <tbody>
+        {% for p, ids in rows %}
+        <tr>
+          <td><a href="/patients/{{ p.id }}">{{ p.code }}</a></td>
+          <td>{{ p.full_name }}</td>
+          <td>{{ p.date_of_birth | date_vn }}</td>
+          <td>{{ "Nam" if p.gender == "M" else "Nữ" }}</td>
+          <td class="font-monospace">{{ ids.national_id }}</td>
+          <td>{{ p.department.name if p.department else "" }}</td>
+          <td>{{ p.attending_doctor.full_name if p.attending_doctor else "" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-secondary py-3">Không có bệnh nhân phù hợp</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
