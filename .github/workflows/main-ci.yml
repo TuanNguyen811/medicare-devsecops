@@ -3,7 +3,7 @@ name: Main CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/pipeline] # TEMP: feat/pipeline only to test before merge
   workflow_dispatch:
 
 permissions:
