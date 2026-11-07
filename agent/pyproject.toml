@@ -25,6 +25,8 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+# Fixture repos are test data (tests assert their line numbers), not agent code.
+extend-exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "RUF"]

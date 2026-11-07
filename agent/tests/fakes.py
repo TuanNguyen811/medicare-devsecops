@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+MINIAPP = Path(__file__).parent / "fixtures" / "miniapp"
 
 
 def git(repo: Path, *args: str) -> str:
@@ -34,5 +36,15 @@ def make_git_repo(tmp_path: Path, files: dict[str, str]) -> Path:
     repo.mkdir()
     git(repo, "init", "-q", "-b", "main")
     write_files(repo, files)
+    commit_all(repo, "base")
+    return repo
+
+
+def miniapp_repo(tmp_path: Path, extra: dict[str, str] | None = None) -> Path:
+    """A committed git copy of tests/fixtures/miniapp (Contract 1 layout), plus extra files."""
+    repo = tmp_path / "repo"
+    shutil.copytree(MINIAPP, repo)
+    git(repo, "init", "-q", "-b", "main")
+    write_files(repo, extra or {})
     commit_all(repo, "base")
     return repo
