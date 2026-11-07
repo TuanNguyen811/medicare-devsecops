@@ -90,19 +90,34 @@ Bảng tóm tắt gate ghi vào job summary của Actions. Bảng này **không 
 
 ## Main CI/CD (`main-ci.yml`)
 
-Lần chạy thử 42357471271:
+Lần chạy đầu tiên trên `main`, ngay sau khi merge PR #3 (run 42360734824, thành công; lần chạy thử trước đó trên nhánh là 42357471271):
 
 | Job | Giây | Kết quả |
 |---|---|---|
-| build-test | 43 | ✅ |
-| full-scan (7 công cụ, upload SARIF theo category `main-*`) | 124 | ✅ (chỉ báo cáo, không chặn) |
-| image (build → Trivy chặn nếu có CRITICAL đã có bản sửa → SBOM → push GHCR) | 52 | ✅ không có CRITICAL có bản sửa; SBOM 45 KB; `ghcr.io/tuannguyen811/medicare-hms@sha256:55bcf451…` |
-| staging (compose up → smoke test → seed → down -v) | 35 | ✅ |
+| build-test | 40 | ✅ |
+| full-scan (7 công cụ, upload SARIF theo category `main-*`) | 137 | ✅ (chỉ báo cáo, không chặn) |
+| image (build → Trivy chặn nếu có CRITICAL đã có bản sửa → SBOM → push GHCR) | 48 | ✅ không có CRITICAL có bản sửa; SBOM khoảng 45 KB; push `ghcr.io/tuannguyen811/medicare-hms` với tag `sha` và `latest` |
+| staging (compose up → smoke test → seed → down -v) | 36 | ✅ |
 
 ## Các trường hợp thực tế (dữ liệu cho báo cáo)
 
 1. **Gate truyền thống chặn PR vì báo nhầm.** PR #3 thêm hạ tầng mẫu `infra/terraform` và `infra/k8s`. Gate ở chế độ `traditional` chặn với **10 phát hiện Checkov mức HIGH**, và cả 10 đều là FP hoặc rủi ro chấp nhận được (xem [`baseline-scan.md`](baseline-scan.md)). Nguyên nhân: Checkov không có mức độ nếu không có API key, nên mọi check không đạt đều mang level `error`. Đây đúng là vấn đề "alert fatigue / FP chặn luồng phát triển" mà Agent cần giải quyết.
-2. **Gate chặn lỗ hổng thật:** PR thử nghiệm được tạo sau khi merge kế hoạch B; kết quả ghi ngay bên dưới.
+2. **Gate chặn lỗ hổng thật** (PR #4, run 42361081208; PR đã đóng, nhánh đã xóa).
+   - **Kịch bản:** lập trình viên thêm tính năng "tìm bệnh nhân theo số điện thoại", trong đó ghép chuỗi tìm kiếm thẳng vào SQL: `text(f"SELECT id FROM patients WHERE phone LIKE '{term}%'")`. Đoạn này chỉ chạy khi chuỗi bắt đầu bằng `0`, nên **255 test, kể cả các test bảo mật có sẵn, vẫn pass**. Ví dụ khai thác: `0' OR 1=1 --`.
+   - **Kết quả:** build-test xanh, gate ở chế độ `traditional` **CHẶN** với 3 phát hiện mức HIGH, cùng ở `app/medicare/patient/service.py:55`:
+
+     | Công cụ | Rule | Mức |
+     |---|---|---|
+     | CodeQL | `py/sql-injection` (lần theo luồng dữ liệu từ tham số `q` của route) | HIGH |
+     | Semgrep | `medicare.sqlalchemy-text-fstring` (rule tự viết) | HIGH |
+     | Semgrep | `avoid-sqlalchemy-text` (registry) | HIGH |
+     | Bandit | `B608` | LOW, không chặn |
+
+     Thời gian từ lúc mở PR đến khi gate có kết quả: **61 giây**.
+   - **Nhận xét cho báo cáo:**
+     - Ba công cụ cùng chỉ một dòng. Khi chuyển sang chế độ `ai-assisted`, Agent sẽ gộp ba phát hiện này thành một kết luận (`finding_ids` có 3 id).
+     - Bandit đánh giá thấp lỗi SQL injection rõ ràng này.
+     - Rule tự viết không bắt được dạng có biến trung gian (`sql = f"..."; text(sql)`). Dạng đó được dùng trong benchmark để đo phần Agent bổ sung so với công cụ quét.
 
 ## Chạy công cụ quét trên máy
 
