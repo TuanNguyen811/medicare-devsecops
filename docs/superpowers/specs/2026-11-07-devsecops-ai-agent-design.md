@@ -1,7 +1,7 @@
 # Thiết kế: Quy trình DevSecOps tích hợp AI Security Agent
 
 - **Ngày:** 2026-11-07
-- **Trạng thái:** Chờ duyệt
+- **Trạng thái:** Đã duyệt (2026-11-07). Đã cập nhật thành mô hình Agent review một lượt và bổ sung phân tích đánh đổi tốc độ/độ chính xác.
 - **Đề tài:** Xây dựng quy trình DevSecOps tích hợp AI Security Agent hỗ trợ phát hiện, thẩm định và khắc phục lỗ hổng bảo mật
 
 ---
@@ -166,7 +166,8 @@ Tài liệu này có 3 vai trò: (1) Agent đọc được qua công cụ, (2) l
 - 6 job quét chạy song song, mỗi job xuất SARIF và upload bằng `github/codeql-action/upload-sarif` (mỗi công cụ một `category` riêng).
 - `ai-security-agent` cần tất cả job quét xong. Agent tải SARIF, checkout với `fetch-depth: 0`, rồi chạy `secagent --mode ci`.
 - `quality-gate` cần agent và build-test xong.
-- CodeQL dùng `build-mode: none`.
+- CodeQL cho Python không cần build (`build-mode: none`, chế độ mặc định của Python).
+- Agent **luôn chạy sau khi tất cả công cụ quét đã xong**, kể cả khi công cụ không phát hiện gì, vì lỗi logic chỉ Agent tìm được.
 
 ### 3.3 Quality gate
 
@@ -195,7 +196,9 @@ build-test → full-scan (upload lên tab Security) → docker build → Trivy q
 
 ### 3.6 Mục tiêu hiệu năng
 
-Pipeline PR ≤ 5 phút (dự kiến 3–4 phút). Bật cache `uv` và cache Trivy DB, cho Agent thẩm định nhiều phát hiện song song. Thời gian thực tế được đo và đưa vào RQ4.
+Pipeline PR ≤ 5 phút (dự kiến 3,5–5 phút: các bước quét khoảng 1,5–2 phút, Agent khoảng 1,5–3 phút). Bật cache `uv`. Cache Trivy DB theo khóa **ngày** để làm mới mỗi ngày, còn job quét đêm luôn tải DB mới nhất. Thời gian thực tế được đo và đưa vào RQ4.
+
+**Nguyên tắc:** tối ưu cho demo không được thay đổi Agent. Benchmark chạy đúng cấu hình như CI, thời gian báo cáo đúng như đo được.
 
 ---
 
@@ -203,14 +206,19 @@ Pipeline PR ≤ 5 phút (dự kiến 3–4 phút). Bật cache `uv` và cache Tr
 
 ### 4.1 Các pha
 
+Agent dùng mô hình **review một lượt**: chỉ có một phiên Agent duy nhất, chạy sau khi tất cả công cụ quét đã xong. Cách này giống một chuyên gia bảo mật review PR: thấy toàn bộ phát hiện cùng lúc nên kết luận nhất quán, nhận ra chuỗi tấn công, và đọc mỗi file một lần rồi dùng cho nhiều phát hiện.
+
 | Pha | Dùng LLM? | Việc làm |
 |---|---|---|
 | 0. Tiền xử lý | Không | Đọc SARIF → chuẩn hóa về `Finding` → gộp trùng (file, dòng ±3, nhóm CWE) → đánh dấu phát hiện nằm trong diff hay có sẵn từ trước → che secret |
-| 1. Thẩm định | Có (vòng lặp Agent, mỗi phát hiện một vòng, chạy song song, tối đa 8 bước) | TP / FP / NEEDS_REVIEW kèm lý do và bằng chứng. Với SCA: đánh giá hàm bị lỗi trong thư viện có được gọi tới không (reachability) |
-| 2. Săn lỗi | Có (vòng lặp Agent, tối đa 25 bước) | Dựa trên diff, quy tắc R-xx và checklist OWASP, tìm lỗi logic, phân quyền, IDOR, fail-open... |
-| 3. Khắc phục | Có | Bản vá (unified diff) + giải thích. Tùy chọn: áp bản vá vào bản sao tạm, chạy pytest + Semgrep để kiểm chứng (`validated: true/false`) |
-| 4. Kiểm chứng | Không | Mỗi trích dẫn file/dòng/đoạn mã phải tồn tại thật, không thì hạ xuống NEEDS_REVIEW. Kiểm tra định dạng bằng Pydantic |
-| 5. Báo cáo | Không | `report.json`, comment Markdown trên PR, review comment dạng `suggestion`, SARIF của Agent (category `ai-agent`), `trace.jsonl` |
+| 1. Phiên review | Có (**một vòng lặp Agent duy nhất**) | Đọc diff + danh sách phát hiện + quy tắc R-xx, rồi: (a) thẩm định từng phát hiện: TP / FP / NEEDS_REVIEW kèm lý do và bằng chứng (với SCA: đánh giá reachability); (b) săn thêm lỗi logic, phân quyền, IDOR, fail-open... trong phần thay đổi; (c) kèm bản vá (unified diff) cho mỗi lỗi thật |
+| 2. Kiểm tra | Không | **Độ phủ:** phát hiện nào chưa có kết luận thì yêu cầu Agent bổ sung một lần, vẫn thiếu thì đánh dấu NEEDS_REVIEW. **Chống bịa:** trích dẫn file/dòng/đoạn mã phải tồn tại thật, không thì hạ xuống NEEDS_REVIEW. **Định dạng:** kiểm tra bằng Pydantic. **Kiểm chứng bản vá:** áp vào bản sao tạm, chạy pytest + Semgrep → `validated: true/false` |
+| 3. Báo cáo | Không | `report.json`, comment Markdown trên PR, review comment dạng `suggestion`, SARIF của Agent (category `ai-agent`), `trace.jsonl` |
+
+**Giới hạn của phiên review:**
+
+- Số bước tối đa = `10 + 3 × số phát hiện`, không quá 60. Chạm giới hạn thì Agent bắt buộc nộp kết luận, và các phát hiện chưa xử lý thành **NEEDS_REVIEW** (không bao giờ thành FP).
+- Có hơn 15 phát hiện thì chia thành các nhóm tối đa 15 và review lần lượt. Phần săn lỗi chỉ chạy ở nhóm đầu tiên.
 
 ### 4.2 Công cụ (tất cả chỉ đọc, đường dẫn bị giới hạn trong thư mục repo)
 
@@ -238,11 +246,12 @@ Pipeline PR ≤ 5 phút (dự kiến 3–4 phút). Bật cache `uv` và cache Tr
 - `--mode ci | cli | benchmark`. Chế độ `cli` hiển thị trực tiếp từng bước suy luận và từng lần gọi công cụ, dùng khi demo.
 - Cờ ablation: `--strategy single-shot` (không dùng công cụ), `--no-requirements`, `--no-ast-tools`, `--model <name>`.
 - Biến môi trường: `LLM_BASE_URL` (mặc định `https://api.deepseek.com`), `LLM_MODEL`, `LLM_API_KEY`.
-- `temperature = 0`. Thử lại với thời gian chờ tăng dần (3 lần), timeout cho mỗi lần gọi, ngân sách token cho mỗi lần chạy, giới hạn số request đồng thời (mặc định 4).
+- `--thinking`: dùng chế độ suy luận của DeepSeek (chậm hơn, có thể chính xác hơn), phục vụ cấu hình C2-thinking.
+- `temperature = 0`. Thử lại với thời gian chờ tăng dần (3 lần), timeout cho mỗi lần gọi, ngân sách token cho mỗi lần chạy.
 
 ### 4.5 Xử lý lỗi
 
-- Một lần gọi LLM thất bại: phát hiện đó thành `NEEDS_REVIEW`.
+- Gọi LLM thất bại sau khi đã thử lại: các phát hiện chưa có kết luận thành `NEEDS_REVIEW`, những kết luận đã nộp trước đó vẫn được giữ.
 - JSON sai định dạng: thử lại 1 lần, gửi kèm thông báo lỗi.
 - Cả Agent thất bại: thoát với mã lỗi riêng, gate quay về chế độ `traditional`.
 
@@ -254,7 +263,7 @@ Pipeline PR ≤ 5 phút (dự kiến 3–4 phút). Bật cache `uv` và cache Tr
 
 ### 4.7 Cấu trúc code
 
-`cli.py`, `config.py`, `models.py`, `llm/client.py`, `context/{diff,sarif,redact}.py`, `tools/{fs,search,pyast,deps,registry}.py`, `phases/{triage,hunt,remediate,verify}.py`, `prompts/*.md`, `report/{markdown,sarif_out,github}.py`, `trace.py`. Quy mô ước tính 1.500–2.000 dòng, có unit test cho phần tiền xử lý, công cụ và kiểm chứng (không gọi LLM thật trong unit test).
+`cli.py`, `config.py`, `models.py`, `llm/client.py`, `context/{diff,sarif,redact}.py`, `tools/{fs,search,pyast,deps,registry}.py`, `phases/{review,check,validate_patch}.py`, `prompts/*.md`, `report/{markdown,sarif_out,github}.py`, `trace.py`. Quy mô ước tính 1.500–2.000 dòng, có unit test cho phần tiền xử lý, công cụ và kiểm chứng (không gọi LLM thật trong unit test).
 
 ---
 
@@ -307,11 +316,11 @@ Pipeline PR ≤ 5 phút (dự kiến 3–4 phút). Bật cache `uv` và cache Tr
 
 ### 5.4 Cấu hình so sánh
 
-C1 truyền thống · **C2 Agent đầy đủ** · C3 LLM gọi một lần · C4 không có tài liệu quy tắc · C5 không có công cụ AST · C6 (tùy chọn) công cụ AI review có sẵn. Mỗi cấu hình có AI chạy 3 lần trên mỗi kịch bản.
+C1 truyền thống · **C2 Agent đầy đủ** (DeepSeek chế độ thường) · C2-thinking (DeepSeek chế độ suy luận, đo đánh đổi tốc độ và độ chính xác) · C3 LLM gọi một lần · C4 không có tài liệu quy tắc · C5 không có công cụ AST · C6 (tùy chọn) công cụ AI review có sẵn. Mỗi cấu hình có AI chạy 3 lần trên mỗi kịch bản.
 
 ### 5.5 Chỉ số
 
-Precision, Recall, F1 (tách theo nhóm pattern/logic và theo OWASP) · tỷ lệ giảm FP · **tỷ lệ loại nhầm lỗi thật** · số lỗi phát hiện bổ sung · chất lượng bản vá (áp được / qua test / công cụ quét hết báo / chấm tay) · thời gian, token, USD mỗi PR · số cảnh báo người review phải đọc mỗi PR · độ lệch chuẩn F1 · kết quả kịch bản prompt injection.
+Precision, Recall, F1 (tách theo nhóm pattern/logic và theo OWASP) · tỷ lệ giảm FP · **tỷ lệ loại nhầm lỗi thật** · số lỗi phát hiện bổ sung · chất lượng bản vá (áp được / qua test / công cụ quét hết báo / chấm tay) · thời gian, token, USD mỗi PR · số cảnh báo người review phải đọc mỗi PR · độ lệch chuẩn F1 · **tỷ lệ chạm giới hạn bước** · **tỷ lệ phát hiện bị Agent bỏ sót kết luận** (trước khi kiểm tra độ phủ) · kết quả kịch bản prompt injection.
 
 ### 5.6 Cách chạy và sản phẩm
 
@@ -324,6 +333,16 @@ Precision, Recall, F1 (tách theo nhóm pattern/logic và theo OWASP) · tỷ l�
 
 Dữ liệu tự tạo có thể thiên vị (giảm thiểu bằng đăng ký đáp án trước, tách dev/test, kiểm chứng trên PyGoat) · mẫu nhỏ · LLM không ổn định và phiên bản mô hình thay đổi · có thể rò rỉ dữ liệu huấn luyện · gửi mã nguồn cho bên thứ ba (DeepSeek), cần cân nhắc trong môi trường bệnh viện thật.
 
+**Đánh đổi tốc độ và độ chính xác** (được đo, không giấu):
+
+| Đánh đổi | Ảnh hưởng | Cách xử lý và đo |
+|---|---|---|
+| Giới hạn số bước của Agent | Có thể cắt ngang khi chưa điều tra xong | Chạm giới hạn thì kết luận NEEDS_REVIEW. Đo tỷ lệ chạm giới hạn, chỉnh giới hạn trên tập dev |
+| Agent chỉ chủ động săn lỗi trong phần PR thay đổi | Bỏ sót lỗi có sẵn ở file không bị đụng tới | Giống cách review PR thực tế. Nhánh `main` vẫn quét toàn bộ bằng công cụ truyền thống. Rà soát toàn repo theo lịch là hướng phát triển |
+| Chế độ thường và chế độ suy luận của mô hình | Nhanh hơn nhưng có thể kém chính xác hơn | So sánh trực tiếp C2 với C2-thinking |
+| Semgrep chỉ quét phần thay đổi trong PR | Bỏ sót lỗi phát sinh gián tiếp ở file không đổi (hiếm) | Nhánh `main` quét toàn bộ |
+| Cache Trivy DB | Có thể sót CVE mới nhất trong ngày | Làm mới cache hằng ngày, job quét đêm dùng DB mới nhất |
+
 ---
 
 ## 6. Thứ tự triển khai dự kiến
@@ -331,7 +350,7 @@ Dữ liệu tự tạo có thể thiên vị (giảm thiểu bằng đăng ký �
 1. Khung repo: cấu trúc thư mục, pre-commit, README.
 2. MediCare HMS (bản sạch) + test + `security-requirements.md` + Docker/compose + infra mẫu.
 3. Pipeline truyền thống: pr-security (chưa có Agent), main-ci, nightly-sca, branch protection.
-4. AI Security Agent: tiền xử lý → công cụ → thẩm định → săn lỗi → khắc phục → kiểm chứng → báo cáo.
+4. AI Security Agent: tiền xử lý → công cụ → phiên review → kiểm tra (độ phủ, chống bịa, kiểm chứng bản vá) → báo cáo.
 5. Tích hợp Agent vào pr-security + quality gate 2 chế độ.
 6. Benchmark: các kịch bản, đáp án, run/evaluate, chạy thực nghiệm.
 7. Tài liệu cho báo cáo và chuẩn bị demo (chạy sẵn PR, chế độ CLI, video dự phòng).
