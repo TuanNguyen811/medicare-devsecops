@@ -1,0 +1,205 @@
+# CI/CD for main: full scans (report only), image scan + SBOM, push to GHCR, ephemeral staging.
+name: Main CI/CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main-ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-test:
+    name: build-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: app/uv.lock
+      - name: Tests and lint
+        working-directory: app
+        run: |
+          uv sync --frozen
+          uv run pytest -q
+          uv run ruff check
+      - name: Quality gate tests
+        run: uv run --no-project --python 3.12 --with pytest pytest security/gate/tests -q
+
+  full-scan:
+    name: full-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+      - name: Install pinned scanners
+        run: bash security/install-tools.sh "$RUNNER_TEMP/tools"
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: python
+          build-mode: none
+          queries: security-extended
+          config: |
+            paths:
+              - app/medicare
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: main-codeql
+          output: codeql-results
+      - name: Semgrep, Bandit, Trivy, Gitleaks (full history), Checkov, zizmor
+        run: |
+          source security/tool-versions.env
+          tools="$RUNNER_TEMP/tools"
+          mkdir -p sarif checkov-out
+          cp codeql-results/python.sarif sarif/codeql.sarif
+          uvx --from "semgrep==${SEMGREP_VERSION}" semgrep scan --metrics off \
+            --config p/python --config p/owasp-top-ten --config security/semgrep/medicare.yml \
+            --sarif --output sarif/semgrep.sarif app
+          uvx --from "bandit[sarif]==${BANDIT_VERSION}" bandit -r app/medicare \
+            -f sarif -o sarif/bandit.sarif --exit-zero
+          "$tools/trivy" fs --scanners vuln --skip-dirs .git --format sarif --output sarif/trivy.sarif .
+          "$tools/gitleaks" git --config security/gitleaks.toml --redact --exit-code 0 \
+            --report-format sarif --report-path sarif/gitleaks.sarif .
+          uvx --from "checkov==${CHECKOV_VERSION}" checkov -d . --config-file security/checkov.yaml \
+            -o sarif --output-file-path checkov-out --soft-fail --quiet
+          mv checkov-out/results_sarif.sarif sarif/checkov.sarif
+          uvx "zizmor==${ZIZMOR_VERSION}" --offline --format sarif .github/workflows \
+            > sarif/zizmor.sarif || test -s sarif/zizmor.sarif
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: sarif/semgrep.sarif
+          category: main-semgrep
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: sarif/bandit.sarif
+          category: main-bandit
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: sarif/trivy.sarif
+          category: main-trivy
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: sarif/gitleaks.sarif
+          category: main-gitleaks
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: sarif/checkov.sarif
+          category: main-checkov
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: sarif/zizmor.sarif
+          category: main-zizmor
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sarif-main
+          path: sarif/
+      - name: Summary (report only, never blocks main)
+        run: |
+          python3 security/gate/gate.py --sarif-dir sarif --mode traditional \
+            --workspace "$GITHUB_WORKSPACE" --summary "$GITHUB_STEP_SUMMARY" || true
+
+  image:
+    name: image
+    needs: build-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned scanners
+        run: bash security/install-tools.sh "$RUNNER_TEMP/tools"
+      - name: Build image
+        run: docker build -t "medicare-hms:${GITHUB_SHA}" app
+      - name: Trivy image scan (block on fixable CRITICAL)
+        run: |
+          "$RUNNER_TEMP/tools/trivy" image --exit-code 1 --severity CRITICAL --ignore-unfixed \
+            "medicare-hms:${GITHUB_SHA}"
+      - name: SBOM (CycloneDX)
+        run: |
+          "$RUNNER_TEMP/tools/trivy" image --format cyclonedx --output sbom.cdx.json \
+            "medicare-hms:${GITHUB_SHA}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          if-no-files-found: error
+      - name: Push to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          IS_MAIN: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          image="ghcr.io/${OWNER,,}/medicare-hms"
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag "medicare-hms:${GITHUB_SHA}" "${image}:${GITHUB_SHA}"
+          docker push "${image}:${GITHUB_SHA}"
+          if [ "$IS_MAIN" = "true" ]; then
+            docker tag "medicare-hms:${GITHUB_SHA}" "${image}:latest"
+            docker push "${image}:latest"
+          fi
+          docker logout ghcr.io
+
+  staging:
+    name: staging
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Ephemeral secrets (generated here, never printed)
+        run: |
+          umask 077
+          rand() { openssl rand -hex "$1"; }
+          pg="$(rand 24)"
+          {
+            echo "ENV=development"
+            echo "SECRET_KEY=$(rand 48)"
+            echo "POSTGRES_USER=medicare"
+            echo "POSTGRES_DB=medicare"
+            echo "POSTGRES_PASSWORD=${pg}"
+            echo "DATABASE_URL=postgresql+psycopg://medicare:${pg}@db:5432/medicare"
+            echo "DEMO_PASSWORD=Demo-$(rand 12)"
+          } > app/.env
+      - name: Start staging stack
+        run: docker compose -f infra/docker-compose.yml up -d --build --wait --wait-timeout 120
+      - name: Smoke tests
+        run: |
+          base=http://127.0.0.1:8000
+          test "$(curl -fsS "$base/health")" = '{"status":"ok"}'
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$base/login")" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$base/patients")" = 303
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/v1/patients/1")" = 401
+          docker compose -f infra/docker-compose.yml exec -T app python -m medicare.seed
+          test "$(docker compose -f infra/docker-compose.yml exec -T app whoami)" = app
+          echo "Staging smoke tests passed"
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f infra/docker-compose.yml down -v
+          rm -f app/.env
