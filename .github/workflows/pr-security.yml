@@ -32,7 +32,9 @@ jobs:
         with:
           version: "0.13.7"
           enable-cache: true
-          cache-dependency-glob: app/uv.lock
+          cache-dependency-glob: |
+            app/uv.lock
+            agent/uv.lock
       - name: Install dependencies
         working-directory: app
         run: uv sync --frozen
@@ -44,6 +46,11 @@ jobs:
         run: uv run ruff check
       - name: Quality gate tests
         run: uv run --no-project --python 3.12 --with pytest pytest security/gate/tests -q
+      - name: AI agent tests and lint
+        working-directory: agent
+        run: |
+          uv run --locked pytest -q
+          uv run --locked ruff check .
 
   semgrep:
     name: sast-semgrep
@@ -67,7 +74,7 @@ jobs:
           uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "semgrep==${SEMGREP_VERSION}" semgrep scan \
             --metrics off --disable-nosem \
             --config p/python --config p/owasp-top-ten --config security/semgrep/medicare.yml \
-            --baseline-commit "$BASE_SHA" --sarif --output sarif/semgrep.sarif app
+            --baseline-commit "$BASE_SHA" --sarif --output sarif/semgrep.sarif app agent/src
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sarif-semgrep
@@ -98,7 +105,7 @@ jobs:
           source security/tool-versions.env
           mkdir -p sarif
           uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "bandit[sarif]==${BANDIT_VERSION}" \
-            bandit -r app/medicare --ignore-nosec -f sarif -o sarif/bandit.sarif --exit-zero
+            bandit -r app/medicare agent/src --ignore-nosec -f sarif -o sarif/bandit.sarif --exit-zero
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sarif-bandit
@@ -130,6 +137,7 @@ jobs:
           config: |
             paths:
               - app/medicare
+              - agent/src
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: codeql
@@ -259,9 +267,110 @@ jobs:
           sarif_file: sarif/zizmor.sarif
           category: zizmor
 
+  ai-agent:
+    name: ai-security-agent
+    needs: [semgrep, bandit, codeql, trivy, gitleaks, iac]
+    # Fork PRs get no secrets; the gate then stays on traditional mode.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: |
+            agent/uv.lock
+            app/uv.lock
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: sarif-*
+          path: sarif
+          merge-multiple: true
+      - name: AI review (the only step holding the LLM key; it does not run the app or its tests)
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+        run: |
+          mkdir -p out
+          set +e
+          uv run --project agent --locked secagent --mode ci --repo . \
+            --base "$BASE_SHA" --head "$HEAD_SHA" --sarif-dir sarif \
+            --requirements docs/security-requirements.md --out out
+          echo "$?" > out/agent-exit
+          echo "secagent exit code: $(cat out/agent-exit) (2 = agent unavailable, gate falls back)"
+      - name: Validate proposed patches (runs PR code and tests; no secret in this step)
+        run: |
+          if [ -s out/report.json ]; then
+            uv run --project agent --locked secagent-validate --out out --repo . \
+              --head "$HEAD_SHA" --max-patches 2 || echo "::warning::secagent-validate failed"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: agent-report
+          path: out/
+          if-no-files-found: ignore
+          include-hidden-files: false
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: always() && hashFiles('out/agent.sarif') != ''
+        with:
+          sarif_file: out/agent.sarif
+          category: ai-agent
+
+  agent-comment:
+    name: agent-comment
+    needs: [ai-agent]
+    if: always() && needs.ai-agent.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Write access to the PR, but no checkout: this job never runs code from the PR.
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: agent-report
+          path: out
+      - name: Post or update the agent report and its suggestions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ ! -s out/report.md ]; then
+            echo "No agent report (no LLM key configured, or the agent did not run)."
+            exit 0
+          fi
+          existing="$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq '.[] | select(.body | startswith("<!-- secagent-report -->")) | .id' | tail -n 1)"
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -F body=@out/report.md > /dev/null
+          else
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@out/report.md > /dev/null
+          fi
+          if [ -s out/review.json ]; then
+            seen="$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate \
+              --jq ".[] | select(.body | contains(\"secagent-review:$HEAD_SHA\")) | .id")"
+            if [ -z "$seen" ]; then
+              gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --input out/review.json > /dev/null \
+                || echo "::warning::Could not post the suggestion review"
+            fi
+          fi
+
   quality-gate:
     name: quality-gate
-    needs: [build-test, semgrep, bandit, codeql, trivy, gitleaks, iac]
+    needs: [build-test, semgrep, bandit, codeql, trivy, gitleaks, iac, ai-agent]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -277,7 +386,11 @@ jobs:
           merge-multiple: true
       - name: Every scanner and the test suite must have completed
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          # The AI agent is not listed: if it fails, the gate falls back to traditional mode.
+          RESULTS: >-
+            ${{ needs.build-test.result }} ${{ needs.semgrep.result }}
+            ${{ needs.bandit.result }} ${{ needs.codeql.result }} ${{ needs.trivy.result }}
+            ${{ needs.gitleaks.result }} ${{ needs.iac.result }}
         run: |
           for result in $RESULTS; do
             if [ "$result" != "success" ]; then
@@ -285,12 +398,21 @@ jobs:
               exit 1
             fi
           done
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: agent-report
+          path: out
       - name: Quality gate
         env:
           SECURITY_GATE_MODE: ${{ vars.SECURITY_GATE_MODE || 'traditional' }}
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
           # Changed files = git diff from the merge base of BASE_SHA and HEAD_SHA.
+          # A missing agent report or exit code means the agent did not run: exit 2 →
+          # traditional mode (fail-safe, roadmap Contract 2).
+          AGENT_EXIT="$(cat out/agent-exit 2>/dev/null || echo 2)"
           python3 security/gate/gate.py --sarif-dir sarif --base "$BASE_SHA" --head "$HEAD_SHA" \
             --mode "$SECURITY_GATE_MODE" --labels "$PR_LABELS" \
+            --report out/report.json --agent-exit "$AGENT_EXIT" \
             --workspace "$GITHUB_WORKSPACE" --summary "$GITHUB_STEP_SUMMARY"

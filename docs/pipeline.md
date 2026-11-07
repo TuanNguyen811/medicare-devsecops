@@ -17,16 +17,26 @@ Phiên bản mọi công cụ quét nằm ở **một file duy nhất**: [`secur
 
 ```
 pull_request → main
- ├─ build-test ─────── pytest (254 test, PostgreSQL thật qua Testcontainers) + ruff + test của gate
- ├─ sast-semgrep ─────┐  chỉ báo phát hiện mới so với commit gốc (--baseline-commit)
- ├─ sast-bandit ──────┤
- ├─ sast-codeql ──────┤  security-extended, chỉ quét app/medicare
- ├─ sca-trivy ────────┤  mọi file khai báo thư viện trong repo (app/uv.lock); CSDL CVE cache theo ngày
+ ├─ build-test ─────── pytest app (254 test, PostgreSQL thật qua Testcontainers) + ruff + test gate + test Agent
+ ├─ sast-semgrep ─────┐  chỉ báo phát hiện mới so với commit gốc (--baseline-commit); app/ và agent/src
+ ├─ sast-bandit ──────┤  app/medicare và agent/src
+ ├─ sast-codeql ──────┤  security-extended, app/medicare và agent/src
+ ├─ sca-trivy ────────┤  mọi file khai báo thư viện trong repo (app/uv.lock, agent/uv.lock); CSDL CVE cache theo ngày
  ├─ secret-gitleaks ──┤  chỉ các commit của PR, che giá trị secret (--redact)
  ├─ iac-checkov ──────┤  Checkov (Terraform, K8s, Dockerfile) + zizmor (workflow CI, chạy từ gốc repo)
  │                    ▼  mỗi job: artifact sarif-<tool> + upload lên tab Security
+ ├─ ai-security-agent ─ đọc diff + SARIF + mã nguồn + quy tắc R-xx → out/report.json (artifact agent-report)
+ │    ├─ bước "AI review": bước duy nhất có LLM_API_KEY; không chạy ứng dụng hay test của PR
+ │    └─ bước "Validate patches": áp bản vá vào worktree tạm, chạy test + Semgrep; không có secret
+ ├─ agent-comment ──── comment báo cáo + review suggestion lên PR; không checkout code (chỉ gửi file)
  └─ quality-gate ───── chặn hoặc cho qua (bắt buộc đạt, theo branch protection)
 ```
+
+**AI Security Agent** (kế hoạch C, chi tiết ở [`agent/README.md`](../agent/README.md)):
+- Chạy sau khi mọi job quét xong, kể cả khi chúng không có phát hiện, vì lỗi logic chỉ Agent tìm được. PR từ fork bị bỏ qua vì không có secret.
+- Nhà cung cấp LLM chọn bằng biến repo `LLM_PROVIDER`: `deepseek` mặc định, `openai`, `gemini`, `anthropic`, `openai-compatible`. Key là secret `LLM_API_KEY`.
+- Khi chưa có key, Agent thoát với mã 2, không comment gì, và gate dùng chế độ `traditional`.
+- Agent lỗi không làm đỏ pipeline: job quality-gate chỉ bắt buộc build-test và 6 job quét thành công. Thiếu `report.json` hoặc mã thoát khác 0 thì gate quay về `traditional`.
 
 **Thời gian đo được** (lần chạy 42357232710, PR #3):
 
@@ -34,11 +44,11 @@ pull_request → main
 |---|---|---|---|---|---|---|---|---|---|
 | Giây | 44 | 40 | 29 | 27 | 26 | 18 | 17 | 5 | **54** |
 
-Các job quét chạy song song nên tổng thời gian chỉ khoảng 1 phút, thấp hơn nhiều so với mục tiêu ≤ 5 phút của spec. Job AI Agent (kế hoạch C) sẽ chạy song song với build-test.
+Các job quét chạy song song nên tổng thời gian chỉ khoảng 1 phút, thấp hơn nhiều so với mục tiêu ≤ 5 phút của spec. Job AI Agent chạy sau các job quét; thời gian đo được ghi ở mục Agent bên dưới.
 
 ## Quality gate
 
-Gate là script [`security/gate/gate.py`](../security/gate/gate.py), chỉ dùng thư viện chuẩn và có 68 test (một phần dùng SARIF thật của từng công cụ). Script đọc mọi file `sarif/*.sarif`, quy đổi mức độ rồi ra quyết định.
+Gate là script [`security/gate/gate.py`](../security/gate/gate.py), chỉ dùng thư viện chuẩn và có 70 test (một phần dùng SARIF thật của từng công cụ). Script đọc mọi file `sarif/*.sarif`, quy đổi mức độ rồi ra quyết định.
 
 **Quy đổi mức độ:**
 - Gitleaks luôn là HIGH.
@@ -52,7 +62,7 @@ Gate là script [`security/gate/gate.py`](../security/gate/gate.py), chỉ dùng
 - Có **bất kỳ vị trí nào** nằm trong file thay đổi, tính cả vị trí chính, `relatedLocations` và các bước `codeFlows`. Ví dụ PR chỉ thêm route mới (nguồn dữ liệu) dẫn vào hàm cũ có lỗ hổng (điểm sink).
 - Nằm trong **cùng thư mục Terraform** với một file `.tf`/`.tfvars` bị sửa. Lý do: Checkov tính cả biến, nên sửa `variables.tf` có thể làm lộ lỗi trong `main.tf`.
 
-**Chính sách cấu hình nhạy cảm:** PR sửa `.github/**`, `security/**` hoặc file bỏ qua cảnh báo của công cụ quét (`.semgrepignore`, `.trivyignore`, `trivy.yaml`, `.gitleaksignore`, `.checkov.yaml`, `.bandit`, `zizmor.yml`, …) sẽ bị **chặn** cho tới khi có label `security-reviewed`. Label này là xác nhận của người review bảo mật.
+**Chính sách cấu hình nhạy cảm:** PR sửa `.github/**`, `security/**`, `agent/**` (kết luận của Agent có thể miễn chặn phát hiện ở chế độ `ai-assisted`) hoặc file bỏ qua cảnh báo của công cụ quét (`.semgrepignore`, `.trivyignore`, `trivy.yaml`, `.gitleaksignore`, `.checkov.yaml`, `.bandit`, `zizmor.yml`, …) sẽ bị **chặn** cho tới khi có label `security-reviewed`. Label này là xác nhận của người review bảo mật.
 
 **Chế độ** (biến repo `SECURITY_GATE_MODE`):
 
