@@ -44,3 +44,13 @@ def test_patient_national_id_unique(db):
     p = make_patient(db)
     with pytest.raises(IntegrityError):
         make_patient(db, national_id=p.national_id)
+
+
+def test_audit_timestamp_comes_from_database_clock(db):
+    """R-05/R-06: the time of an audit row is set by the DB, not by the app process."""
+    at = db.execute(text(
+        "INSERT INTO audit_logs (actor_id, action, entity_type, entity_id) "
+        "VALUES (1, 'VIEW_RECORD', 'record', 1) RETURNING at"
+    )).scalar_one()
+    db_now = db.execute(text("SELECT now()")).scalar_one()
+    assert at is not None and abs((db_now - at).total_seconds()) < 5
