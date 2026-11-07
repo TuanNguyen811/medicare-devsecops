@@ -21,3 +21,10 @@ def test_settings_require_secret_key(monkeypatch):
 def test_secret_key_min_length():
     with pytest.raises(ValidationError):
         Settings(database_url="postgresql+psycopg://u:p@h/db", secret_key="short")
+
+
+def test_api_docs_not_exposed():
+    app = create_app(Settings(env="test", database_url="postgresql+psycopg://u:p@h/db", secret_key=KEY))
+    client = TestClient(app)
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404

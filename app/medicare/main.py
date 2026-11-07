@@ -6,7 +6,9 @@ from medicare.config import Settings
 def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is None:
         settings = Settings()
-    app = FastAPI(title="MediCare HMS")
+    app = FastAPI(
+        title="MediCare HMS", docs_url=None, redoc_url=None, openapi_url=None
+    )
     app.state.settings = settings
 
     @app.get("/health")
