@@ -12,6 +12,7 @@ dependencies = [
 
 [project.scripts]
 secagent = "secagent.cli:run"
+secagent-validate = "secagent.cli:run_validate"
 
 [build-system]
 requires = ["uv_build>=0.13.7,<0.14.0"]

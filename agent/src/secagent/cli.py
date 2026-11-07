@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import sys
 import time
 from collections import Counter
@@ -172,3 +173,73 @@ def main(argv: list[str] | None = None, *, llm_factory: LLMFactory | None = None
 
 def run() -> None:
     sys.exit(main())
+
+
+# --- secagent-validate ----------------------------------------------------------------------
+
+DEFAULT_TEST_CMD = "uv run --project app --locked pytest -q -x"
+
+
+def _tool_versions(repo: Path) -> dict[str, str]:
+    path = repo / "security" / "tool-versions.env"
+    if not path.is_file():
+        return {}
+    pairs = (line.split("=", 1) for line in path.read_text(encoding="utf-8").splitlines()
+             if "=" in line and not line.lstrip().startswith("#"))
+    return {k.strip(): v.strip() for k, v in pairs}
+
+
+def default_scan_cmd(repo: Path) -> list[str] | None:
+    versions = _tool_versions(repo)
+    if "SEMGREP_VERSION" not in versions:
+        return None
+    pin = (["--exclude-newer", versions["TOOLS_EXCLUDE_NEWER"]]
+           if "TOOLS_EXCLUDE_NEWER" in versions else [])
+    return ["uvx", *pin, "--from", f"semgrep=={versions['SEMGREP_VERSION']}", "semgrep", "scan",
+            "--metrics", "off", "--quiet", "--error", "--disable-nosem",
+            "--config", "security/semgrep/medicare.yml"]
+
+
+def main_validate(argv: list[str] | None = None, *, runner=None) -> int:
+    """Validate the TP patches of out/report.json; never fails the pipeline (exit 0)."""
+    from secagent.phases.validate_patch import run_command, validate_report
+
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    p = argparse.ArgumentParser(prog="secagent-validate",
+                                description="Kiểm chứng bản vá Agent đề xuất (không cần secret)")
+    p.add_argument("--out", default="out")
+    p.add_argument("--repo", default=".")
+    p.add_argument("--head")
+    p.add_argument("--max-patches", type=int, default=2)
+    p.add_argument("--timeout-s", type=float, default=240)
+    p.add_argument("--test-cmd", default=DEFAULT_TEST_CMD)
+    p.add_argument("--scan-cmd", default=None,
+                   help='mặc định: Semgrep với rule của dự án; "none" để tắt')
+    args = p.parse_args(argv)
+    out, repo = Path(args.out), Path(args.repo).resolve()
+    if not (out / "report.json").is_file():
+        _say("secagent-validate: không có gì để kiểm chứng (thiếu report.json)")
+        return 0
+    if args.scan_cmd is None:
+        scan_cmd = default_scan_cmd(repo)
+    elif args.scan_cmd.lower() == "none":
+        scan_cmd = None
+    else:
+        scan_cmd = shlex.split(args.scan_cmd)
+    try:
+        report = validate_report(repo, out, max_patches=args.max_patches,
+                                 test_cmd=shlex.split(args.test_cmd), scan_cmd=scan_cmd,
+                                 runner=runner or run_command, timeout_s=args.timeout_s,
+                                 head_sha=args.head)
+    except Exception as exc:  # validation is advisory: the gate never reads `validated`
+        _say(f"secagent-validate: bỏ qua do lỗi {type(exc).__name__}")
+        return 0
+    checked = [e for e in report.findings if e.fix is not None and e.fix.validated is not None]
+    passed = sum(1 for e in checked if e.fix.validated)
+    _say(f"secagent-validate: {passed}/{len(checked)} bản vá qua kiểm chứng")
+    return 0
+
+
+def run_validate() -> None:
+    sys.exit(main_validate())
