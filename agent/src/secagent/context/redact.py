@@ -27,6 +27,17 @@ def redact(text: str) -> str:
     return _ASSIGNMENT.sub(lambda m: f"{m[1]}{m[2]}{m[3]}{REDACTED}{m[3]}", text)
 
 
+def redact_value(value):
+    """Redact every string inside nested dicts and lists (report.json, review.json)."""
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, dict):
+        return {k: redact_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact_value(v) for v in value]
+    return value
+
+
 def mask_line() -> str:
     """Replacement for a whole source line that Gitleaks reported."""
     return "«REDACTED: dòng bị Gitleaks báo»"

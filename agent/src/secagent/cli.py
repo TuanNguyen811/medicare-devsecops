@@ -1,0 +1,174 @@
+"""Command line: `secagent` (review, roadmap Contract 2).
+
+Exit code 0: the run completed (unjudged clusters are NEEDS_REVIEW). Exit code 2: the agent
+failed (missing key, bad arguments, no successful LLM call, unexpected error); the quality
+gate then falls back to traditional mode.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+from collections import Counter
+from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
+from pathlib import Path
+
+from secagent.config import ConfigError, Settings, cost_usd
+from secagent.context.diff import load_diff
+from secagent.context.redact import redact_value
+from secagent.context.sarif import cluster_findings, load_findings
+from secagent.llm.base import LLMClient, make_client
+from secagent.models import Meta, Report
+from secagent.phases.check import build_entries, ensure_coverage
+from secagent.phases.review import ReviewContext, run_review
+from secagent.report.github import build_review
+from secagent.report.markdown import render_failure, render_markdown
+from secagent.report.sarif_out import to_sarif
+from secagent.tools.fs import RepoFS
+from secagent.trace import Trace
+
+LLMFactory = Callable[[Settings], LLMClient]
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="secagent", description="AI Security Agent cho Pull Request")
+    p.add_argument("--mode", choices=("ci", "cli", "benchmark"), default="cli")
+    p.add_argument("--repo", default=".")
+    p.add_argument("--base", required=True, help="commit gốc (base của PR)")
+    p.add_argument("--head", required=True, help="commit của PR")
+    p.add_argument("--sarif-dir", default="sarif")
+    p.add_argument("--requirements", default="docs/security-requirements.md")
+    p.add_argument("--out", default="out")
+    p.add_argument("--strategy", choices=("agent", "single-shot"), default="agent")
+    p.add_argument("--no-requirements", action="store_true")
+    p.add_argument("--no-ast-tools", action="store_true")
+    p.add_argument("--thinking", action="store_true")
+    p.add_argument("--model")
+    p.add_argument("--time-budget-s", type=float)
+    return p
+
+
+def _say(text: str) -> None:
+    print(text, file=sys.stderr, flush=True)
+
+
+def _printer(mode: str) -> Callable[[str, dict], None]:
+    if mode != "cli":
+        return lambda kind, data: None
+
+    def show(kind: str, data: dict) -> None:
+        if kind == "llm":
+            calls = ", ".join(data["tool_calls"]) or "(trả lời bằng văn bản)"
+            _say(f"[bước {data['step']}/{data['limit']}] → {calls}")
+            if data["content"].strip():
+                _say(f"    💬 {data['content'].strip()[:300]}")
+        elif kind == "tool":
+            mark = "✓" if data["ok"] else "✗"
+            _say(f"    {mark} {data['name']}({data['arguments'][:120]})")
+
+    return show
+
+
+def _requirements(repo: Path, raw: str, settings: Settings, trace: Trace) -> str | None:
+    if not settings.use_requirements:
+        return None
+    path = Path(raw)
+    if not path.is_absolute() and not path.is_file():
+        path = repo / raw
+    if not path.is_file():
+        trace.event("requirements_missing", path=raw)
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+def _run(args: argparse.Namespace, settings: Settings, llm_factory: LLMFactory, trace: Trace,
+         out: Path) -> int:
+    started, started_at = time.monotonic(), datetime.now(UTC).isoformat(timespec="seconds")
+    repo = Path(args.repo).resolve()
+    findings, errors = load_findings(Path(args.sarif_dir))
+    diff = load_diff(repo, args.base, args.head)
+    clusters = cluster_findings(findings, diff)
+    secret_lines: dict[str, set[int]] = {}
+    for f in findings:
+        if f.tool == "gitleaks" and f.file:
+            secret_lines.setdefault(f.file, set()).update(range(f.line, f.end_line + 1))
+    fs = RepoFS(repo, secret_lines)
+    trace.event("start", mode=settings.mode, provider=settings.provider, model=settings.model,
+                strategy=settings.strategy, clusters=len(clusters), findings=len(findings),
+                sarif_errors=errors, changed_files=sorted(diff.changed))
+    ctx = ReviewContext(fs=fs, diff=diff, clusters=clusters,
+                        requirements=_requirements(repo, args.requirements, settings, trace),
+                        settings=settings)
+    outcome = run_review(ctx, llm_factory(settings), trace, on_event=_printer(settings.mode))
+    if outcome.llm_calls == 0 and outcome.error:
+        (out / "report.md").write_text(render_failure(outcome.error), encoding="utf-8")
+        _say(f"secagent: không gọi được LLM ({outcome.error})")
+        return 2
+    uncovered = ensure_coverage(outcome, clusters, settings)
+    entries = build_entries(clusters, outcome, fs, trace)
+    raw = Report(meta=Meta(
+        model=settings.model, strategy=settings.strategy, started_at=started_at,
+        duration_s=round(time.monotonic() - started, 2), llm_calls=outcome.llm_calls,
+        tool_calls=outcome.tool_calls, tokens_in=outcome.tokens_in,
+        tokens_out=outcome.tokens_out,
+        cost_usd=round(cost_usd(outcome.tokens_in, outcome.tokens_out, settings), 6),
+        step_limit=outcome.step_limit, limit_hit=outcome.limit_hit,
+        uncovered_before_check=uncovered, error=outcome.error), findings=entries)
+    # Defence in depth: whatever the model wrote, no secret-shaped string leaves the run.
+    report = Report.model_validate(redact_value(raw.model_dump(mode="json")))
+    entries = report.findings
+    (out / "report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    (out / "report.md").write_text(render_markdown(report, head_sha=args.head),
+                                   encoding="utf-8")
+    (out / "agent.sarif").write_text(json.dumps(to_sarif(report), indent=2, ensure_ascii=False),
+                                     encoding="utf-8")
+    review = build_review(report, diff, args.head)
+    if review is not None:
+        (out / "review.json").write_text(json.dumps(review, indent=2, ensure_ascii=False),
+                                         encoding="utf-8")
+    counts = Counter(e.verdict for e in entries)
+    trace.event("done", verdicts=dict(counts), duration_s=report.meta.duration_s,
+                cost_usd=report.meta.cost_usd)
+    _say(f"secagent: {counts['TP']} TP · {counts['NEEDS_REVIEW']} NEEDS_REVIEW · "
+         f"{counts['FP']} FP · {sum(e.source == 'agent' for e in entries)} phát hiện mới · "
+         f"{outcome.llm_calls} lần gọi LLM · {report.meta.duration_s:.1f} s")
+    if settings.mode == "cli":
+        for e in entries:
+            _say(f"  {e.verdict:<12} {e.severity:<8} {e.title}  ({e.file}:{e.line})")
+    return 0
+
+
+def main(argv: list[str] | None = None, *, llm_factory: LLMFactory | None = None,
+         env: Mapping[str, str] | None = None) -> int:
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    args = build_parser().parse_args(argv)
+    try:
+        settings = Settings.from_env(
+            os.environ if env is None else env, mode=args.mode, strategy=args.strategy,
+            thinking=args.thinking, use_requirements=not args.no_requirements,
+            use_ast_tools=not args.no_ast_tools, model_override=args.model,
+            time_budget_s=args.time_budget_s)
+    except ConfigError as exc:
+        _say(f"secagent: {exc}")
+        return 2
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    trace = Trace(out / "trace.jsonl")
+    try:
+        return _run(args, settings, llm_factory or make_client, trace, out)
+    except Exception as exc:  # fail safe: the gate falls back to traditional mode
+        trace.event("crash", error=type(exc).__name__)
+        (out / "report.md").write_text(render_failure(type(exc).__name__), encoding="utf-8")
+        _say(f"secagent: lỗi bất ngờ {type(exc).__name__}")
+        return 2
+    finally:
+        trace.close()
+
+
+def run() -> None:
+    sys.exit(main())

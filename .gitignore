@@ -24,3 +24,6 @@ Thumbs.db
 
 # Benchmark outputs (raw runs; summaries are committed explicitly)
 benchmark/results/raw/
+
+# AI agent output (secagent --out)
+/out/
