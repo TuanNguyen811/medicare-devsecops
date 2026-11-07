@@ -11,3 +11,15 @@
 Thiết kế chi tiết: [docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md](docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md)
 
 > ⚠️ Repo này chứa các kịch bản lỗ hổng **được cài có chủ đích** phục vụ nghiên cứu. Không triển khai các nhánh kịch bản lên môi trường public. Toàn bộ dữ liệu bệnh nhân là dữ liệu giả.
+
+## Cho lập trình viên
+
+- Chạy ứng dụng và test: xem [`app/README.md`](app/README.md).
+- Bật kiểm tra trước khi commit (chặn secret bằng Gitleaks, lint bằng Ruff):
+
+  ```bash
+  uv tool install pre-commit
+  pre-commit install
+  ```
+
+- Pipeline bảo mật trên GitHub Actions: xem [`docs/pipeline.md`](docs/pipeline.md).

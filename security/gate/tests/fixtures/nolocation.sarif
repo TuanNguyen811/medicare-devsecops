@@ -1,0 +1,2 @@
+{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "X", "rules": []}},
+ "results": [{"ruleId": "repo-wide-issue", "level": "error", "message": {"text": "no location"}}]}]}

@@ -1,0 +1,67 @@
+# Sample manifest for IaC scanning. Replace the image digest with a real one before deploying.
+# Environment variables come from the Secret "medicare-env", created out of band (never committed).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: medicare-app
+  namespace: medicare
+  labels:
+    app: medicare
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: medicare
+  template:
+    metadata:
+      labels:
+        app: medicare
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: ghcr.io/tuannguyen811/medicare-hms@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - secretRef:
+                name: medicare-env
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi

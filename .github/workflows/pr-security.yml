@@ -1,0 +1,296 @@
+# Security pipeline for every Pull Request into main.
+# Scanners run in parallel and write SARIF; the quality gate decides (security/gate/gate.py).
+# Contract with the AI agent (plan C): roadmap "Hợp đồng 2".
+name: PR Security
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-security-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  BASE_SHA: ${{ github.event.pull_request.base.sha }}
+  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+jobs:
+  build-test:
+    name: build-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: app/uv.lock
+      - name: Install dependencies
+        working-directory: app
+        run: uv sync --frozen
+      - name: Unit and integration tests
+        working-directory: app
+        run: uv run pytest -q
+      - name: Lint
+        working-directory: app
+        run: uv run ruff check
+      - name: Quality gate tests
+        run: uv run --no-project --python 3.12 --with pytest pytest security/gate/tests -q
+
+  semgrep:
+    name: sast-semgrep
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+      - name: Semgrep (diff-aware against the PR base)
+        run: |
+          source security/tool-versions.env
+          mkdir -p sarif
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "semgrep==${SEMGREP_VERSION}" semgrep scan \
+            --metrics off --disable-nosem \
+            --config p/python --config p/owasp-top-ten --config security/semgrep/medicare.yml \
+            --baseline-commit "$BASE_SHA" --sarif --output sarif/semgrep.sarif app
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sarif-semgrep
+          path: sarif/semgrep.sarif
+          if-no-files-found: error
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          sarif_file: sarif/semgrep.sarif
+          category: semgrep
+
+  bandit:
+    name: sast-bandit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+      - name: Bandit
+        run: |
+          source security/tool-versions.env
+          mkdir -p sarif
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "bandit[sarif]==${BANDIT_VERSION}" \
+            bandit -r app/medicare --ignore-nosec -f sarif -o sarif/bandit.sarif --exit-zero
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sarif-bandit
+          path: sarif/bandit.sarif
+          if-no-files-found: error
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          sarif_file: sarif/bandit.sarif
+          category: bandit
+
+  codeql:
+    name: sast-codeql
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: python
+          build-mode: none
+          queries: security-extended
+          config: |
+            paths:
+              - app/medicare
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: codeql
+          output: codeql-results
+          upload: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'always' || 'never' }}
+      - name: Collect SARIF
+        run: |
+          mkdir -p sarif
+          cp codeql-results/python.sarif sarif/codeql.sarif
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sarif-codeql
+          path: sarif/codeql.sarif
+          if-no-files-found: error
+
+  trivy:
+    name: sca-trivy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned scanners
+        run: bash security/install-tools.sh "$RUNNER_TEMP/tools"
+      - name: Cache key (refreshed daily)
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ steps.day.outputs.day }}
+      - name: Trivy (every dependency manifest in the repo, e.g. app/uv.lock)
+        run: |
+          mkdir -p sarif
+          "$RUNNER_TEMP/tools/trivy" fs --scanners vuln --skip-dirs .git \
+            --format sarif --output sarif/trivy.sarif .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sarif-trivy
+          path: sarif/trivy.sarif
+          if-no-files-found: error
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          sarif_file: sarif/trivy.sarif
+          category: trivy
+
+  gitleaks:
+    name: secret-gitleaks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pinned scanners
+        run: bash security/install-tools.sh "$RUNNER_TEMP/tools"
+      - name: Gitleaks (commits of this PR only, secrets redacted)
+        run: |
+          mkdir -p sarif
+          "$RUNNER_TEMP/tools/gitleaks" git --log-opts="${BASE_SHA}..${HEAD_SHA}" \
+            --config security/gitleaks.toml --ignore-gitleaks-allow --redact --exit-code 0 \
+            --report-format sarif --report-path sarif/gitleaks.sarif .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sarif-gitleaks
+          path: sarif/gitleaks.sarif
+          if-no-files-found: error
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          sarif_file: sarif/gitleaks.sarif
+          category: gitleaks
+
+  iac:
+    name: iac-checkov
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+      - name: Checkov (Terraform, Kubernetes, Dockerfile)
+        run: |
+          source security/tool-versions.env
+          mkdir -p sarif checkov-out
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "checkov==${CHECKOV_VERSION}" \
+            checkov -d . --config-file security/checkov.yaml \
+            -o sarif --output-file-path checkov-out --soft-fail --quiet
+          mv checkov-out/results_sarif.sarif sarif/checkov.sarif
+      - name: zizmor (GitHub Actions workflows)
+        run: |
+          source security/tool-versions.env
+          # Run from the repo root so SARIF paths are repo-relative (.github/workflows/x.yml)
+          # and match the files the PR changed. The gate decides, not this step.
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" "zizmor==${ZIZMOR_VERSION}" --offline --format sarif . \
+            > sarif/zizmor.sarif || test -s sarif/zizmor.sarif
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sarif-iac
+          path: |
+            sarif/checkov.sarif
+            sarif/zizmor.sarif
+          if-no-files-found: error
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          sarif_file: sarif/checkov.sarif
+          category: checkov
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          sarif_file: sarif/zizmor.sarif
+          category: zizmor
+
+  quality-gate:
+    name: quality-gate
+    needs: [build-test, semgrep, bandit, codeql, trivy, gitleaks, iac]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: sarif-*
+          path: sarif
+          merge-multiple: true
+      - name: Every scanner and the test suite must have completed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::A scanner or the test job did not succeed ($RESULTS); failing safe."
+              exit 1
+            fi
+          done
+      - name: Quality gate
+        env:
+          SECURITY_GATE_MODE: ${{ vars.SECURITY_GATE_MODE || 'traditional' }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          # Changed files = git diff from the merge base of BASE_SHA and HEAD_SHA.
+          python3 security/gate/gate.py --sarif-dir sarif --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --mode "$SECURITY_GATE_MODE" --labels "$PR_LABELS" \
+            --workspace "$GITHUB_WORKSPACE" --summary "$GITHUB_STEP_SUMMARY"

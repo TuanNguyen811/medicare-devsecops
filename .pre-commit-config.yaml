@@ -1,0 +1,14 @@
+# Local checks before each commit. Install once: uv tool install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        args: ["--config", "security/gitleaks.toml"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff-check
+        files: ^(app|security/gate)/
+        args: ["--line-length", "100"]

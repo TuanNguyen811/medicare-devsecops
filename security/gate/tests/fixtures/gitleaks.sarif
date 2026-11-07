@@ -1,0 +1,4 @@
+{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "gitleaks", "rules": [{"id": "aws-access-token"}]}},
+ "results": [
+  {"ruleId": "aws-access-token", "message": {"text": "aws-access-token has detected secret AKIAIOSFODNN7EXAMPLE"},
+   "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app/medicare/sms.py"}, "region": {"startLine": 5}}}]}]}]}

@@ -1,0 +1,52 @@
+# Nightly dependency re-scan: new CVEs get published even when the code does not change.
+name: Nightly SCA
+
+on:
+  schedule:
+    - cron: "0 19 * * *" # 02:00 Asia/Ho_Chi_Minh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sca:
+    name: nightly-sca
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned scanners
+        run: bash security/install-tools.sh "$RUNNER_TEMP/tools"
+      - name: Trivy (dependencies, freshest DB, no cache)
+        run: |
+          mkdir -p sarif
+          "$RUNNER_TEMP/tools/trivy" fs --scanners vuln --skip-dirs .git \
+            --format sarif --output sarif/trivy-deps.sarif .
+      - name: Trivy (published image, if it exists)
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          image="ghcr.io/${OWNER,,}/medicare-hms:latest"
+          if "$RUNNER_TEMP/tools/trivy" image --format sarif --output sarif/trivy-image.sarif "$image"; then
+            echo "Scanned $image"
+          else
+            echo "::notice::$image not available yet; image scan skipped"
+          fi
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: sarif/trivy-deps.sarif
+          category: nightly-trivy
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: hashFiles('sarif/trivy-image.sarif') != ''
+        with:
+          sarif_file: sarif/trivy-image.sarif
+          category: nightly-trivy-image

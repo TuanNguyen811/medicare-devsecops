@@ -1,0 +1,4 @@
+{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Checkov", "rules": [{"id": "CKV_AWS_18"}]}},
+ "results": [
+  {"ruleId": "CKV_AWS_18", "level": "error", "message": {"text": "Ensure the S3 bucket has access logging enabled"},
+   "locations": [{"physicalLocation": {"artifactLocation": {"uri": "/github/workspace/infra/terraform/main.tf"}, "region": {"startLine": 30}}}]}]}]}

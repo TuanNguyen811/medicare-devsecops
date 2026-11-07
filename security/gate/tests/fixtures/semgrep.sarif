@@ -1,0 +1,8 @@
+{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Semgrep OSS", "rules": [
+  {"id": "medicare.sqlalchemy-text-fstring", "defaultConfiguration": {"level": "error"}},
+  {"id": "python.lang.best-practice.open-never-closed", "defaultConfiguration": {"level": "warning"}}]}},
+ "results": [
+  {"ruleId": "medicare.sqlalchemy-text-fstring", "level": "error", "message": {"text": "SQL built from f-string"},
+   "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app/medicare/patient/service.py"}, "region": {"startLine": 42}}}]},
+  {"ruleId": "python.lang.best-practice.open-never-closed", "level": "warning", "message": {"text": "file not closed"},
+   "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app/medicare/seed.py"}, "region": {"startLine": 80}}}]}]}]}

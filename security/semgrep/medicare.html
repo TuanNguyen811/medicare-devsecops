@@ -1,0 +1,17 @@
+<!-- Test targets for medicare.jinja-safe-filter -->
+<div class="note">
+  <!-- ruleid: medicare.jinja-safe-filter -->
+  {{ record.notes | safe }}
+</div>
+<div class="note">
+  <!-- ruleid: medicare.jinja-safe-filter -->
+  {{ record.notes|safe }}
+</div>
+<div class="note">
+  <!-- ok: medicare.jinja-safe-filter -->
+  {{ record.notes }}
+</div>
+<div class="note">
+  <!-- ok: medicare.jinja-safe-filter -->
+  {{ record.notes | e }}
+</div>

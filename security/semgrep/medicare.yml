@@ -1,0 +1,62 @@
+# Project-specific Semgrep rules for MediCare HMS (complement p/python + p/owasp-top-ten).
+# Tests: semgrep --test security/semgrep  (targets: medicare.py, medicare.html)
+rules:
+  - id: medicare.sqlalchemy-text-fstring
+    languages: [python]
+    severity: ERROR
+    message: >-
+      SQL trong sqlalchemy.text() được dựng từ chuỗi động (f-string, nối chuỗi, .format, %).
+      Dùng bind parameter, ví dụ text("... WHERE code = :code"), {"code": value}.
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A05:2025 - Injection"
+      confidence: HIGH
+      category: security
+    pattern-either:
+      - pattern: sqlalchemy.text(f"...")
+      - pattern: sqlalchemy.text("..." + $X)
+      - pattern: sqlalchemy.text($X + "...")
+      - pattern: sqlalchemy.text("...".format(...))
+      - pattern: sqlalchemy.text("..." % $X)
+
+  - id: medicare.jinja-safe-filter
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Tắt cơ chế tự escape của Jinja2 (|safe hoặc Markup()) có thể gây XSS khi dữ liệu
+      đến từ người dùng. MediCare cấm dùng trên dữ liệu người dùng.
+    metadata:
+      cwe: "CWE-79: Cross-site Scripting"
+      owasp: "A05:2025 - Injection"
+      confidence: MEDIUM
+      category: security
+    paths:
+      include: ["*.html", "*.htm", "*.j2", "*.jinja", "*.py"]
+    pattern-regex: '(\|\s*safe\b|\bMarkup\()'
+
+  - id: medicare.route-int-path-param
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Tham số id trên đường dẫn đang có kiểu int. Hãy dùng medicare.common.ids.ObjectId,
+      vì id ngoài phạm vi INTEGER phải trả 404 giống như id không tồn tại (R-15),
+      không được gây lỗi 500.
+    metadata:
+      cwe: "CWE-20: Improper Input Validation"
+      owasp: "A10:2025 - Mishandling of Exceptional Conditions"
+      confidence: HIGH
+      category: security
+    patterns:
+      - pattern: |
+          @$ROUTER.$METHOD($PATH, ...)
+          def $FUNC(..., $ID: int, ...):
+            ...
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(get|post|put|patch|delete)$
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '.*\{\w+\}.*'
+      - metavariable-regex:
+          metavariable: $ID
+          regex: .*_id$

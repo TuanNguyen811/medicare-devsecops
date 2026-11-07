@@ -1,0 +1,27 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {"driver": {"name": "CodeQL", "rules": [
+        {"id": "py/sql-injection", "properties": {"security-severity": "8.8"}}
+      ]}},
+      "results": [
+        {
+          "ruleId": "py/sql-injection",
+          "message": {"text": "This SQL query depends on a user-provided value."},
+          "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app/medicare/common/db.py"}, "region": {"startLine": 12}}}],
+          "codeFlows": [{"threadFlows": [{"locations": [
+            {"location": {"physicalLocation": {"artifactLocation": {"uri": "app/medicare/patient/router.py"}, "region": {"startLine": 30}}}},
+            {"location": {"physicalLocation": {"artifactLocation": {"uri": "app/medicare/common/db.py"}, "region": {"startLine": 12}}}}
+          ]}]}]
+        },
+        {
+          "ruleId": "py/sql-injection",
+          "message": {"text": "This SQL query depends on a user-provided value."},
+          "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app/medicare/common/db.py"}, "region": {"startLine": 20}}}],
+          "relatedLocations": [{"id": 1, "physicalLocation": {"artifactLocation": {"uri": "app/medicare/billing/router.py"}, "region": {"startLine": 44}}}]
+        }
+      ]
+    }
+  ]
+}
