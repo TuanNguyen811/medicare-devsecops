@@ -236,13 +236,15 @@ class Cluster:
         return sorted({f.tool for f in self.findings})
 
 
+def cwe_group(cwe: str) -> str:
+    """The CWE family name (e.g. "sql"), or the CWE itself when it has no family."""
+    return next((name for name, members in CWE_GROUPS.items() if cwe in members), cwe)
+
+
 def group_keys(finding: ScanFinding) -> set[str]:
     if not finding.cwes:
         return {f"rule:{finding.rule_id}"}
-    keys = set()
-    for cwe in finding.cwes:
-        keys.add(next((name for name, members in CWE_GROUPS.items() if cwe in members), cwe))
-    return keys
+    return {cwe_group(cwe) for cwe in finding.cwes}
 
 
 def _in_diff(members: list[ScanFinding], diff: PrDiff) -> bool:
