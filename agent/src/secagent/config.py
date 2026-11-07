@@ -37,7 +37,10 @@ PROVIDERS: dict[str, ProviderPreset] = {
                              "reasoning_effort", None),
     "gemini": ProviderPreset("openai", "https://generativelanguage.googleapis.com/v1beta/openai/",
                              "gemini-2.5-flash", None, "reasoning_effort", 0.0),
-    "anthropic": ProviderPreset("anthropic", None, "claude-sonnet-5-5", None, "anthropic", 0.0),
+    # Claude: thinking is always on (effort is the knob) and sampling parameters are rejected.
+    # Prices: Claude Opus 5.5 list price per million tokens.
+    "anthropic": ProviderPreset("anthropic", None, "claude-opus-5-5", None, "anthropic", None,
+                                4.0, 20.0),
     "openai-compatible": ProviderPreset("openai", None, None, None, "reasoning_effort", 0.0),
 }
 
@@ -102,8 +105,8 @@ class Settings:
         if raw_temperature is not None:
             temperature = None if raw_temperature.lower() == "none" else _number(
                 "LLM_TEMPERATURE", raw_temperature)
-        if thinking and preset.thinking == "anthropic":
-            temperature = None  # Claude extended thinking does not accept a temperature
+        if preset.client == "anthropic" and temperature is not None:
+            raise ConfigError("Claude không nhận tham số temperature; bỏ LLM_TEMPERATURE.")
         reasoning_effort = "high" if thinking and preset.thinking == "reasoning_effort" else None
 
         price_in = get("LLM_PRICE_IN_PER_M")

@@ -47,9 +47,12 @@ def test_provider_presets(provider):
         assert s.base_url == "https://generativelanguage.googleapis.com/v1beta/openai/"
         assert s.temperature == 0 and thinking.reasoning_effort == "high"
     if provider == "anthropic":
-        assert s.client == "anthropic" and s.model == "claude-sonnet-5-5"
-        assert s.temperature == 0 and s.base_url is None
-        assert thinking.temperature is None and thinking.reasoning_effort is None
+        assert s.client == "anthropic" and s.model == "claude-opus-5-5"
+        assert s.temperature is None and s.base_url is None
+        assert thinking.thinking and thinking.temperature is None
+        assert thinking.reasoning_effort is None
+        with pytest.raises(ConfigError):
+            settings({"LLM_PROVIDER": provider, "LLM_TEMPERATURE": "0"})
 
 
 def test_openai_compatible_requires_base_url_and_model():
@@ -80,7 +83,8 @@ def test_step_limit(n, limit):
 
 def test_cost_usd():
     assert cost_usd(1_000_000, 1_000_000, settings()) == pytest.approx(0.70)
-    assert cost_usd(1_000_000, 1_000_000, settings({"LLM_PROVIDER": "anthropic"})) == 0.0
+    assert cost_usd(1_000_000, 1_000_000, settings({"LLM_PROVIDER": "anthropic"})) == 24.0
+    assert cost_usd(1_000_000, 1_000_000, settings({"LLM_PROVIDER": "gemini"})) == 0.0
     priced = settings({"LLM_PROVIDER": "anthropic", "LLM_PRICE_IN_PER_M": "3",
                        "LLM_PRICE_OUT_PER_M": "15"})
     assert cost_usd(1_000_000, 1_000_000, priced) == pytest.approx(18.0)
