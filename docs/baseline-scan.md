@@ -63,5 +63,6 @@ Vì `main` là bản sạch đã qua review độc lập, **cả 15 phát hiện
 
 - **Checkov không có mức độ** khi chạy không kèm API key của Prisma Cloud. Mọi check không đạt đều có level `error`, nên gate quy về HIGH. Đó là lý do một PR chỉ *thêm* hạ tầng mẫu (PR #3) đã bị gate truyền thống chặn bởi 10 FP.
 - **Semgrep và Trivy cho 0 phát hiện** trên bản sạch. Kịch bản lỗ hổng nào khiến hai công cụ này báo thì gần như chắc chắn là TP.
-- **Gitleaks báo trên file test.** Gate chỉ xét file mà PR thay đổi, nên hai FP này chỉ xuất hiện khi PR sửa đúng các file test đó.
+- **Gitleaks báo trên file test.** Bảng trên quét toàn bộ cây (`gitleaks dir`). Trên CI, Gitleaks chỉ quét **các commit của PR** (`gitleaks git --log-opts base..head`). Vì vậy hai FP này chỉ xuất hiện khi commit của PR thêm hoặc sửa đúng những dòng đó. Gate không lọc kết quả Gitleaks theo file thay đổi, vì secret đã commit rồi bị đổi tên hoặc xóa vẫn nằm trong lịch sử.
+- **Quét lại sau review cuối kế hoạch B** (cùng ngày) với cấu hình mới: zizmor quét từ gốc repo, Semgrep/Bandit/Gitleaks bỏ qua comment chặn cảnh báo, công cụ Python cài với `--exclude-newer`, bucket logs có thêm policy chỉ cho phép TLS. Kết quả **không đổi**: cùng 14 phát hiện ở cùng vị trí, cộng phát hiện CodeQL.
 - Không có comment chặn cảnh báo nào (`# nosec`, `checkov:skip`, …) trong `app/` và `infra/`. Mọi FP trên đều được giữ nguyên để đo.

@@ -17,13 +17,13 @@ Phiên bản mọi công cụ quét nằm ở **một file duy nhất**: [`secur
 
 ```
 pull_request → main
- ├─ build-test ─────── pytest (253 test, PostgreSQL thật qua Testcontainers) + ruff + test của gate
+ ├─ build-test ─────── pytest (254 test, PostgreSQL thật qua Testcontainers) + ruff + test của gate
  ├─ sast-semgrep ─────┐  chỉ báo phát hiện mới so với commit gốc (--baseline-commit)
  ├─ sast-bandit ──────┤
  ├─ sast-codeql ──────┤  security-extended, chỉ quét app/medicare
- ├─ sca-trivy ────────┤  app/uv.lock, cơ sở dữ liệu CVE được cache theo ngày
+ ├─ sca-trivy ────────┤  mọi file khai báo thư viện trong repo (app/uv.lock); CSDL CVE cache theo ngày
  ├─ secret-gitleaks ──┤  chỉ các commit của PR, che giá trị secret (--redact)
- ├─ iac-checkov ──────┤  Checkov (Terraform, K8s, Dockerfile) + zizmor (workflow CI)
+ ├─ iac-checkov ──────┤  Checkov (Terraform, K8s, Dockerfile) + zizmor (workflow CI, chạy từ gốc repo)
  │                    ▼  mỗi job: artifact sarif-<tool> + upload lên tab Security
  └─ quality-gate ───── chặn hoặc cho qua (bắt buộc đạt, theo branch protection)
 ```
@@ -38,21 +38,28 @@ Các job quét chạy song song nên tổng thời gian chỉ khoảng 1 phút, 
 
 ## Quality gate
 
-Gate là script [`security/gate/gate.py`](../security/gate/gate.py), chỉ dùng thư viện chuẩn và có 45 test. Script đọc mọi file `sarif/*.sarif`, quy đổi mức độ rồi ra quyết định.
+Gate là script [`security/gate/gate.py`](../security/gate/gate.py), chỉ dùng thư viện chuẩn và có 68 test (một phần dùng SARIF thật của từng công cụ). Script đọc mọi file `sarif/*.sarif`, quy đổi mức độ rồi ra quyết định.
 
 **Quy đổi mức độ:**
 - Gitleaks luôn là HIGH.
 - Nếu có `security-severity` (CVSS) ở kết quả hoặc ở rule: ≥ 9.0 là CRITICAL, ≥ 7.0 là HIGH, ≥ 4.0 là MEDIUM, còn lại LOW. Rule có thể nằm ở `tool.driver` hoặc `tool.extensions`; CodeQL đặt rule ở `extensions`.
+  - Với Trivy, điểm này là CVSS chứ không phải nhãn của Trivy. Ví dụ CVE-2024-56326 được Trivy gắn MEDIUM nhưng có CVSS 7.8, nên gate xếp HIGH. Bước quét image ở main-ci thì dùng nhãn của Trivy.
 - Nếu không có, dùng `level`: `error` là HIGH, `warning` là MEDIUM, `note`/không có là LOW.
 
-**Phạm vi:** chỉ xét phát hiện nằm trong **file mà PR thay đổi**. Phát hiện không có vị trí thì luôn được xét.
+**Phạm vi:** gate chỉ xét phát hiện mà PR có thể đã gây ra. Danh sách file thay đổi do gate tự tính bằng `git diff` **từ merge base** (`base...head`). Vì vậy các commit vào `main` sau khi PR rẽ nhánh không bị tính, tên file có dấu hay dấu cách được đọc đúng, và đường dẫn trong SARIF được giải mã percent-encoding. Một phát hiện được giữ lại khi thỏa một trong các điều kiện:
+- Không có vị trí.
+- Đến từ **Gitleaks**: công cụ này chỉ quét các commit của PR, nên secret đã commit rồi bị đổi tên hoặc xóa ở commit sau vẫn bị chặn (secret vẫn còn trong lịch sử của PR).
+- Có **bất kỳ vị trí nào** nằm trong file thay đổi, tính cả vị trí chính, `relatedLocations` và các bước `codeFlows`. Ví dụ PR chỉ thêm route mới (nguồn dữ liệu) dẫn vào hàm cũ có lỗ hổng (điểm sink).
+- Nằm trong **cùng thư mục Terraform** với một file `.tf`/`.tfvars` bị sửa. Lý do: Checkov tính cả biến, nên sửa `variables.tf` có thể làm lộ lỗi trong `main.tf`.
+
+**Chính sách cấu hình nhạy cảm:** PR sửa `.github/**`, `security/**` hoặc file bỏ qua cảnh báo của công cụ quét (`.semgrepignore`, `.trivyignore`, `trivy.yaml`, `.gitleaksignore`, `.checkov.yaml`, `.bandit`, `zizmor.yml`, …) sẽ bị **chặn** cho tới khi có label `security-reviewed`. Label này là xác nhận của người review bảo mật.
 
 **Chế độ** (biến repo `SECURITY_GATE_MODE`):
 
 | Chế độ | Chặn khi |
 |---|---|
 | `traditional` (mặc định) | Có bất kỳ phát hiện HIGH/CRITICAL nào |
-| `ai-assisted` (kế hoạch C) | Phát hiện HIGH/CRITICAL được Agent kết luận `TP`/`NEEDS_REVIEW`, hoặc **chưa được Agent thẩm định**. Kết luận `FP` miễn chặn mức Critical chỉ khi PR có label `security-reviewed`. Ngoài ra chặn khi Agent tự tìm thêm lỗi HIGH/CRITICAL `TP` với độ tin cậy ≥ 0.7 |
+| `ai-assisted` (kế hoạch C) | Phát hiện HIGH/CRITICAL được Agent kết luận `TP`/`NEEDS_REVIEW`, hoặc **chưa được Agent thẩm định**. Nếu có nhiều kết luận cho cùng một phát hiện, chỉ cần một kết luận khác `FP` là chặn. Kết luận `FP` miễn chặn mức Critical chỉ khi PR có label `security-reviewed`. Ngoài ra chặn khi Agent tự tìm thêm lỗi HIGH/CRITICAL `TP` với độ tin cậy ≥ 0.7 |
 
 **Fail-safe:**
 - Agent lỗi (mã thoát 2, thiếu hoặc hỏng `report.json`) → gate quay về `traditional`.
@@ -70,9 +77,16 @@ Bảng tóm tắt gate ghi vào job summary của Actions. Bảng này **không 
 | Chống pwn request | Không dùng `pull_request_target`. PR từ fork không upload SARIF và không đọc được secret |
 | Chống script injection | Mọi giá trị `${{ }}` đến từ người dùng (labels, SHA) được truyền qua `env:`, không nhúng vào `run:` |
 | Checkout | `persist-credentials: false` ở mọi job |
-| Tự kiểm tra | actionlint 1.7.12 và zizmor 1.32.0 (cũng chạy trong job iac-checkov): **0 phát hiện** |
+| Tự kiểm tra | actionlint 1.7.12 và zizmor 1.32.0 (cũng chạy trong job iac-checkov, quét từ gốc repo nên phát hiện trong workflow mà PR sửa sẽ chặn PR): **0 phát hiện** |
+| Không cho tắt cảnh báo trong code | Semgrep `--disable-nosem`, Bandit `--ignore-nosec`, Gitleaks `--ignore-gitleaks-allow`: comment `# nosemgrep`, `# nosec`, `gitleaks:allow` không có tác dụng. Checkov vẫn ghi kết quả bị `checkov:skip` vào SARIF (kèm `suppressions`) và gate vẫn đếm. File ignore của công cụ thì phải có label `security-reviewed` |
+| Tái lập kết quả quét | Phiên bản công cụ cố định trong `tool-versions.env`; công cụ Python cài bằng `uvx --exclude-newer 2026-11-07T00:00:00Z`, nên thư viện phụ thuộc cũng cố định |
 | Staging | Secret sinh ngẫu nhiên trong job bằng `openssl rand`, file `.env` có quyền 600, xóa ngay sau khi chạy |
 | Branch protection `main` | Bắt buộc `build-test` và `quality-gate` đạt; cấm force-push và cấm xóa nhánh |
+
+**Giới hạn đã biết** (ghi vào phần "mối đe dọa đối với tính hợp lệ" của báo cáo):
+- Với sự kiện `pull_request`, GitHub chạy **workflow và `gate.py` của chính PR**. Người có quyền push nhánh có thể sửa workflow để bỏ qua gate. Chính sách cấu hình nhạy cảm chỉ làm việc này lộ ra (PR bị chặn cho tới khi có label `security-reviewed`), không ngăn được hoàn toàn. Muốn chặn hẳn cần review bắt buộc kèm CODEOWNERS cho `.github/` và `security/`, việc sẽ bật khi nhóm có thêm người review (hiện một người làm nên chưa thể tự duyệt PR của mình).
+- Bộ rule `p/python` và `p/owasp-top-ten` của Semgrep lấy từ registry, không có phiên bản. Kết quả Semgrep có thể đổi theo ngày, nên benchmark lưu lại SARIF của từng lần chạy.
+- Checkov bỏ qua (không báo lỗi) file Terraform có lỗi cú pháp.
 
 ## Main CI/CD (`main-ci.yml`)
 
@@ -88,7 +102,7 @@ Lần chạy thử 42357471271:
 ## Các trường hợp thực tế (dữ liệu cho báo cáo)
 
 1. **Gate truyền thống chặn PR vì báo nhầm.** PR #3 thêm hạ tầng mẫu `infra/terraform` và `infra/k8s`. Gate ở chế độ `traditional` chặn với **10 phát hiện Checkov mức HIGH**, và cả 10 đều là FP hoặc rủi ro chấp nhận được (xem [`baseline-scan.md`](baseline-scan.md)). Nguyên nhân: Checkov không có mức độ nếu không có API key, nên mọi check không đạt đều mang level `error`. Đây đúng là vấn đề "alert fatigue / FP chặn luồng phát triển" mà Agent cần giải quyết.
-2. **Gate chặn lỗ hổng thật:** xem mục dưới. PR thử nghiệm được tạo sau khi merge kế hoạch B.
+2. **Gate chặn lỗ hổng thật:** PR thử nghiệm được tạo sau khi merge kế hoạch B; kết quả ghi ngay bên dưới.
 
 ## Chạy công cụ quét trên máy
 
