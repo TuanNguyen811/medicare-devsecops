@@ -1,0 +1,405 @@
+{
+ "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+ "version": "2.1.0",
+ "runs": [
+  {
+   "tool": {
+    "driver": {
+     "name": "Checkov",
+     "version": "3.4.3",
+     "informationUri": "https://checkov.io",
+     "rules": [
+      {
+       "id": "CKV_K8S_35",
+       "name": "Prefer using secrets as files over secrets as environment variables",
+       "shortDescription": {
+        "text": "Prefer using secrets as files over secrets as environment variables"
+       },
+       "fullDescription": {
+        "text": "Prefer using secrets as files over secrets as environment variables"
+       },
+       "help": {
+        "text": "Prefer using secrets as files over secrets as environment variables\nResource: Deployment.medicare.medicare-app"
+       },
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "helpUri": "https://docs.prismacloud.io/en/enterprise-edition/policy-reference/kubernetes-policies/kubernetes-policy-index/bc-k8s-33"
+      },
+      {
+       "id": "CKV_AWS_394",
+       "name": "Ensure aws_availability_zones data source pins zone identity so its result set does not silently expand when AWS adds an Availability Zone",
+       "shortDescription": {
+        "text": "Ensure aws_availability_zones data source pins zone identity so its result set does not silently expand when AWS adds an Availability Zone"
+       },
+       "fullDescription": {
+        "text": "Ensure aws_availability_zones data source pins zone identity so its result set does not silently expand when AWS adds an Availability Zone"
+       },
+       "help": {
+        "text": "Ensure aws_availability_zones data source pins zone identity so its result set does not silently expand when AWS adds an Availability Zone\nResource: aws_availability_zones.available"
+       },
+       "defaultConfiguration": {
+        "level": "error"
+       }
+      },
+      {
+       "id": "CKV_AWS_356",
+       "name": "Ensure no IAM policies documents allow \"*\" as a statement's resource for restrictable actions",
+       "shortDescription": {
+        "text": "Ensure no IAM policies documents allow \"*\" as a statement's resource for restrictable actions"
+       },
+       "fullDescription": {
+        "text": "Ensure no IAM policies documents allow \"*\" as a statement's resource for restrictable actions"
+       },
+       "help": {
+        "text": "Ensure no IAM policies documents allow \"*\" as a statement's resource for restrictable actions\nResource: aws_iam_policy_document.kms"
+       },
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "helpUri": "https://docs.prismacloud.io/en/enterprise-edition/policy-reference/aws-policies/aws-iam-policies/bc-aws-356"
+      },
+      {
+       "id": "CKV_AWS_109",
+       "name": "Ensure IAM policies does not allow permissions management / resource exposure without constraints",
+       "shortDescription": {
+        "text": "Ensure IAM policies does not allow permissions management / resource exposure without constraints"
+       },
+       "fullDescription": {
+        "text": "Ensure IAM policies does not allow permissions management / resource exposure without constraints"
+       },
+       "help": {
+        "text": "Ensure IAM policies does not allow permissions management / resource exposure without constraints\nResource: aws_iam_policy_document.kms"
+       },
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "helpUri": "https://docs.prismacloud.io/en/enterprise-edition/policy-reference/aws-policies/aws-iam-policies/ensure-iam-policies-do-not-allow-permissions-management-resource-exposure-without-constraint"
+      },
+      {
+       "id": "CKV_AWS_111",
+       "name": "Ensure IAM policies does not allow write access without constraints",
+       "shortDescription": {
+        "text": "Ensure IAM policies does not allow write access without constraints"
+       },
+       "fullDescription": {
+        "text": "Ensure IAM policies does not allow write access without constraints"
+       },
+       "help": {
+        "text": "Ensure IAM policies does not allow write access without constraints\nResource: aws_iam_policy_document.kms"
+       },
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "helpUri": "https://docs.prismacloud.io/en/enterprise-edition/policy-reference/aws-policies/aws-iam-policies/ensure-iam-policies-do-not-allow-write-access-without-constraint"
+      },
+      {
+       "id": "CKV2_AWS_62",
+       "name": "Ensure S3 buckets should have event notifications enabled",
+       "shortDescription": {
+        "text": "Ensure S3 buckets should have event notifications enabled"
+       },
+       "fullDescription": {
+        "text": "Ensure S3 buckets should have event notifications enabled"
+       },
+       "help": {
+        "text": "Ensure S3 buckets should have event notifications enabled\nResource: aws_s3_bucket.logs"
+       },
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "helpUri": "https://docs.prismacloud.io/en/enterprise-edition/policy-reference/aws-policies/aws-logging-policies/bc-aws-2-62"
+      },
+      {
+       "id": "CKV2_AWS_5",
+       "name": "Ensure that Security Groups are attached to another resource",
+       "shortDescription": {
+        "text": "Ensure that Security Groups are attached to another resource"
+       },
+       "fullDescription": {
+        "text": "Ensure that Security Groups are attached to another resource"
+       },
+       "help": {
+        "text": "Ensure that Security Groups are attached to another resource\nResource: aws_security_group.app"
+       },
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "helpUri": "https://docs.prismacloud.io/en/enterprise-edition/policy-reference/aws-policies/aws-networking-policies/ensure-that-security-groups-are-attached-to-ec2-instances-or-elastic-network-interfaces-enis"
+      },
+      {
+       "id": "CKV_AWS_144",
+       "name": "Ensure that S3 bucket has cross-region replication enabled",
+       "shortDescription": {
+        "text": "Ensure that S3 bucket has cross-region replication enabled"
+       },
+       "fullDescription": {
+        "text": "Ensure that S3 bucket has cross-region replication enabled"
+       },
+       "help": {
+        "text": "Ensure that S3 bucket has cross-region replication enabled\nResource: aws_s3_bucket.logs"
+       },
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "helpUri": "https://docs.prismacloud.io/en/enterprise-edition/policy-reference/aws-policies/aws-general-policies/ensure-that-s3-bucket-has-cross-region-replication-enabled"
+      }
+     ],
+     "organization": "bridgecrew"
+    }
+   },
+   "results": [
+    {
+     "ruleId": "CKV_K8S_35",
+     "ruleIndex": 0,
+     "level": "error",
+     "attachments": [],
+     "message": {
+      "text": "Prefer using secrets as files over secrets as environment variables"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "infra/k8s/deployment.yaml"
+        },
+        "region": {
+         "startLine": 3,
+         "endLine": 67,
+         "snippet": {
+          "text": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: medicare-app\n  namespace: medicare\n  labels:\n    app: medicare\nspec:\n  replicas: 2\n  selector:\n    matchLabels:\n      app: medicare\n  template:\n    metadata:\n      labels:\n        app: medicare\n    spec:\n      automountServiceAccountToken: false\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 10001\n        runAsGroup: 10001\n        seccompProfile:\n          type: RuntimeDefault\n      containers:\n        - name: app\n          image: ghcr.io/tuannguyen811/medicare-hms@sha256:0000000000000000000000000000000000000000000000000000000000000000\n          imagePullPolicy: Always\n          ports:\n            - containerPort: 8000\n              name: http\n          envFrom:\n            - secretRef:\n                name: medicare-env\n          securityContext:\n            allowPrivilegeEscalation: false\n            readOnlyRootFilesystem: true\n            capabilities:\n              drop: [\"ALL\"]\n          resources:\n            requests:\n              cpu: 100m\n              memory: 256Mi\n            limits:\n              cpu: 500m\n              memory: 512Mi\n          livenessProbe:\n            httpGet:\n              path: /health\n              port: http\n            initialDelaySeconds: 15\n            periodSeconds: 20\n          readinessProbe:\n            httpGet:\n              path: /health\n              port: http\n            periodSeconds: 10\n          volumeMounts:\n            - name: tmp\n              mountPath: /tmp\n      volumes:\n        - name: tmp\n          emptyDir:\n            medium: Memory\n            sizeLimit: 64Mi\n"
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "CKV_AWS_394",
+     "ruleIndex": 1,
+     "level": "error",
+     "attachments": [],
+     "message": {
+      "text": "Ensure aws_availability_zones data source pins zone identity so its result set does not silently expand when AWS adds an Availability Zone"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "infra/terraform/main.tf"
+        },
+        "region": {
+         "startLine": 5,
+         "endLine": 7,
+         "snippet": {
+          "text": "data \"aws_availability_zones\" \"available\" {\n  state = \"available\"\n}\n"
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "CKV_AWS_356",
+     "ruleIndex": 2,
+     "level": "error",
+     "attachments": [],
+     "message": {
+      "text": "Ensure no IAM policies documents allow \"*\" as a statement's resource for restrictable actions"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "infra/terraform/main.tf"
+        },
+        "region": {
+         "startLine": 15,
+         "endLine": 25,
+         "snippet": {
+          "text": "data \"aws_iam_policy_document\" \"kms\" {\n  statement {\n    sid       = \"AccountAdministration\"\n    actions   = [\"kms:*\"]\n    resources = [\"*\"]\n    principals {\n      type        = \"AWS\"\n      identifiers = [\"arn:aws:iam::${data.aws_caller_identity.current.account_id}:root\"]\n    }\n  }\n}\n"
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "CKV_AWS_109",
+     "ruleIndex": 3,
+     "level": "error",
+     "attachments": [],
+     "message": {
+      "text": "Ensure IAM policies does not allow permissions management / resource exposure without constraints"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "infra/terraform/main.tf"
+        },
+        "region": {
+         "startLine": 15,
+         "endLine": 25,
+         "snippet": {
+          "text": "data \"aws_iam_policy_document\" \"kms\" {\n  statement {\n    sid       = \"AccountAdministration\"\n    actions   = [\"kms:*\"]\n    resources = [\"*\"]\n    principals {\n      type        = \"AWS\"\n      identifiers = [\"arn:aws:iam::${data.aws_caller_identity.current.account_id}:root\"]\n    }\n  }\n}\n"
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "CKV_AWS_111",
+     "ruleIndex": 4,
+     "level": "error",
+     "attachments": [],
+     "message": {
+      "text": "Ensure IAM policies does not allow write access without constraints"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "infra/terraform/main.tf"
+        },
+        "region": {
+         "startLine": 15,
+         "endLine": 25,
+         "snippet": {
+          "text": "data \"aws_iam_policy_document\" \"kms\" {\n  statement {\n    sid       = \"AccountAdministration\"\n    actions   = [\"kms:*\"]\n    resources = [\"*\"]\n    principals {\n      type        = \"AWS\"\n      identifiers = [\"arn:aws:iam::${data.aws_caller_identity.current.account_id}:root\"]\n    }\n  }\n}\n"
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "CKV2_AWS_62",
+     "ruleIndex": 5,
+     "level": "error",
+     "attachments": [],
+     "message": {
+      "text": "Ensure S3 buckets should have event notifications enabled"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "infra/terraform/main.tf"
+        },
+        "region": {
+         "startLine": 175,
+         "endLine": 177,
+         "snippet": {
+          "text": "resource \"aws_s3_bucket\" \"logs\" {\n  bucket = \"${local.name}-logs\"\n}\n"
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "CKV2_AWS_62",
+     "ruleIndex": 5,
+     "level": "error",
+     "attachments": [],
+     "message": {
+      "text": "Ensure S3 buckets should have event notifications enabled"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "infra/terraform/main.tf"
+        },
+        "region": {
+         "startLine": 179,
+         "endLine": 181,
+         "snippet": {
+          "text": "resource \"aws_s3_bucket\" \"imaging\" {\n  bucket = \"${local.name}-imaging\"\n}\n"
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "CKV2_AWS_5",
+     "ruleIndex": 6,
+     "level": "error",
+     "attachments": [],
+     "message": {
+      "text": "Ensure that Security Groups are attached to another resource"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "infra/terraform/main.tf"
+        },
+        "region": {
+         "startLine": 64,
+         "endLine": 68,
+         "snippet": {
+          "text": "resource \"aws_security_group\" \"app\" {\n  name        = \"${local.name}-app\"\n  description = \"MediCare application tasks\"\n  vpc_id      = aws_vpc.main.id\n}\n"
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "CKV_AWS_144",
+     "ruleIndex": 7,
+     "level": "error",
+     "attachments": [],
+     "message": {
+      "text": "Ensure that S3 bucket has cross-region replication enabled"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "infra/terraform/main.tf"
+        },
+        "region": {
+         "startLine": 175,
+         "endLine": 177,
+         "snippet": {
+          "text": "resource \"aws_s3_bucket\" \"logs\" {\n  bucket = \"${local.name}-logs\"\n}\n"
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "CKV_AWS_144",
+     "ruleIndex": 7,
+     "level": "error",
+     "attachments": [],
+     "message": {
+      "text": "Ensure that S3 bucket has cross-region replication enabled"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "infra/terraform/main.tf"
+        },
+        "region": {
+         "startLine": 179,
+         "endLine": 181,
+         "snippet": {
+          "text": "resource \"aws_s3_bucket\" \"imaging\" {\n  bucket = \"${local.name}-imaging\"\n}\n"
+         }
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

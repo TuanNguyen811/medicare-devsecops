@@ -1,0 +1,98 @@
+# Pipeline DevSecOps
+
+Pipeline chạy trên GitHub Actions, gồm 3 workflow, cộng thêm pre-commit trên máy lập trình viên.
+
+## Công cụ ở từng giai đoạn
+
+| Giai đoạn | Khi nào | Công cụ | Nơi cấu hình |
+|---|---|---|---|
+| **Code** | Trước mỗi commit, trên máy lập trình viên | Gitleaks, Ruff | `.pre-commit-config.yaml` |
+| **Pull Request** | Mỗi lần mở hoặc cập nhật PR vào `main` | Semgrep, CodeQL, Bandit (SAST); Trivy (SCA); Gitleaks (Secret); Checkov, zizmor (IaC và workflow CI); **quality gate** | `.github/workflows/pr-security.yml` |
+| **Merge vào main** | Mỗi lần push lên `main` | Quét toàn bộ (lên tab Security); build image, Trivy quét image, SBOM CycloneDX, push GHCR; staging tạm thời + smoke test | `.github/workflows/main-ci.yml` |
+| **Hằng đêm** | 02:00 giờ Việt Nam | Trivy với cơ sở dữ liệu CVE mới nhất (thư viện + image `latest`) | `.github/workflows/nightly-sca.yml` |
+
+Phiên bản mọi công cụ quét nằm ở **một file duy nhất**: [`security/tool-versions.env`](../security/tool-versions.env). Binary (trivy, gitleaks, actionlint) được tải bằng [`security/install-tools.sh`](../security/install-tools.sh) và kiểm tra sha256. Công cụ Python (semgrep, bandit, checkov, zizmor) được cài đúng phiên bản bằng `uvx`.
+
+## Workflow Pull Request (`pr-security.yml`)
+
+```
+pull_request → main
+ ├─ build-test ─────── pytest (253 test, PostgreSQL thật qua Testcontainers) + ruff + test của gate
+ ├─ sast-semgrep ─────┐  chỉ báo phát hiện mới so với commit gốc (--baseline-commit)
+ ├─ sast-bandit ──────┤
+ ├─ sast-codeql ──────┤  security-extended, chỉ quét app/medicare
+ ├─ sca-trivy ────────┤  app/uv.lock, cơ sở dữ liệu CVE được cache theo ngày
+ ├─ secret-gitleaks ──┤  chỉ các commit của PR, che giá trị secret (--redact)
+ ├─ iac-checkov ──────┤  Checkov (Terraform, K8s, Dockerfile) + zizmor (workflow CI)
+ │                    ▼  mỗi job: artifact sarif-<tool> + upload lên tab Security
+ └─ quality-gate ───── chặn hoặc cho qua (bắt buộc đạt, theo branch protection)
+```
+
+**Thời gian đo được** (lần chạy 42357232710, PR #3):
+
+| Job | build-test | codeql | checkov+zizmor | semgrep | trivy | gitleaks | bandit | gate | **Tổng** |
+|---|---|---|---|---|---|---|---|---|---|
+| Giây | 44 | 40 | 29 | 27 | 26 | 18 | 17 | 5 | **54** |
+
+Các job quét chạy song song nên tổng thời gian chỉ khoảng 1 phút, thấp hơn nhiều so với mục tiêu ≤ 5 phút của spec. Job AI Agent (kế hoạch C) sẽ chạy song song với build-test.
+
+## Quality gate
+
+Gate là script [`security/gate/gate.py`](../security/gate/gate.py), chỉ dùng thư viện chuẩn và có 45 test. Script đọc mọi file `sarif/*.sarif`, quy đổi mức độ rồi ra quyết định.
+
+**Quy đổi mức độ:**
+- Gitleaks luôn là HIGH.
+- Nếu có `security-severity` (CVSS) ở kết quả hoặc ở rule: ≥ 9.0 là CRITICAL, ≥ 7.0 là HIGH, ≥ 4.0 là MEDIUM, còn lại LOW. Rule có thể nằm ở `tool.driver` hoặc `tool.extensions`; CodeQL đặt rule ở `extensions`.
+- Nếu không có, dùng `level`: `error` là HIGH, `warning` là MEDIUM, `note`/không có là LOW.
+
+**Phạm vi:** chỉ xét phát hiện nằm trong **file mà PR thay đổi**. Phát hiện không có vị trí thì luôn được xét.
+
+**Chế độ** (biến repo `SECURITY_GATE_MODE`):
+
+| Chế độ | Chặn khi |
+|---|---|
+| `traditional` (mặc định) | Có bất kỳ phát hiện HIGH/CRITICAL nào |
+| `ai-assisted` (kế hoạch C) | Phát hiện HIGH/CRITICAL được Agent kết luận `TP`/`NEEDS_REVIEW`, hoặc **chưa được Agent thẩm định**. Kết luận `FP` miễn chặn mức Critical chỉ khi PR có label `security-reviewed`. Ngoài ra chặn khi Agent tự tìm thêm lỗi HIGH/CRITICAL `TP` với độ tin cậy ≥ 0.7 |
+
+**Fail-safe:**
+- Agent lỗi (mã thoát 2, thiếu hoặc hỏng `report.json`) → gate quay về `traditional`.
+- File SARIF hỏng → chặn.
+- Một job quét hoặc build-test không thành công → chặn.
+
+Bảng tóm tắt gate ghi vào job summary của Actions. Bảng này **không in nội dung `message`** của SARIF, vì message của Gitleaks có thể chứa secret.
+
+## Bảo mật cho chính pipeline
+
+| Biện pháp | Cách làm |
+|---|---|
+| Đặc quyền tối thiểu | `permissions: contents: read` ở cấp workflow. Job nào cần thêm quyền thì tự khai báo (`security-events: write`, `packages: write`) |
+| Chống tấn công chuỗi cung ứng qua Action | Mọi `uses:` cố định bằng commit SHA 40 ký tự, kèm comment tag. Không dùng Action quét của bên thứ ba |
+| Chống pwn request | Không dùng `pull_request_target`. PR từ fork không upload SARIF và không đọc được secret |
+| Chống script injection | Mọi giá trị `${{ }}` đến từ người dùng (labels, SHA) được truyền qua `env:`, không nhúng vào `run:` |
+| Checkout | `persist-credentials: false` ở mọi job |
+| Tự kiểm tra | actionlint 1.7.12 và zizmor 1.32.0 (cũng chạy trong job iac-checkov): **0 phát hiện** |
+| Staging | Secret sinh ngẫu nhiên trong job bằng `openssl rand`, file `.env` có quyền 600, xóa ngay sau khi chạy |
+| Branch protection `main` | Bắt buộc `build-test` và `quality-gate` đạt; cấm force-push và cấm xóa nhánh |
+
+## Main CI/CD (`main-ci.yml`)
+
+Lần chạy thử 42357471271:
+
+| Job | Giây | Kết quả |
+|---|---|---|
+| build-test | 43 | ✅ |
+| full-scan (7 công cụ, upload SARIF theo category `main-*`) | 124 | ✅ (chỉ báo cáo, không chặn) |
+| image (build → Trivy chặn nếu có CRITICAL đã có bản sửa → SBOM → push GHCR) | 52 | ✅ không có CRITICAL có bản sửa; SBOM 45 KB; `ghcr.io/tuannguyen811/medicare-hms@sha256:55bcf451…` |
+| staging (compose up → smoke test → seed → down -v) | 35 | ✅ |
+
+## Các trường hợp thực tế (dữ liệu cho báo cáo)
+
+1. **Gate truyền thống chặn PR vì báo nhầm.** PR #3 thêm hạ tầng mẫu `infra/terraform` và `infra/k8s`. Gate ở chế độ `traditional` chặn với **10 phát hiện Checkov mức HIGH**, và cả 10 đều là FP hoặc rủi ro chấp nhận được (xem [`baseline-scan.md`](baseline-scan.md)). Nguyên nhân: Checkov không có mức độ nếu không có API key, nên mọi check không đạt đều mang level `error`. Đây đúng là vấn đề "alert fatigue / FP chặn luồng phát triển" mà Agent cần giải quyết.
+2. **Gate chặn lỗ hổng thật:** xem mục dưới. PR thử nghiệm được tạo sau khi merge kế hoạch B.
+
+## Chạy công cụ quét trên máy
+
+```bash
+bash security/scan-local.sh /tmp/scan HEAD          # quét bản export của commit HEAD bằng Docker
+python3 security/gate/gate.py --sarif-dir /tmp/scan --mode traditional
+```

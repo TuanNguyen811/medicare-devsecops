@@ -1,0 +1,746 @@
+{
+ "runs": [
+  {
+   "tool": {
+    "driver": {
+     "name": "Bandit",
+     "organization": "PyCQA",
+     "rules": [
+      {
+       "id": "B101",
+       "name": "assert_used",
+       "properties": {
+        "tags": [
+         "security",
+         "external/cwe/cwe-703"
+        ],
+        "precision": "high"
+       },
+       "helpUri": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html"
+      },
+      {
+       "id": "B311",
+       "name": "blacklist",
+       "properties": {
+        "tags": [
+         "security",
+         "external/cwe/cwe-330"
+        ],
+        "precision": "high"
+       },
+       "helpUri": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random"
+      }
+     ],
+     "version": "1.9.4",
+     "semanticVersion": "1.9.4"
+    }
+   },
+   "properties": {
+    "metrics": {
+     "_totals": {
+      "loc": 2372,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.LOW": 2,
+      "CONFIDENCE.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.HIGH": 2
+     },
+     "app/medicare/__init__.py": {
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/appointment/__init__.py": {
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/appointment/models.py": {
+      "loc": 39,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/appointment/router.py": {
+      "loc": 135,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/appointment/schemas.py": {
+      "loc": 30,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/appointment/service.py": {
+      "loc": 96,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/audit/__init__.py": {
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/audit/models.py": {
+      "loc": 13,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/audit/router.py": {
+      "loc": 46,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/audit/service.py": {
+      "loc": 19,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/auth/__init__.py": {
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/auth/admin_router.py": {
+      "loc": 114,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/auth/models.py": {
+      "loc": 31,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/auth/router.py": {
+      "loc": 85,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/billing/__init__.py": {
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/billing/models.py": {
+      "loc": 28,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/billing/router.py": {
+      "loc": 68,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/billing/service.py": {
+      "loc": 78,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/common/__init__.py": {
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/common/auth.py": {
+      "loc": 70,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/common/csrf.py": {
+      "loc": 27,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/common/errors.py": {
+      "loc": 101,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 1
+     },
+     "app/medicare/common/ids.py": {
+      "loc": 17,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/common/passwords.py": {
+      "loc": 11,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/common/templating.py": {
+      "loc": 51,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/config.py": {
+      "loc": 16,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/db.py": {
+      "loc": 36,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/department/__init__.py": {
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/department/models.py": {
+      "loc": 8,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/main.py": {
+      "loc": 47,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/patient/__init__.py": {
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/patient/models.py": {
+      "loc": 32,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/patient/router.py": {
+      "loc": 183,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/patient/schemas.py": {
+      "loc": 58,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/patient/service.py": {
+      "loc": 96,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/policy.py": {
+      "loc": 81,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/prescription/__init__.py": {
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/prescription/models.py": {
+      "loc": 39,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/prescription/router.py": {
+      "loc": 130,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/prescription/service.py": {
+      "loc": 89,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/record/__init__.py": {
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/record/models.py": {
+      "loc": 26,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/record/router.py": {
+      "loc": 157,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/record/schemas.py": {
+      "loc": 29,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/record/service.py": {
+      "loc": 64,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     },
+     "app/medicare/seed.py": {
+      "loc": 192,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 1
+     },
+     "app/medicare/validators.py": {
+      "loc": 30,
+      "nosec": 0,
+      "skipped_tests": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.HIGH": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.HIGH": 0
+     }
+    }
+   },
+   "results": [
+    {
+     "message": {
+      "text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code."
+     },
+     "level": "note",
+     "locations": [
+      {
+       "physicalLocation": {
+        "region": {
+         "snippet": {
+          "text": "    assert isinstance(exc, StarletteHTTPException)\n"
+         },
+         "endColumn": 51,
+         "endLine": 40,
+         "startColumn": 5,
+         "startLine": 40
+        },
+        "artifactLocation": {
+         "uri": "app/medicare/common/errors.py"
+        },
+        "contextRegion": {
+         "snippet": {
+          "text": "async def _http_exception_handler(request: Request, exc: Exception) -> Response:\n    assert isinstance(exc, StarletteHTTPException)\n    if _is_api(request):\n"
+         },
+         "endLine": 41,
+         "startLine": 39
+        }
+       }
+      }
+     ],
+     "properties": {
+      "issue_confidence": "HIGH",
+      "issue_severity": "LOW"
+     },
+     "ruleId": "B101",
+     "ruleIndex": 0
+    },
+    {
+     "message": {
+      "text": "Standard pseudo-random generators are not suitable for security/cryptographic purposes."
+     },
+     "level": "note",
+     "locations": [
+      {
+       "physicalLocation": {
+        "region": {
+         "snippet": {
+          "text": "    rng = random.Random(rng_seed)  # demo data only, not security-relevant\n"
+         },
+         "endColumn": 34,
+         "endLine": 80,
+         "startColumn": 11,
+         "startLine": 80
+        },
+        "artifactLocation": {
+         "uri": "app/medicare/seed.py"
+        },
+        "contextRegion": {
+         "snippet": {
+          "text": "    fake.seed_instance(rng_seed)\n    rng = random.Random(rng_seed)  # demo data only, not security-relevant\n    pw_hash = hash_password(password)\n"
+         },
+         "endLine": 81,
+         "startLine": 79
+        }
+       }
+      }
+     ],
+     "properties": {
+      "issue_confidence": "HIGH",
+      "issue_severity": "LOW"
+     },
+     "ruleId": "B311",
+     "ruleIndex": 1
+    }
+   ]
+  }
+ ],
+ "version": "2.1.0",
+ "$schema": "https://json.schemastore.org/sarif-2.1.0.json"
+}

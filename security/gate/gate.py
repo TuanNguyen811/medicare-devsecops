@@ -92,14 +92,31 @@ def severity_of(result: dict, rule: dict | None, tool: str) -> str:
     return _LEVELS.get(level or "", "LOW")
 
 
-def _rule_for(result: dict, rules: list[dict]) -> tuple[str, dict | None]:
-    by_id = {r.get("id"): r for r in rules if isinstance(r, dict)}
+def _components(tool: dict) -> list[list[dict]]:
+    """Rule lists of the driver (component -1) and of each extension (CodeQL query packs)."""
+    driver = (tool.get("driver") or {}).get("rules") or []
+    extensions = [(ext or {}).get("rules") or [] for ext in tool.get("extensions") or []]
+    return [driver, *extensions]
+
+
+def _rule_for(result: dict, tool: dict) -> tuple[str, dict | None]:
+    components = _components(tool)
     ref = result.get("rule") or {}
     rule_id = result.get("ruleId") or ref.get("id")
     index = result.get("ruleIndex", ref.get("index"))
-    if rule_id is None and isinstance(index, int) and 0 <= index < len(rules):
-        rule_id = rules[index].get("id")
-    return (rule_id or "unknown"), by_id.get(rule_id)
+    # SARIF: rule.toolComponent.index points into tool.extensions; absent means the driver.
+    component = (ref.get("toolComponent") or {}).get("index")
+    rules = components[component + 1] if isinstance(component, int) and \
+        0 <= component < len(components) - 1 else components[0]
+    rule = None
+    if isinstance(index, int) and 0 <= index < len(rules):
+        rule = rules[index]
+    if rule is None or (rule_id and rule.get("id") != rule_id):
+        rule = next((r for rs in components for r in rs
+                     if isinstance(r, dict) and r.get("id") == rule_id), None)
+    if rule_id is None and rule is not None:
+        rule_id = rule.get("id")
+    return (rule_id or "unknown"), rule
 
 
 def _location(result: dict, workspace: str | None) -> tuple[str, int]:
@@ -120,9 +137,9 @@ def load_sarif(path: Path, tool: str, workspace: str | None) -> list[Finding]:
         raise SarifError(f"{Path(path).name}: {type(exc).__name__}") from exc
     findings = []
     for run in runs or []:
-        rules = ((run.get("tool") or {}).get("driver") or {}).get("rules") or []
+        tool_meta = run.get("tool") or {}
         for result in run.get("results") or []:
-            rule_id, rule = _rule_for(result, rules)
+            rule_id, rule = _rule_for(result, tool_meta)
             file, line = _location(result, workspace)
             findings.append(Finding(tool, rule_id, severity_of(result, rule, tool), file, line))
     return findings

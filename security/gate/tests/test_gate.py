@@ -223,3 +223,29 @@ def test_cli_ai_mode_reads_report_and_labels(tmp_path):
     r = _run("--sarif-dir", str(sarif), "--mode", "ai-assisted", "--report", str(report),
              "--agent-exit", "0")
     assert r.returncode == 1 and "fallback" in r.stdout
+
+
+# --- real tool output (v0.1-baseline + infra, scanned with the pinned versions) ---------
+
+REAL = FIX / "real"
+
+
+@pytest.mark.parametrize("name", ["bandit", "checkov", "codeql", "gitleaks", "semgrep",
+                                  "trivy", "zizmor"])
+def test_parses_real_tool_output(name):
+    findings = load_sarif(REAL / f"{name}.sarif", name, None)
+    assert all(x.rule_id != "unknown" and x.severity in ("LOW", "MEDIUM", "HIGH", "CRITICAL")
+               for x in findings)
+
+
+def test_real_codeql_rule_metadata_lives_in_tool_extensions():
+    """CodeQL puts rules in tool.extensions[] and references them via rule.toolComponent."""
+    (finding,) = load_sarif(REAL / "codeql.sarif", "codeql", None)
+    assert finding.rule_id == "py/clear-text-logging-sensitive-data"
+    assert finding.severity == "HIGH"  # security-severity 7.5 on the extension rule
+    assert finding.file == "app/medicare/seed.py"
+
+
+def test_real_checkov_paths_are_repo_relative():
+    files = {x.file for x in load_sarif(REAL / "checkov.sarif", "checkov", None)}
+    assert files == {"infra/terraform/main.tf", "infra/k8s/deployment.yaml"}
