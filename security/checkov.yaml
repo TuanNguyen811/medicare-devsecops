@@ -1,0 +1,8 @@
+# Checkov configuration for IaC scanning (Terraform, Kubernetes, Dockerfile, embedded secrets).
+framework:
+  - terraform
+  - kubernetes
+  - dockerfile
+  - secrets
+compact: true
+quiet: false

@@ -1,0 +1,7 @@
+# Gitleaks configuration: default ruleset, no allowlist.
+# Findings on the clean baseline are recorded as experiment data (docs/baseline-scan.md),
+# never suppressed here.
+title = "medicare-devsecops"
+
+[extend]
+useDefault = true
