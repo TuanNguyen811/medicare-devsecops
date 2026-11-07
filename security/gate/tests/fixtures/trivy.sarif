@@ -1,0 +1,5 @@
+{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Trivy", "rules": [
+  {"id": "CVE-2020-14343", "properties": {"security-severity": "9.8"}, "defaultConfiguration": {"level": "error"}}]}},
+ "results": [
+  {"ruleId": "CVE-2020-14343", "ruleIndex": 0, "level": "error", "message": {"text": "Package: pyyaml 5.3.1"},
+   "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app/uv.lock", "uriBaseId": "ROOTPATH"}, "region": {"startLine": 1}}}]}]}]}

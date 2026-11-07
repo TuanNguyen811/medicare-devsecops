@@ -1,0 +1,8 @@
+{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "CodeQL", "rules": [
+  {"id": "py/sql-injection", "properties": {"security-severity": "8.8"}},
+  {"id": "py/clear-text-logging-sensitive-data", "properties": {"security-severity": "9.1"}}]}},
+ "results": [
+  {"ruleIndex": 0, "message": {"text": "This SQL query depends on a user-provided value."},
+   "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app/medicare/patient/service.py"}, "region": {"startLine": 42}}}]},
+  {"rule": {"id": "py/clear-text-logging-sensitive-data", "index": 1}, "message": {"text": "logs a password"},
+   "locations": [{"physicalLocation": {"artifactLocation": {"uri": "file:///github/workspace/app/medicare/auth/router.py"}, "region": {"startLine": 7}}}]}]}]}
