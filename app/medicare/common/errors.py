@@ -4,6 +4,7 @@ import traceback
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from medicare.common.auth import LoginRequired
 from medicare.common.templating import render
@@ -71,4 +72,34 @@ async def _unhandled_handler(request: Request, exc: Exception) -> Response:
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
     app.add_exception_handler(LoginRequired, _login_required_handler)
-    app.add_exception_handler(Exception, _unhandled_handler)
+
+
+class CatchAllErrorsMiddleware:
+    """Turn any unhandled exception into the generic 500 response without re-raising.
+
+    Starlette's ServerErrorMiddleware re-raises after its handler runs, so uvicorn would
+    log str(exc), which can contain PII. Sitting inside it, this middleware swallows the
+    exception after logging only its class name and frame locations.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        started = False
+
+        async def tracking_send(message: Message) -> None:
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracking_send)
+        except Exception as exc:
+            response = await _unhandled_handler(Request(scope, receive), exc)
+            if not started:
+                await response(scope, receive, send)

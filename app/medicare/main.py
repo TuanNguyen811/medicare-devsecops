@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from medicare.auth.router import router as auth_router
-from medicare.common.errors import register_error_handlers
+from medicare.common.errors import CatchAllErrorsMiddleware, register_error_handlers
 from medicare.config import Settings
 from medicare.db import create_db
 
@@ -21,6 +21,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.engine, app.state.session_factory = create_db(settings.database_url)
 
+    app.add_middleware(CatchAllErrorsMiddleware)  # innermost: inside Session, outside routing
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.secret_key.get_secret_value(),

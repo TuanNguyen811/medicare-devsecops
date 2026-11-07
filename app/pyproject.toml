@@ -34,6 +34,8 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Form"]
 [tool.ruff.lint.per-file-ignores]
 # conftest sets testcontainers env vars before importing it.
 "tests/conftest.py" = ["E402"]
+# The catch-all middleware must intercept every exception by design.
+"medicare/common/errors.py" = ["BLE001"]
 
 [dependency-groups]
 dev = [

@@ -39,3 +39,23 @@ def test_notfound_exception_html_and_api(app, client):
     assert client.get("/_nf").status_code == 404
     r = client.get("/api/_nf")
     assert r.status_code == 404 and r.json() == {"detail": "Not Found"}
+
+
+def test_unhandled_error_does_not_propagate_to_server(app, caplog):
+    from fastapi.testclient import TestClient
+
+    @app.get("/_boom2")
+    def boom():
+        raise RuntimeError("secret detail 012345678901")
+
+    @app.get("/api/_boom2")
+    def api_boom():
+        raise RuntimeError("secret detail 012345678901")
+
+    strict = TestClient(app)  # raise_server_exceptions=True: any re-raise fails the call
+    with caplog.at_level(logging.ERROR):
+        r = strict.get("/_boom2")
+        ra = strict.get("/api/_boom2")
+    assert r.status_code == 500 and "Đã có lỗi xảy ra" in r.text
+    assert ra.status_code == 500 and ra.json() == {"detail": "Internal Server Error"}
+    assert "secret detail" not in caplog.text
