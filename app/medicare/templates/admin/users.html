@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Tài khoản{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Quản lý tài khoản</h1>
+{% if errors %}
+<div class="alert alert-danger py-2" role="alert">
+  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="card mc-card mb-3">
+  <div class="card-header">Tạo tài khoản</div>
+  <div class="card-body">
+    <form class="row g-2 align-items-end" method="post" action="/admin/users" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-md-2"><label class="form-label" for="username">Tên đăng nhập</label><input class="form-control form-control-sm" id="username" name="username" value="{{ values.username or '' }}" maxlength="50" required></div>
+      <div class="col-md-3"><label class="form-label" for="full_name">Họ tên</label><input class="form-control form-control-sm" id="full_name" name="full_name" value="{{ values.full_name or '' }}" maxlength="100" required></div>
+      <div class="col-md-2">
+        <label class="form-label" for="role">Vai trò</label>
+        <select class="form-select form-select-sm" id="role" name="role" required>
+          {% for r in roles %}<option value="{{ r.value }}" {% if values.role == r.value %}selected{% endif %}>{{ role_labels[r] }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="department_id">Khoa</label>
+        <select class="form-select form-select-sm" id="department_id" name="department_id">
+          <option value="">-</option>
+          {% for d in departments %}<option value="{{ d.id }}" {% if values.department_id == d.id|string %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1"><label class="form-label" for="patient_id">ID BN</label><input class="form-control form-control-sm" id="patient_id" name="patient_id" value="{{ values.patient_id or '' }}" inputmode="numeric"></div>
+      <div class="col-md-2"><label class="form-label" for="password">Mật khẩu</label><input class="form-control form-control-sm" id="password" name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></div>
+      <div class="col-12"><button class="btn btn-primary btn-sm" type="submit">Tạo tài khoản</button></div>
+    </form>
+  </div>
+</div>
+<div class="card mc-card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead><tr><th>Tên đăng nhập</th><th>Họ tên</th><th>Vai trò</th><th>Khoa</th><th>Hồ sơ BN</th><th>Trạng thái</th><th class="text-end"></th></tr></thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td class="font-monospace">{{ u.username }}</td>
+          <td>{{ u.full_name }}</td>
+          <td>{{ role_labels[u.role] }}</td>
+          <td>{{ u.department.name if u.department else "" }}</td>
+          <td>{{ patient_codes.get(u.patient_id, "") }}</td>
+          <td>{% if u.is_active %}<span class="badge text-bg-success">Hoạt động</span>{% else %}<span class="badge text-bg-secondary">Đã khóa</span>{% endif %}</td>
+          <td class="text-end">
+            {% if u.is_active and u.id != current_user.id %}
+            <form method="post" action="/admin/users/{{ u.id }}/deactivate">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-outline-danger btn-sm" type="submit">Vô hiệu hóa</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

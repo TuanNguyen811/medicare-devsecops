@@ -1,0 +1,38 @@
+# MediCare HMS: local demo / staging.
+# Usage (from the repo root): docker compose -f infra/docker-compose.yml up -d --build
+# Settings and database credentials come from app/.env (copy app/.env.example first).
+
+name: medicare
+
+services:
+  db:
+    image: postgres:16-alpine
+    env_file: ../app/.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # No published port: the database is reachable only from the app container.
+
+  app:
+    build: ../app
+    env_file: ../app/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Bound to localhost only: never expose a demo instance on the network.
+      - "127.0.0.1:8000:8000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  pgdata:

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ patient.code }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h5 mb-0">Hồ sơ bệnh nhân <span class="text-secondary">{{ patient.code }}</span></h1>
+  <div class="d-flex gap-2">
+    {% if can_view_records %}<a class="btn btn-outline-primary btn-sm" href="/patients/{{ patient.id }}/records"><i class="bi bi-file-medical"></i> Bệnh án</a>{% endif %}
+    {% if can_edit %}<a class="btn btn-primary btn-sm" href="/patients/{{ patient.id }}/edit"><i class="bi bi-pencil"></i> Sửa hồ sơ</a>{% endif %}
+  </div>
+</div>
+<div class="card mc-card">
+  <div class="card-header">Thông tin hành chính</div>
+  <div class="card-body">
+    <dl class="row mb-0">
+      <dt class="col-sm-3">Họ tên</dt><dd class="col-sm-9">{{ patient.full_name }}</dd>
+      <dt class="col-sm-3">Ngày sinh</dt><dd class="col-sm-9">{{ patient.date_of_birth | date_vn }}</dd>
+      <dt class="col-sm-3">Giới tính</dt><dd class="col-sm-9">{{ "Nam" if patient.gender == "M" else "Nữ" }}</dd>
+      <dt class="col-sm-3">CCCD</dt><dd class="col-sm-9 font-monospace">{{ ids.national_id }}</dd>
+      <dt class="col-sm-3">Mã BHYT</dt><dd class="col-sm-9 font-monospace">{{ ids.insurance_number or "Không có" }}</dd>
+      <dt class="col-sm-3">Số điện thoại</dt><dd class="col-sm-9">{{ patient.phone }}</dd>
+      <dt class="col-sm-3">Địa chỉ</dt><dd class="col-sm-9">{{ patient.address }}</dd>
+      <dt class="col-sm-3">Khoa điều trị</dt><dd class="col-sm-9">{{ patient.department.name if patient.department else "Chưa phân khoa" }}</dd>
+      <dt class="col-sm-3">Bác sĩ phụ trách</dt><dd class="col-sm-9">{{ patient.attending_doctor.full_name if patient.attending_doctor else "Chưa phân công" }}</dd>
+    </dl>
+  </div>
+</div>
+{% endblock %}

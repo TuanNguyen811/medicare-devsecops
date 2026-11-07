@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">{{ title }}</h1>
+{% if errors %}
+<div class="alert alert-danger py-2" role="alert">
+  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="card mc-card" style="max-width: 820px;">
+  <div class="card-body">
+    <form method="post" action="{{ action }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="row g-3">
+        <div class="col-md-8">
+          <label class="form-label" for="full_name">Họ tên</label>
+          <input class="form-control" id="full_name" name="full_name" value="{{ values.full_name or '' }}" maxlength="100" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="date_of_birth">Ngày sinh</label>
+          <input class="form-control" id="date_of_birth" name="date_of_birth" type="date" value="{{ values.date_of_birth or '' }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="gender">Giới tính</label>
+          <select class="form-select" id="gender" name="gender" required>
+            <option value="M" {% if values.gender == "M" %}selected{% endif %}>Nam</option>
+            <option value="F" {% if values.gender == "F" %}selected{% endif %}>Nữ</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="national_id">CCCD</label>
+          <input class="form-control font-monospace" id="national_id" name="national_id" value="{{ values.national_id or '' }}" pattern="\d{12}" maxlength="12" inputmode="numeric" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="insurance_number">Mã BHYT</label>
+          <input class="form-control font-monospace" id="insurance_number" name="insurance_number" value="{{ values.insurance_number or '' }}" maxlength="15" placeholder="VD: DN4010123456789">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="phone">Số điện thoại</label>
+          <input class="form-control" id="phone" name="phone" value="{{ values.phone or '' }}" maxlength="11" inputmode="tel" required>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label" for="address">Địa chỉ</label>
+          <input class="form-control" id="address" name="address" value="{{ values.address or '' }}" maxlength="255" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="department_id">Khoa điều trị</label>
+          <select class="form-select" id="department_id" name="department_id">
+            <option value="">Chưa phân khoa</option>
+            {% for d in departments %}
+            <option value="{{ d.id }}" {% if values.department_id|string == d.id|string %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="attending_doctor_id">Bác sĩ phụ trách</label>
+          <select class="form-select" id="attending_doctor_id" name="attending_doctor_id">
+            <option value="">Chưa phân công</option>
+            {% for doc in doctors %}
+            <option value="{{ doc.id }}" {% if values.attending_doctor_id|string == doc.id|string %}selected{% endif %}>{{ doc.full_name }}{% if doc.department %} ({{ doc.department.name }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Lưu</button>
+        <a class="btn btn-outline-secondary" href="/patients">Hủy</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

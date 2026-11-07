@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Đơn thuốc #{{ prescription.id }}{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Đơn thuốc #{{ prescription.id }} <span class="text-secondary">{{ patient.code }} - {{ patient.full_name }}</span></h1>
+<div class="card mc-card">
+  <div class="card-header d-flex justify-content-between">
+    <span>Bác sĩ kê đơn: {{ prescription.doctor.full_name }}</span>
+    <span class="text-secondary">{{ prescription.created_at | datetime_vn }}</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr><th>#</th><th>Thuốc</th><th>Liều dùng</th><th class="text-end">Số lượng</th><th class="text-end">Đơn giá</th><th class="text-end">Thành tiền</th></tr></thead>
+      <tbody>
+        {% for item in prescription.items %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ item.medicine.name }}</td>
+          <td>{{ item.dosage }}</td>
+          <td class="text-end">{{ item.quantity }} {{ item.medicine.unit }}</td>
+          <td class="text-end">{{ item.medicine.unit_price | vnd }}</td>
+          <td class="text-end">{{ (item.medicine.unit_price * item.quantity) | vnd }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr><th colspan="5" class="text-end">Tổng tiền thuốc</th><th class="text-end">{{ total | vnd }}</th></tr></tfoot>
+    </table>
+  </div>
+  {% if prescription.note %}<div class="card-body border-top"><strong>Lời dặn:</strong> <span class="mc-pre">{{ prescription.note }}</span></div>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,10 @@
+# Never ship local secrets or dev artefacts in the image.
+.env
+.env.*
+.venv
+**/__pycache__
+.pytest_cache
+.ruff_cache
+tests
+Dockerfile
+.dockerignore

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Nhật ký truy cập{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Nhật ký truy cập bệnh án</h1>
+<div class="card mc-card">
+  <div class="card-body pb-0">
+    <form class="row g-2 mb-3" method="get" action="/admin/audit">
+      <div class="col-sm-4 col-lg-3"><input class="form-control form-control-sm" name="record_id" value="{{ record_id or '' }}" inputmode="numeric" placeholder="Lọc theo mã phiếu khám"></div>
+      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-funnel"></i> Lọc</button></div>
+      <div class="col-auto align-self-center small text-secondary">{{ total }} dòng</div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead><tr><th>Thời điểm</th><th>Người thực hiện</th><th>Hành động</th><th>Đối tượng</th><th>IP</th></tr></thead>
+      <tbody>
+        {% for log, username in rows %}
+        <tr data-audit-row>
+          <td class="text-nowrap">{{ log.at | datetime_vn }}</td>
+          <td class="font-monospace">{{ username or ("#" ~ log.actor_id) }}</td>
+          <td>{{ log.action }}</td>
+          <td>{{ log.entity_type }} #{{ log.entity_id }}</td>
+          <td class="font-monospace">{{ log.ip or "" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-secondary py-3">Không có dữ liệu</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer d-flex justify-content-between small">
+    {% set filt = ("&record_id=" ~ record_id) if record_id else "" %}
+    <span>{% if page > 1 %}<a href="/admin/audit?page={{ page - 1 }}{{ filt }}">&laquo; Trang trước</a>{% endif %}</span>
+    <span>Trang {{ page }}</span>
+    <span>{% if has_next %}<a href="/admin/audit?page={{ page + 1 }}{{ filt }}">Trang sau &raquo;</a>{% endif %}</span>
+  </div>
+</div>
+{% endblock %}
