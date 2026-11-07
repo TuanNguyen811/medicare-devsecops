@@ -9,6 +9,7 @@ SARIF fixture of the gate so the two cannot drift silently.
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -197,6 +198,28 @@ def load_findings(sarif_dir: Path, workspace: str | None = None,
         except (OSError, ValueError, KeyError, TypeError):
             errors.append(path.name)
     return findings, errors
+
+
+_TF_SUFFIXES = (".tf", ".tfvars", ".tf.json")
+
+
+def _tf_dir(path: str) -> str | None:
+    return posixpath.dirname(path) if path.endswith(_TF_SUFFIXES) else None
+
+
+def filter_changed(findings: list[ScanFinding], changed: set[str]) -> list[ScanFinding]:
+    """The findings the quality gate considers (port of gate.filter_changed): location-less,
+    commit-scoped (Gitleaks), any location in a changed file, or the same Terraform module."""
+    tf_dirs = {d for d in map(_tf_dir, changed) if d is not None}
+
+    def keep(f: ScanFinding) -> bool:
+        if f.file == "" or f.tool in COMMIT_SCOPED:
+            return True
+        if f.file in changed or any(p in changed for p in f.related):
+            return True
+        return _tf_dir(f.file) in tf_dirs
+
+    return [f for f in findings if keep(f)]
 
 
 @dataclass

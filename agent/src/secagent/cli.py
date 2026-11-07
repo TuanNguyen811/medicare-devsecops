@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import shlex
+import subprocess
 import sys
 import time
 from collections import Counter
@@ -20,8 +21,8 @@ from pathlib import Path
 
 from secagent.config import ConfigError, Settings, cost_usd
 from secagent.context.diff import load_diff
-from secagent.context.redact import redact_value
-from secagent.context.sarif import cluster_findings, load_findings
+from secagent.context.redact import redact, redact_value
+from secagent.context.sarif import cluster_findings, filter_changed, load_findings
 from secagent.llm.base import LLMClient, make_client
 from secagent.models import Meta, Report
 from secagent.phases.check import build_entries, ensure_coverage
@@ -29,7 +30,7 @@ from secagent.phases.review import ReviewContext, run_review
 from secagent.report.github import build_review
 from secagent.report.markdown import render_failure, render_markdown
 from secagent.report.sarif_out import to_sarif
-from secagent.tools.fs import RepoFS
+from secagent.tools.fs import RepoFS, ToolError
 from secagent.trace import Trace
 
 LLMFactory = Callable[[Settings], LLMClient]
@@ -74,16 +75,33 @@ def _printer(mode: str) -> Callable[[str, dict], None]:
     return show
 
 
-def _requirements(repo: Path, raw: str, settings: Settings, trace: Trace) -> str | None:
+def _requirements(fs: RepoFS, raw: str, settings: Settings, trace: Trace) -> str | None:
+    """The business rules, read inside the repository (no symlink out of it) and redacted."""
     if not settings.use_requirements:
         return None
     path = Path(raw)
-    if not path.is_absolute() and not path.is_file():
-        path = repo / raw
-    if not path.is_file():
-        trace.event("requirements_missing", path=raw)
+    if path.is_absolute():
+        try:
+            raw = path.resolve().relative_to(fs.root).as_posix()
+        except ValueError:
+            trace.event("requirements_outside_repo", path=str(path))
+            return None
+    try:
+        return redact("\n".join(fs.lines(raw)))
+    except ToolError as exc:
+        trace.event("requirements_unavailable", path=raw, error=str(exc))
         return None
-    return path.read_text(encoding="utf-8")
+
+
+def _head_reader(repo: Path, rev: str):
+    """Lines of a file at the PR head commit (suggestions are anchored there), or None."""
+    def read(path: str) -> list[str] | None:
+        done = subprocess.run(["git", "-C", str(repo), "show", f"{rev}:{path}"],
+                              capture_output=True, check=False)
+        if done.returncode != 0:
+            return None
+        return done.stdout.decode("utf-8", errors="replace").splitlines()
+    return read
 
 
 def _run(args: argparse.Namespace, settings: Settings, llm_factory: LLMFactory, trace: Trace,
@@ -91,18 +109,21 @@ def _run(args: argparse.Namespace, settings: Settings, llm_factory: LLMFactory, 
     started, started_at = time.monotonic(), datetime.now(UTC).isoformat(timespec="seconds")
     repo = Path(args.repo).resolve()
     findings, errors = load_findings(Path(args.sarif_dir))
-    diff = load_diff(repo, args.base, args.head)
-    clusters = cluster_findings(findings, diff)
     secret_lines: dict[str, set[int]] = {}
     for f in findings:
         if f.tool == "gitleaks" and f.file:
             secret_lines.setdefault(f.file, set()).update(range(f.line, f.end_line + 1))
+    diff = load_diff(repo, args.base, args.head).mask_lines(secret_lines)
+    # Judge exactly the findings the quality gate considers (its changed-file filter).
+    relevant = filter_changed(findings, diff.changed)
+    clusters = cluster_findings(relevant, diff)
     fs = RepoFS(repo, secret_lines)
     trace.event("start", mode=settings.mode, provider=settings.provider, model=settings.model,
                 strategy=settings.strategy, clusters=len(clusters), findings=len(findings),
-                sarif_errors=errors, changed_files=sorted(diff.changed))
+                relevant_findings=len(relevant), sarif_errors=errors,
+                changed_files=sorted(diff.changed))
     ctx = ReviewContext(fs=fs, diff=diff, clusters=clusters,
-                        requirements=_requirements(repo, args.requirements, settings, trace),
+                        requirements=_requirements(fs, args.requirements, settings, trace),
                         settings=settings)
     outcome = run_review(ctx, llm_factory(settings), trace, on_event=_printer(settings.mode))
     if outcome.llm_calls == 0 and outcome.error:
@@ -127,7 +148,7 @@ def _run(args: argparse.Namespace, settings: Settings, llm_factory: LLMFactory, 
                                    encoding="utf-8")
     (out / "agent.sarif").write_text(json.dumps(to_sarif(report), indent=2, ensure_ascii=False),
                                      encoding="utf-8")
-    review = build_review(report, diff, args.head)
+    review = build_review(report, diff, args.head, _head_reader(repo, args.head))
     if review is not None:
         (out / "review.json").write_text(json.dumps(review, indent=2, ensure_ascii=False),
                                          encoding="utf-8")

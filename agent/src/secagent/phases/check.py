@@ -19,6 +19,8 @@ from secagent.tools.fs import RepoFS, ToolError
 from secagent.trace import Trace
 
 TOOL_ORDER = ("semgrep", "codeql", "bandit", "trivy", "gitleaks", "checkov", "zizmor")
+MIN_SNIPPET_CHARS = 10  # an FP must quote real code, not ")" or an empty snippet
+NEAR_LINES = 20
 VERDICT_ORDER = {"TP": 0, "NEEDS_REVIEW": 1, "FP": 2}
 _LINE_PREFIX = re.compile(r"^\s*\d+\|\s?")  # a "   12| " prefix copied from read_file output
 
@@ -67,6 +69,26 @@ def evidence_problems(evidence: list[Evidence], fs: RepoFS) -> list[str]:
     return problems
 
 
+def fp_is_anchored(evidence: list[Evidence], cluster: Cluster) -> bool:
+    """An FP verdict needs one evidence item that quotes real code (≥ 10 non-space characters)
+    at the finding (same file, ±20 lines) or in a related / code-flow file. For SCA findings
+    the manifest line proves nothing, so any quoted code (e.g. the import site) is accepted."""
+    members = cluster.findings
+    member_files = {f.file for f in members if f.file}
+    related = {r for f in members for r in f.related}
+    sca = any(f.tool == "trivy" for f in members)
+    for item in evidence:
+        if len(_normalize(item.snippet).replace(" ", "")) < MIN_SNIPPET_CHARS:
+            continue
+        if sca or (item.file in related and item.file not in member_files):
+            return True
+        if item.file in member_files and any(
+                item.start_line - NEAR_LINES <= f.line <= item.end_line + NEAR_LINES
+                for f in members if f.file == item.file):
+            return True
+    return False
+
+
 def _tool_rank(tool: str) -> tuple[int, str]:
     return (TOOL_ORDER.index(tool) if tool in TOOL_ORDER else len(TOOL_ORDER), tool)
 
@@ -105,6 +127,10 @@ def _cluster_entry(cluster: Cluster, outcome: ReviewOutcome, fs: RepoFS) -> Repo
     elif v.verdict == "FP" and not v.evidence:
         verdict = "NEEDS_REVIEW"
         reasoning = f"[Kết luận FP không có bằng chứng] {reasoning}"
+    elif v.verdict == "FP" and not fp_is_anchored(v.evidence, cluster):
+        verdict = "NEEDS_REVIEW"
+        reasoning = ("[Bằng chứng cho FP phải trích đoạn mã (≥ 10 ký tự) tại vị trí phát hiện "
+                     f"hoặc trong file liên quan] {reasoning}")
     return ReportEntry(**base, verdict=verdict, confidence=v.confidence, severity=v.severity,
                        cwe=v.cwe or (cluster.cwes[0] if cluster.cwes else None),
                        owasp=v.owasp, violated_rule=v.violated_rule, reasoning=reasoning,

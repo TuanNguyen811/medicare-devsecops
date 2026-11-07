@@ -84,3 +84,26 @@ def test_list_files_uses_git_and_includes_new_files(tmp_path):
 def test_files_without_git_fall_back_to_walking(tmp_path):
     write_files(tmp_path, {"a/b.py": "x = 1\n", ".venv/c.py": "y\n", "a/.env": "S=1\n"})
     assert RepoFS(tmp_path).files() == ["a/b.py"]
+
+
+def test_in_repo_symlink_to_denied_file_is_refused(tmp_path):
+    """Final review I4: a committed alias must not reach app/.env or .git."""
+    repo = miniapp_repo(tmp_path)
+    write_files(repo, {"app/.env": "SECRET_KEY=x\n"})
+    try:
+        os.symlink(repo / "app" / ".env", repo / "docs" / "notes.md")
+        os.symlink(repo / ".git", repo / "gitdir", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not permitted on this machine")
+    fs = RepoFS(repo)
+    with pytest.raises(AccessDenied):
+        fs.read_file("docs/notes.md")
+    with pytest.raises(AccessDenied):
+        fs.read_file("gitdir/config")
+
+
+def test_denied_names_are_case_insensitive(tmp_path):
+    fs = RepoFS(miniapp_repo(tmp_path))
+    for bad in ["app/.ENV", "keys/SERVER.PEM", ".GIT/config", "Id_Rsa"]:
+        with pytest.raises(AccessDenied):
+            fs.resolve(bad)

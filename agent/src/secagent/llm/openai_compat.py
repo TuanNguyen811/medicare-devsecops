@@ -47,11 +47,20 @@ class OpenAIChatClient:
                                     attempts=s.attempts, sleep=self.sleep, retryable=RETRYABLE)
         except openai.APIError as exc:
             raise LLMError(describe(exc)) from None
+        try:
+            return self._parse(response)
+        except (AttributeError, TypeError, ValueError, KeyError, IndexError) as exc:
+            raise LLMError(f"phản hồi không hợp lệ ({type(exc).__name__})") from None
+
+    @staticmethod
+    def _parse(response) -> LLMResponse:
         if not response.choices:
             raise LLMError("phản hồi rỗng (không có choices)")
         message = response.choices[0].message
-        calls = [ToolCall(c.id, c.function.name, c.function.arguments or "{}")
-                 for c in message.tool_calls or [] if getattr(c, "function", None)]
+        calls = [ToolCall(c.id or f"call_{index}", c.function.name or "",
+                          c.function.arguments or "{}")
+                 for index, c in enumerate(message.tool_calls or [])
+                 if getattr(c, "function", None)]
         reasoning = getattr(message, "reasoning_content", None) or (
             (message.model_extra or {}).get("reasoning_content"))
         usage = response.usage

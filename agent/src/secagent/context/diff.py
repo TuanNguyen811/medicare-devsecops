@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from secagent.context.redact import redact
+from secagent.context.redact import mask_line, redact
 
 _HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 _GIT_HEADER = re.compile(r"^diff --git a/(.*) b/(.*)$")
@@ -28,6 +28,28 @@ class PrDiff:
     @property
     def changed(self) -> set[str]:
         return set(self.files)
+
+    def mask_lines(self, secret_lines: dict[str, set[int]]) -> PrDiff:
+        """Copy of the diff where added lines Gitleaks reported are replaced by a mask."""
+        files: dict[str, FileDiff] = {}
+        for path, fd in self.files.items():
+            hidden = secret_lines.get(path)
+            if not hidden:
+                files[path] = fd
+                continue
+            out, in_hunk, new_line = [], False, 0
+            for raw in fd.patch.splitlines():
+                hunk = _HUNK.match(raw)
+                if hunk:
+                    in_hunk, new_line = True, int(hunk.group(1))
+                elif in_hunk and raw.startswith("+"):
+                    raw = "+" + mask_line() if new_line in hidden else raw
+                    new_line += 1
+                elif in_hunk and raw.startswith(" "):
+                    new_line += 1
+                out.append(raw)
+            files[path] = FileDiff(path, set(fd.added), "\n".join(out) + "\n")
+        return PrDiff(files)
 
     def text(self, max_lines: int = 1500) -> str:
         lines = [line for fd in self.files.values() for line in fd.patch.splitlines()]

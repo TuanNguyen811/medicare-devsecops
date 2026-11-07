@@ -94,9 +94,12 @@ Mã thoát: `0` là chạy xong; `2` là Agent thất bại, khi đó gate quay 
 - **Che secret.** Dòng mà Gitleaks báo bị che nguyên dòng. Các mẫu key, token, mật khẩu bị che trong mọi thứ gửi LLM và trong `report.*` lẫn `trace.jsonl`.
 - **Prompt injection không gỡ được việc chặn.** Kết luận `FP` phải có bằng chứng khớp code thật. Gate chỉ miễn chặn Critical khi có label `security-reviewed`. Sửa `agent/**` cũng cần label đó.
 - **Trên CI:**
-  - Bước gọi LLM là bước duy nhất có `LLM_API_KEY`, và không chạy ứng dụng hay test của PR.
-  - Bước kiểm chứng bản vá có chạy test của PR, nhưng không có secret và chỉ nhận môi trường tối thiểu.
-  - Comment lên PR do job `agent-comment` đảm nhận: job này không checkout code, chỉ gửi file Agent đã sinh.
+  - Bước gọi LLM là bước duy nhất có `LLM_API_KEY`. Bước này chạy code Agent lấy từ PR (vì vậy sửa `agent/**` cần label `security-reviewed`), nhưng không chạy ứng dụng hay test của PR. `report.json` được upload (artifact `agent-report`) ngay sau bước này, và quality gate chỉ đọc artifact đó.
+  - Kiểm chứng bản vá chạy ở job riêng `validate-patches`. Job này chạy test của PR nên không tham chiếu secret nào và không lưu uv cache; kết quả của nó (artifact `agent-validation`) chỉ để hiển thị, gate không dùng.
+  - Job `agent-comment` không checkout code. Job này chỉ cập nhật comment và review của chính bot, và luôn gửi review dạng `COMMENT` (Agent không bao giờ approve PR).
+- **Bằng chứng cho FP.** Kết luận `FP` phải trích ít nhất một đoạn mã thật (≥ 10 ký tự) tại vị trí phát hiện (±20 dòng) hoặc trong file liên quan theo luồng dữ liệu; với phát hiện SCA thì chỉ cần trích được mã thật, ví dụ nơi import. Không đạt thì kết luận thành `NEEDS_REVIEW`.
+- **Bản vá không được tin số dòng.** Dòng bị xóa và dòng ngữ cảnh của bản vá phải khớp nội dung thật; nếu không, bản vá không được tính là đã kiểm chứng và không thành gợi ý sửa.
+- **Chỉ thẩm định phát hiện trong phần PR thay đổi**, đúng tập mà quality gate xét, và xét phát hiện nghiêm trọng nhất trước.
 - **Dữ liệu gửi đi.** Code của PR được gửi cho nhà cung cấp LLM đã chọn; cần cân nhắc điều này trong môi trường bệnh viện thật (spec mục 5.7).
 
 ## Phát triển

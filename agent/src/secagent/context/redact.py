@@ -11,7 +11,12 @@ _PATTERNS = (
     re.compile(r"\b(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b"),
     re.compile(r"\beyJ[\w-]+\.[\w-]+\.[\w-]+"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"),
+    re.compile(r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"),  # OpenAI / Anthropic / DeepSeek keys
+    re.compile(r"\b(?:sk|rk)_live_[0-9A-Za-z]{16,}"),  # Stripe
+    re.compile(r"\bxox[abprs]-[0-9A-Za-z-]{10,}"),  # Slack
 )
+# scheme://user:password@host — keep the user and host, hide the password.
+_URL_PASSWORD = re.compile(r"(\b[a-zA-Z][a-zA-Z0-9+.-]*://[^/\s:@]+:)([^@\s/]+)(@)")
 # name = "value" / name: 'value' / "name": "value" where the name looks like a credential.
 _ASSIGNMENT = re.compile(
     r"(?i)\b([\w-]*(?:password|passwd|secret|token|api[_-]?key)[\w-]*)"
@@ -24,6 +29,7 @@ def redact(text: str) -> str:
         return text
     for pattern in _PATTERNS:
         text = pattern.sub(REDACTED, text)
+    text = _URL_PASSWORD.sub(lambda m: f"{m[1]}{REDACTED}{m[3]}", text)
     return _ASSIGNMENT.sub(lambda m: f"{m[1]}{m[2]}{m[3]}{REDACTED}{m[3]}", text)
 
 

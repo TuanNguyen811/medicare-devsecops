@@ -20,8 +20,8 @@ from pydantic import BaseModel, Field
 from secagent.config import Settings, step_limit
 from secagent.context.diff import PrDiff
 from secagent.context.sarif import Cluster
-from secagent.llm.base import LLMClient, LLMError
-from secagent.models import NewFindingArgs, VerdictArgs
+from secagent.llm.base import LLMClient, LLMError, describe
+from secagent.models import SEVERITY_RANK, NewFindingArgs, VerdictArgs
 from secagent.tools.fs import RepoFS, ToolError, wrap_untrusted
 from secagent.tools.registry import ToolRegistry, ToolSpec, build_read_tools, format_findings
 from secagent.trace import Trace
@@ -199,6 +199,10 @@ class Session:
             outcome.error = str(exc)
             self.trace.event("llm_error", error=str(exc))
             return False
+        except Exception as exc:  # any other failure: keep the verdicts already submitted
+            outcome.error = describe(exc)
+            self.trace.event("llm_error", error=outcome.error)
+            return False
         outcome.llm_calls += 1
         outcome.tokens_in += response.tokens_in
         outcome.tokens_out += response.tokens_out
@@ -260,7 +264,10 @@ def run_review(ctx: ReviewContext, llm: LLMClient, trace: Trace,
     settings = ctx.settings
     outcome = ReviewOutcome(started=clock())
     size = max(1, settings.batch_size)
-    batches = [ctx.clusters[i:i + size] for i in range(0, len(ctx.clusters), size)] or [[]]
+    # Most severe first, so a budget that runs out leaves the low-severity clusters unjudged.
+    ordered = sorted(ctx.clusters,
+                     key=lambda c: (-SEVERITY_RANK.get(c.severity, 0), _cluster_key(c.id)))
+    batches = [ordered[i:i + size] for i in range(0, len(ordered), size)] or [[]]
     single_shot = settings.strategy == "single-shot"
     for index, batch in enumerate(batches):
         if outcome.error or not budget_left(outcome, settings, clock):

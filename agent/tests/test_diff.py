@@ -74,3 +74,10 @@ def test_load_diff_uses_merge_base(tmp_path):
 def test_load_diff_rejects_option_like_revisions(tmp_path):
     with pytest.raises(ValueError):
         load_diff(tmp_path, "--output=/tmp/x", "HEAD")
+
+
+def test_mask_lines_hides_gitleaks_lines_in_the_patch():
+    d = parse_unified_diff(SAMPLE).mask_lines({"app/a.py": {2}, "app/new.py": {1}})
+    assert "y = 2" not in d.files["app/a.py"].patch and "Gitleaks" in d.files["app/a.py"].patch
+    assert "+one" not in d.text() and "+two" in d.text()
+    assert d.files["app/a.py"].added == {2, 12, 13}

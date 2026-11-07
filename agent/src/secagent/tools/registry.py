@@ -77,10 +77,10 @@ class ToolRegistry:
                               "parameters": portable_schema(s.args_model)}}
                 for s in self._specs.values()]
 
-    def call(self, name: str, raw_args: str) -> str:
-        spec = self._specs.get(name)
+    def call(self, name: str | None, raw_args: str | None) -> str:
+        spec = self._specs.get(name or "")
         if spec is None:
-            return f"ERROR: unknown tool {name[:100]}"
+            return f"ERROR: unknown tool {str(name or '')[:100]}"
         try:
             data = json.loads(raw_args or "{}")
             if not isinstance(data, dict):
@@ -96,6 +96,7 @@ class ToolRegistry:
             return f"ERROR: {exc}"
         except Exception as exc:  # a tool bug must not end the review session
             return f"ERROR: {type(exc).__name__}"
+        out = redact(out)  # every tool result, whatever produced it
         return out if len(out) <= MAX_OUTPUT else out[:MAX_OUTPUT] + TRUNCATED
 
 

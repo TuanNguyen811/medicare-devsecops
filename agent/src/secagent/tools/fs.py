@@ -27,7 +27,7 @@ class AccessDenied(ToolError):
 
 
 def _is_denied(rel: str) -> bool:
-    parts = rel.split("/")
+    parts = rel.lower().split("/")  # case-insensitive: .ENV is .env on Windows and macOS
     name = parts[-1]
     if ".git" in parts:
         return True
@@ -87,6 +87,9 @@ class RepoFS:
         full = (self.root / rel).resolve()
         if not full.is_relative_to(self.root):
             raise AccessDenied(f"liên kết trỏ ra ngoài repo: {rel}")
+        # A committed symlink (docs/notes.md -> ../app/.env) must not unlock a denied target.
+        if full != self.root and _is_denied(full.relative_to(self.root).as_posix()):
+            raise AccessDenied(f"{rel} trỏ tới file bị cấm")
         return full
 
     def lines(self, path: str) -> list[str]:
@@ -97,7 +100,8 @@ class RepoFS:
         if full.stat().st_size > MAX_BYTES:
             raise ToolError(f"file quá lớn (> 1 MB): {rel}")
         lines = full.read_text(encoding="utf-8", errors="replace").splitlines()
-        masked = self.secret_lines.get(rel, set())
+        real = full.relative_to(self.root).as_posix()
+        masked = self.secret_lines.get(rel, set()) | self.secret_lines.get(real, set())
         return [mask_line() if i in masked else line for i, line in enumerate(lines, start=1)]
 
     def read_file(self, path: str, start_line: int = 1, end_line: int | None = None) -> str:

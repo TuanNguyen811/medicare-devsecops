@@ -80,7 +80,9 @@ def test_sarif_out_only_agent_findings():
 
 def test_build_review_suggestion():
     diff = PrDiff({SERVICE: FileDiff(SERVICE, {14, 15})})
-    review = build_review(Report(meta=meta(), findings=[entry()]), diff, "abc123")
+    head = ["x"] * 14 + [OLD]
+    review = build_review(Report(meta=meta(), findings=[entry()]), diff, "abc123",
+                          lambda path: head)
     (comment,) = review["comments"]
     assert review["commit_id"] == "abc123" and review["event"] == "COMMENT"
     assert "secagent-review:abc123" in review["body"]
@@ -92,11 +94,15 @@ def test_build_review_suggestion():
 def test_build_review_multi_line_and_outside_the_pr():
     two = entry(fix=Fix(description="d", patch=patch(14, old=("a", OLD), new=(NEW,))))
     review = build_review(Report(meta=meta(), findings=[two]),
-                          PrDiff({SERVICE: FileDiff(SERVICE, {14, 15})}), "h")
+                          PrDiff({SERVICE: FileDiff(SERVICE, {14, 15})}), "h",
+                          lambda path: ["x"] * 13 + ["a", OLD])
     (comment,) = review["comments"]
     assert (comment["start_line"], comment["line"]) == (14, 15)
     outside = PrDiff({SERVICE: FileDiff(SERVICE, {30})})
-    assert build_review(Report(meta=meta(), findings=[entry()]), outside, "h") is None
+    head = ["x"] * 14 + [OLD]
+    assert build_review(Report(meta=meta(), findings=[entry()]), outside, "h",
+                        lambda path: head) is None
     fp = entry("FP")
     assert build_review(Report(meta=meta(), findings=[fp]),
-                        PrDiff({SERVICE: FileDiff(SERVICE, {15})}), "h") is None
+                        PrDiff({SERVICE: FileDiff(SERVICE, {15})}), "h",
+                        lambda path: head) is None

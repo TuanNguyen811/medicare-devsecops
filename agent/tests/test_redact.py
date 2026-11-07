@@ -43,3 +43,16 @@ def test_redact_keeps_ordinary_code():
 
 def test_mask_line_mentions_gitleaks():
     assert "Gitleaks" in mask_line() and REDACTED.strip("«»") in mask_line()
+
+
+def test_redact_masks_dsn_and_provider_keys():
+    pw = "Sup3r" + "Secret99"
+    keys = ["sk-ant-" + "a1" * 20, "sk-proj-" + "b2" * 20, "sk-" + "c3d4" * 8,
+            "sk_live_" + "Z" * 24, "xoxb-" + "1234567890-abcdefghij"]
+    text = f"DSN = postgres://admin:{pw}@db:5432/medicare\n" + "\n".join(keys)
+    out = redact(text)
+    assert pw not in out and "postgres://admin:" in out and "@db:5432" in out
+    for key in keys:
+        assert key not in out
+    assert redact("see https://user@example.com/a and http://h:8000/x") == (
+        "see https://user@example.com/a and http://h:8000/x")

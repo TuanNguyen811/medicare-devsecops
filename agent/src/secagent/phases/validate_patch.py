@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from secagent.models import SEVERITY_RANK, Report, ReportEntry
+from secagent.patchutil import old_lines_match, parse_patch, patched_files
 from secagent.report.markdown import render_markdown
 
 Runner = Callable[[list[str], Path, float], tuple[int, str]]
@@ -53,9 +54,24 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
                           encoding="utf-8", errors="replace", check=False)
 
 
-def _patched_files(patch: str) -> list[str]:
-    return [line[4:].rstrip("\t").removeprefix("b/") for line in patch.splitlines()
-            if line.startswith("+++ ") and line[4:].strip() != "/dev/null"]
+def _positions_problem(worktree: Path, patch: str) -> str | None:
+    """Why the patch's hunks do not sit where they claim (git apply would accept an offset)."""
+    files = parse_patch(patch)
+    if not files:
+        return "bản vá không đúng định dạng unified diff"
+    for file_patch in files:
+        if file_patch.old_path is None:
+            continue  # a new file has no existing lines to check
+        target = (worktree / file_patch.old_path).resolve()
+        try:
+            if not target.is_relative_to(worktree.resolve()):
+                return f"bản vá trỏ ra ngoài repo: {file_patch.old_path}"
+            lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return f"không đọc được {file_patch.old_path}"
+        if not old_lines_match(file_patch, lines):
+            return f"bản vá không khớp nội dung {file_patch.old_path} tại số dòng đã nêu"
+    return None
 
 
 def validate_patch(repo: Path, entry: ReportEntry, *, test_cmd: list[str],
@@ -70,6 +86,9 @@ def validate_patch(repo: Path, entry: ReportEntry, *, test_cmd: list[str],
     try:
         if added.returncode != 0:
             return ValidationResult(False, None, None, "không tạo được worktree tạm")
+        problem = _positions_problem(worktree, patch)
+        if problem is not None:
+            return ValidationResult(False, None, None, problem)
         patch_file = scratch / "fix.patch"
         patch_file.write_text(patch if patch.endswith("\n") else patch + "\n", encoding="utf-8")
         check = _git(worktree, "apply", "--check", str(patch_file))
@@ -82,7 +101,7 @@ def validate_patch(repo: Path, entry: ReportEntry, *, test_cmd: list[str],
         notes = ["test đạt" if tests_passed else f"test không đạt (mã {code}): {output[-300:]}"]
         scan_clean = None
         if scan_cmd:
-            code, output = runner([*scan_cmd, *_patched_files(patch)], worktree, timeout_s)
+            code, output = runner([*scan_cmd, *patched_files(patch)], worktree, timeout_s)
             scan_clean = code == 0
             notes.append("Semgrep sạch" if scan_clean else f"Semgrep còn báo: {output[-300:]}")
         return ValidationResult(True, tests_passed, scan_clean, "; ".join(notes))

@@ -189,3 +189,21 @@ def test_events_are_emitted(tmp_path):
     llm = ScriptedLLM([reply(call("read_file", path=SERVICE)), reply(call("finish"))])
     run_review(context(tmp_path, n=0), llm, Trace(None), on_event=lambda k, d: events.append(k))
     assert events == ["llm", "tool", "llm", "tool"]
+
+
+def test_high_severity_clusters_are_judged_first(tmp_path):
+    findings = [ScanFinding("semgrep", f"rule{i:02d}", "CRITICAL" if i > 15 else "LOW", SERVICE,
+                            1, 1, "m", (), ()) for i in range(1, 18)]
+    ctx = ReviewContext(fs=RepoFS(miniapp_repo(tmp_path)), diff=DIFF,
+                        clusters=cluster_findings(findings, DIFF), requirements=None,
+                        settings=settings())
+    critical = {c.id for c in ctx.clusters if c.severity == "CRITICAL"}
+    llm = ScriptedLLM([reply(call("finish")) for _ in range(4)])
+    out = run_review(ctx, llm, Trace(None))
+    assert critical <= out.sessions[0].batch_ids and len(out.sessions[1].batch_ids) == 2
+
+
+def test_unexpected_llm_exception_keeps_verdicts(tmp_path):
+    llm = ScriptedLLM([reply(call("submit_verdict", **verdict("F1"))), RuntimeError("boom")])
+    out = run_review(context(tmp_path, n=2), llm, Trace(None))
+    assert out.verdicts["F1"].verdict == "TP" and "RuntimeError" in out.error

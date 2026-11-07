@@ -25,10 +25,11 @@ pull_request → main
  ├─ secret-gitleaks ──┤  chỉ các commit của PR, che giá trị secret (--redact)
  ├─ iac-checkov ──────┤  Checkov (Terraform, K8s, Dockerfile) + zizmor (workflow CI, chạy từ gốc repo)
  │                    ▼  mỗi job: artifact sarif-<tool> + upload lên tab Security
- ├─ ai-security-agent ─ đọc diff + SARIF + mã nguồn + quy tắc R-xx → out/report.json (artifact agent-report)
- │    ├─ bước "AI review": bước duy nhất có LLM_API_KEY; không chạy ứng dụng hay test của PR
- │    └─ bước "Validate patches": áp bản vá vào worktree tạm, chạy test + Semgrep; không có secret
- ├─ agent-comment ──── comment báo cáo + review suggestion lên PR; không checkout code (chỉ gửi file)
+ ├─ ai-security-agent ─ đọc diff + SARIF + mã nguồn + quy tắc R-xx → out/report.json; job duy nhất có
+ │                      LLM_API_KEY, không chạy ứng dụng hay test của PR; upload agent-report ngay sau đó
+ ├─ validate-patches ── áp bản vá vào worktree tạm, chạy test + Semgrep; không secret, không lưu cache;
+ │                      artifact agent-validation chỉ để hiển thị (gate không đọc)
+ ├─ agent-comment ──── comment báo cáo + review suggestion (luôn COMMENT); không checkout code
  └─ quality-gate ───── chặn hoặc cho qua (bắt buộc đạt, theo branch protection)
 ```
 
@@ -97,6 +98,7 @@ Bảng tóm tắt gate ghi vào job summary của Actions. Bảng này **không 
 - Với sự kiện `pull_request`, GitHub chạy **workflow và `gate.py` của chính PR**. Người có quyền push nhánh có thể sửa workflow để bỏ qua gate. Chính sách cấu hình nhạy cảm chỉ làm việc này lộ ra (PR bị chặn cho tới khi có label `security-reviewed`), không ngăn được hoàn toàn. Muốn chặn hẳn cần review bắt buộc kèm CODEOWNERS cho `.github/` và `security/`, việc sẽ bật khi nhóm có thêm người review (hiện một người làm nên chưa thể tự duyệt PR của mình).
 - Bộ rule `p/python` và `p/owasp-top-ten` của Semgrep lấy từ registry, không có phiên bản. Kết quả Semgrep có thể đổi theo ngày, nên benchmark lưu lại SARIF của từng lần chạy.
 - Checkov bỏ qua (không báo lỗi) file Terraform có lỗi cú pháp.
+- Bước có `LLM_API_KEY` chạy code Agent lấy từ chính PR. Người có quyền push vốn đã có thể sửa workflow để đọc secret, nên đây không phải bề mặt tấn công mới; PR sửa `agent/**` bị chặn cho tới khi có label `security-reviewed`.
 
 ## Main CI/CD (`main-ci.yml`)
 

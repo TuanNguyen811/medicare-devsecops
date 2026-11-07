@@ -113,6 +113,13 @@ class AnthropicClient:
                 attempts=s.attempts, sleep=self.sleep, retryable=RETRYABLE)
         except anthropic.APIError as exc:
             raise LLMError(describe(exc)) from None
+        try:
+            return self._parse(response)
+        except (AttributeError, TypeError, ValueError, KeyError, IndexError) as exc:
+            raise LLMError(f"phản hồi không hợp lệ ({type(exc).__name__})") from None
+
+    @staticmethod
+    def _parse(response) -> LLMResponse:
         if response.stop_reason == "refusal":
             category = getattr(response.stop_details, "category", None) or "không rõ"
             raise LLMError(f"refusal ({category})")

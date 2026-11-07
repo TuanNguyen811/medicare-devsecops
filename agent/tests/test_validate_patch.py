@@ -42,7 +42,8 @@ def test_valid_patch_applies_and_passes(tmp_path):
 def test_patch_that_does_not_apply(tmp_path):
     result = validate_patch(repo(tmp_path), entry(patch("nope", "safe")), test_cmd=CHECK_SAFE,
                             scan_cmd=SCAN_OK)
-    assert not result.applied and not result.validated and "git apply" in result.note
+    assert not result.applied and not result.validated
+    assert "không khớp" in result.note  # caught before git apply (it would accept an offset)
 
 
 def test_patch_breaking_tests(tmp_path):

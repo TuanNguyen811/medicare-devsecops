@@ -175,10 +175,41 @@ def test_cluster_entry_fields(tmp_path):
 def test_uncovered_never_fp_and_order(tmp_path):
     ctx = context(tmp_path, [finding("a", 1, sev="LOW"), finding("b", 5), finding("c", 10)])
     out = _outcome(verdicts=[verdict("F3", "FP", evidence=[
-        {"file": SERVICE, "start_line": 10, "end_line": 10, "snippet": "def run"}])],
+        {"file": SERVICE, "start_line": 10, "end_line": 10,
+         "snippet": "def run(self, data: dict) -> str:"}])],
         new=[_new()])
     out.limit_hit = True
     entries = build_entries(ctx.clusters, out, ctx.fs)
     assert [e.verdict for e in entries] == ["TP", "NEEDS_REVIEW", "NEEDS_REVIEW", "FP"]
     assert [e.severity for e in entries[1:3]] == ["HIGH", "LOW"]
     assert "giới hạn" in entries[1].reasoning
+
+
+def test_fp_evidence_must_quote_the_flagged_code(tmp_path):
+    """Final review I2: an FP for a HIGH finding cannot rest on unrelated or trivial evidence."""
+    ctx = context(tmp_path, [finding("sqli", 1, cwes=["CWE-89"])])
+    far = verdict("F1", "FP", evidence=[{"file": "docs/security-requirements.md",
+                                         "start_line": 1, "end_line": 1}])
+    tiny = verdict("F1", "FP", evidence=[{"file": SERVICE, "start_line": 1, "end_line": 1,
+                                          "snippet": ")"}])
+    good = verdict("F1", "FP", evidence=[{"file": SERVICE, "start_line": 1, "end_line": 2,
+                                          "snippet": 'return {"id": item_id}'}])
+    for v, expected in ((far, "NEEDS_REVIEW"), (tiny, "NEEDS_REVIEW"), (good, "FP")):
+        (entry,) = build_entries(ctx.clusters, _outcome(verdicts=[v]), ctx.fs)
+        assert entry.verdict == expected, v["evidence"]
+
+
+def test_fp_evidence_in_related_file_or_for_sca(tmp_path):
+    flow = ScanFinding("codeql", "py/sql-injection", "HIGH", SERVICE, 1, 1, "m", ("CWE-89",),
+                       (ROUTER,))
+    trivy = finding("CVE-2020-14343", 1, tool="trivy", cwes=["CWE-1395"], file="app/uv.lock")
+    ctx = context(tmp_path, [flow, trivy])
+    ids = {c.findings[0].tool: c.id for c in ctx.clusters}
+    out = _outcome(verdicts=[
+        verdict(ids["codeql"], "FP", evidence=[{"file": ROUTER, "start_line": 13, "end_line": 13,
+                                                "snippet": "return service.load_item(item_id)"}]),
+        verdict(ids["trivy"], "FP", evidence=[{
+            "file": "app/medicare/demo/importer.py", "start_line": 5, "end_line": 5,
+            "snippet": "return yaml.safe_load(text)"}]),
+    ])
+    assert [e.verdict for e in build_entries(ctx.clusters, out, ctx.fs)] == ["FP", "FP"]
