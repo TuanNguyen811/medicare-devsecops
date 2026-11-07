@@ -13,6 +13,7 @@ from medicare.common.csrf import verify_csrf
 from medicare.common.templating import flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
+from medicare.prescription import service as prescription_service
 from medicare.record import service
 from medicare.record.schemas import FIELD_LABELS, RecordForm, form_errors
 
@@ -108,6 +109,8 @@ def record_detail(
     return render(request, "record/detail.html", {
         "record": record, "patient": patient,
         "can_write": policy.can_write_record(user, patient),
+        "can_prescribe": policy.can_prescribe(user, patient),
+        "prescriptions": prescription_service.list_for_record(db, record.id),
         "breadcrumbs": _crumbs(patient, (f"Phiếu khám #{record.id}", None)),
     })
 

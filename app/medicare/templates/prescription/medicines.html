@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Danh mục thuốc{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Danh mục thuốc</h1>
+{% if errors %}
+<div class="alert alert-danger py-2" role="alert">
+  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="card mc-card mb-3">
+  <div class="card-header">Thêm thuốc</div>
+  <div class="card-body">
+    <form class="row g-2 align-items-end" method="post" action="/admin/medicines">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-md-2"><label class="form-label" for="code">Mã</label><input class="form-control form-control-sm" id="code" name="code" value="{{ values.code or '' }}" maxlength="20" required></div>
+      <div class="col-md-4"><label class="form-label" for="name">Tên thuốc</label><input class="form-control form-control-sm" id="name" name="name" value="{{ values.name or '' }}" maxlength="100" required></div>
+      <div class="col-md-2"><label class="form-label" for="unit">Đơn vị</label><input class="form-control form-control-sm" id="unit" name="unit" value="{{ values.unit or '' }}" maxlength="20" required></div>
+      <div class="col-md-2"><label class="form-label" for="unit_price">Đơn giá (đ)</label><input class="form-control form-control-sm text-end" id="unit_price" name="unit_price" value="{{ values.unit_price or '' }}" inputmode="numeric" required></div>
+      <div class="col-md-2"><button class="btn btn-primary btn-sm w-100" type="submit">Thêm</button></div>
+    </form>
+  </div>
+</div>
+<div class="card mc-card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead><tr><th>Mã</th><th>Tên thuốc</th><th>Đơn vị</th><th class="text-end">Đơn giá</th><th>Trạng thái</th></tr></thead>
+      <tbody>
+        {% for m in medicines %}
+        <tr>
+          <td class="font-monospace">{{ m.code }}</td>
+          <td>{{ m.name }}</td>
+          <td>{{ m.unit }}</td>
+          <td class="text-end">{{ m.unit_price | vnd }}</td>
+          <td>{% if m.is_active %}<span class="badge text-bg-success">Đang dùng</span>{% else %}<span class="badge text-bg-secondary">Ngừng</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-secondary py-3">Chưa có thuốc</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

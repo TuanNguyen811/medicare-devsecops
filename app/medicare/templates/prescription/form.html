@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Kê đơn thuốc{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Kê đơn thuốc <span class="text-secondary">{{ patient.code }} - {{ patient.full_name }} · Phiếu khám #{{ record.id }}</span></h1>
+{% if errors %}
+<div class="alert alert-danger py-2" role="alert">
+  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="card mc-card">
+  <div class="card-body">
+    <form method="post" action="/records/{{ record.id }}/prescriptions">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th style="width: 45%;">Thuốc</th><th style="width: 15%;">Số lượng</th><th>Liều dùng</th></tr></thead>
+          <tbody>
+            {% for i in rows %}
+            <tr>
+              <td>
+                <select class="form-select form-select-sm" name="medicine_id[]" aria-label="Thuốc dòng {{ i + 1 }}">
+                  <option value="">-</option>
+                  {% for m in medicines %}
+                  <option value="{{ m.id }}">{{ m.name }} ({{ m.unit }}, {{ m.unit_price | vnd }})</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td><input class="form-control form-control-sm text-end" name="quantity[]" type="number" min="1" max="1000" aria-label="Số lượng dòng {{ i + 1 }}"></td>
+              <td><input class="form-control form-control-sm" name="dosage[]" maxlength="200" placeholder="VD: 1 viên x 2 lần/ngày" aria-label="Liều dùng dòng {{ i + 1 }}"></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="note">Lời dặn</label>
+        <textarea class="form-control" id="note" name="note" rows="2" maxlength="500">{{ values.note or '' }}</textarea>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Lưu đơn thuốc</button>
+        <a class="btn btn-outline-secondary" href="/records/{{ record.id }}">Hủy</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

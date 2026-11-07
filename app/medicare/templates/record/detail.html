@@ -4,6 +4,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h5 mb-0">Phiếu khám #{{ record.id }} <span class="text-secondary">{{ patient.code }} - {{ patient.full_name }}</span></h1>
   <div class="d-flex gap-2">
+    {% if can_prescribe %}<a class="btn btn-outline-primary btn-sm" href="/records/{{ record.id }}/prescriptions/new"><i class="bi bi-capsule"></i> Kê đơn</a>{% endif %}
     {% if can_write %}<a class="btn btn-primary btn-sm" href="/records/{{ record.id }}/edit"><i class="bi bi-pencil"></i> Sửa</a>{% endif %}
   </div>
 </div>
@@ -18,5 +19,15 @@
       <dt class="col-sm-3">Ghi chú</dt><dd class="col-sm-9 mc-pre">{{ record.notes }}</dd>
     </dl>
   </div>
+</div>
+<div class="card mc-card mt-3">
+  <div class="card-header">Đơn thuốc</div>
+  <ul class="list-group list-group-flush">
+    {% for p in prescriptions %}
+    <li class="list-group-item"><a href="/prescriptions/{{ p.id }}">Đơn thuốc #{{ p.id }}</a> <span class="text-secondary small">{{ p.created_at | datetime_vn }}</span></li>
+    {% else %}
+    <li class="list-group-item text-secondary">Chưa có đơn thuốc</li>
+    {% endfor %}
+  </ul>
 </div>
 {% endblock %}
