@@ -5,8 +5,6 @@ on:
   schedule:
     - cron: "0 19 * * *" # 02:00 Asia/Ho_Chi_Minh
   workflow_dispatch:
-  push: # TEMP: test before merge
-    branches: [feat/pipeline]
 
 permissions:
   contents: read
