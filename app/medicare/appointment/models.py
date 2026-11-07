@@ -1,10 +1,15 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, func, text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from medicare.db import Base, str_enum
+
+if TYPE_CHECKING:
+    from medicare.auth.models import User
+    from medicare.patient.models import Patient
 
 
 class AppointmentStatus(StrEnum):
@@ -39,3 +44,6 @@ class Appointment(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+    patient: Mapped["Patient"] = relationship(lazy="joined")
+    doctor: Mapped["User"] = relationship(foreign_keys=[doctor_id], lazy="joined")

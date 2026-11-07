@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from medicare.auth.models import Role
 from medicare.common.csrf import get_csrf_token
 
-_VN_TZ = timezone(timedelta(hours=7))  # Vietnam has no DST
+VN_TZ = timezone(timedelta(hours=7))  # Vietnam has no DST
 
 ROLE_LABELS = {
     Role.ADMIN: "Quản trị viên",
@@ -31,7 +31,7 @@ def datetime_vn(value: datetime | None) -> str:
     if value is None:
         return ""
     if value.tzinfo is not None:
-        value = value.astimezone(_VN_TZ)
+        value = value.astimezone(VN_TZ)
     return value.strftime("%d/%m/%Y %H:%M")
 
 

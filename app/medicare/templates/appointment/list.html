@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Lịch hẹn{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h5 mb-0">Lịch hẹn khám</h1>
+  {% if can_book %}<a class="btn btn-primary btn-sm" href="/appointments/new"><i class="bi bi-calendar-plus"></i> Đặt lịch hẹn</a>{% endif %}
+</div>
+<div class="card mc-card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Thời gian</th><th>Bệnh nhân</th><th>Bác sĩ</th><th>Lý do khám</th><th>Trạng thái</th><th class="text-end">Thao tác</th></tr>
+      </thead>
+      <tbody>
+        {% for a, can_cancel in rows %}
+        {% set label, color = status_labels[a.status.value] %}
+        <tr>
+          <td class="text-nowrap">{{ a.scheduled_at | datetime_vn }}</td>
+          <td>{{ a.patient.code }} - {{ a.patient.full_name }}</td>
+          <td>{{ a.doctor.full_name }}</td>
+          <td>{{ a.reason }}</td>
+          <td><span class="badge text-bg-{{ color }}">{{ label }}</span></td>
+          <td class="text-end text-nowrap">
+            {% if can_confirm and a.status.value == "REQUESTED" %}
+            <form class="d-inline" method="post" action="/appointments/{{ a.id }}/confirm">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-outline-primary btn-sm" type="submit">Xác nhận</button>
+            </form>
+            {% endif %}
+            {% if can_cancel %}
+            <form class="d-inline" method="post" action="/appointments/{{ a.id }}/cancel">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-outline-secondary btn-sm" type="submit">Hủy</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-secondary py-3">Chưa có lịch hẹn</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Đặt lịch hẹn{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Đặt lịch hẹn khám</h1>
+{% if errors %}
+<div class="alert alert-danger py-2" role="alert">
+  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="card mc-card" style="max-width: 640px;">
+  <div class="card-body">
+    <form method="post" action="/appointments">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if patients %}
+      <div class="mb-3">
+        <label class="form-label" for="patient_id">Bệnh nhân</label>
+        <select class="form-select" id="patient_id" name="patient_id" required>
+          <option value="">Chọn bệnh nhân</option>
+          {% for p in patients %}
+          <option value="{{ p.id }}" {% if values.patient_id|string == p.id|string %}selected{% endif %}>{{ p.code }} - {{ p.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label" for="doctor_id">Bác sĩ</label>
+        <select class="form-select" id="doctor_id" name="doctor_id" required>
+          <option value="">Chọn bác sĩ</option>
+          {% for d in doctors %}
+          <option value="{{ d.id }}" {% if values.doctor_id|string == d.id|string %}selected{% endif %}>{{ d.full_name }}{% if d.department %} ({{ d.department.name }}){% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="scheduled_at">Thời gian hẹn</label>
+        <input class="form-control" id="scheduled_at" name="scheduled_at" type="datetime-local" step="1800" value="{{ values.scheduled_at or '' }}" required>
+        <div class="form-text">Theo mốc 30 phút, ví dụ 08:00, 08:30.</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="reason">Lý do khám</label>
+        <textarea class="form-control" id="reason" name="reason" rows="2" maxlength="500" required>{{ values.reason or '' }}</textarea>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Đặt lịch</button>
+        <a class="btn btn-outline-secondary" href="/appointments">Hủy</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

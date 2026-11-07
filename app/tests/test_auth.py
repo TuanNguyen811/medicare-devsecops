@@ -1,4 +1,3 @@
-import pytest
 
 from medicare.auth.models import Role
 from tests.conftest import csrf_token, login
@@ -55,7 +54,6 @@ def test_post_without_csrf_is_403(client, db):
     assert r.status_code == 403
 
 
-@pytest.mark.xfail(strict=True, reason="/api/v1/appointments arrives in Task 6")
 def test_anonymous_html_redirects_and_api_401(client):
     assert client.get("/", follow_redirects=False).headers["location"] == "/login"
     assert client.get("/api/v1/appointments").status_code == 401

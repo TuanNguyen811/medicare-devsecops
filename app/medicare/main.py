@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+from medicare.appointment.router import router as appointment_router
 from medicare.auth.router import router as auth_router
 from medicare.common.errors import CatchAllErrorsMiddleware, register_error_handlers
 from medicare.config import Settings
@@ -35,6 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(auth_router)
     app.include_router(patient_router)
+    app.include_router(appointment_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:
