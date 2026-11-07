@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
@@ -6,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from medicare.auth.models import Role, User
+from medicare.common.csrf import rotate_csrf_token
 from medicare.common.passwords import hash_password, verify_password
 from medicare.db import get_db
 
@@ -21,8 +23,16 @@ class LoginRequired(Exception):
     """Raised when a request needs an authenticated user; handled in errors.py."""
 
 
+def _now() -> float:
+    return time.time()
+
+
 def authenticate(db: Session, username: str, password: str, now: datetime) -> User | None:
-    user = db.scalar(select(User).where(User.username == username))
+    # Row lock: concurrent failed guesses must each count toward the lockout (R-07).
+    # OF users: the joined department is the nullable side of an outer join.
+    user = db.scalar(
+        select(User).where(User.username == username).with_for_update(of=User)
+    )
     if user is None:
         verify_password(_DUMMY_HASH, password)
         return None
@@ -42,10 +52,36 @@ def authenticate(db: Session, username: str, password: str, now: datetime) -> Us
     return user
 
 
+def start_session(request: Request, user: User) -> None:
+    """Fresh session after authentication (R-08: no fixation)."""
+    request.session.clear()
+    request.session["user_id"] = user.id
+    request.session["sv"] = user.session_version
+    request.session["iat"] = int(_now())
+    rotate_csrf_token(request)
+
+
+def revoke_sessions(user: User) -> None:
+    """Invalidate every session issued to `user` so far (cookies are client-side)."""
+    user.session_version += 1
+
+
+def _session_valid(request: Request, user: User | None) -> bool:
+    if user is None or not user.is_active:
+        return False
+    if request.session.get("sv") != user.session_version:
+        return False
+    issued_at = request.session.get("iat")
+    max_age = request.app.state.settings.session_max_age
+    # Absolute lifetime: the signed cookie is re-issued on every response, so its
+    # max_age alone would only be an idle timeout.
+    return isinstance(issued_at, int) and 0 <= _now() - issued_at <= max_age
+
+
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     user_id = request.session.get("user_id")
     user = db.get(User, user_id) if isinstance(user_id, int) else None
-    if user is None or not user.is_active:
+    if not _session_valid(request, user):
         request.session.clear()
         raise LoginRequired
     request.state.current_user = user

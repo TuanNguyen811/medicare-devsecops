@@ -5,8 +5,13 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from medicare.auth.models import User
-from medicare.common.auth import authenticate, get_current_user
-from medicare.common.csrf import rotate_csrf_token, verify_csrf
+from medicare.common.auth import (
+    authenticate,
+    get_current_user,
+    revoke_sessions,
+    start_session,
+)
+from medicare.common.csrf import verify_csrf
 from medicare.common.passwords import hash_password, verify_password
 from medicare.common.templating import flash, render
 from medicare.db import get_db
@@ -36,14 +41,17 @@ def login(
     db.commit()  # persists the failed-attempt counter and lock
     if user is None:
         return render(request, "login.html", {"error": LOGIN_ERROR})
-    request.session.clear()
-    request.session["user_id"] = user.id
-    rotate_csrf_token(request)
+    start_session(request, user)
     return RedirectResponse("/", status_code=303)
 
 
 @router.post("/logout", dependencies=[Depends(verify_csrf)])
-def logout(request: Request) -> Response:
+def logout(request: Request, db: Session = Depends(get_db)) -> Response:
+    user_id = request.session.get("user_id")
+    user = db.get(User, user_id) if isinstance(user_id, int) else None
+    if user is not None and request.session.get("sv") == user.session_version:
+        revoke_sessions(user)  # a copied cookie must not outlive the logout
+        db.commit()
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
 
@@ -83,7 +91,9 @@ def change_password(
     if error:
         return render(request, "password.html", _password_ctx() | {"error": error})
     user.password_hash = hash_password(new_password)
+    revoke_sessions(user)  # sign out every other device
     db.commit()
+    request.session["sv"] = user.session_version  # keep this session alive
     flash(request, "Đã đổi mật khẩu")
     return RedirectResponse("/", status_code=303)
 

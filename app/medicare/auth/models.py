@@ -33,6 +33,8 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
     failed_login_count: Mapped[int] = mapped_column(default=0, server_default="0")
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Bumped on logout and password change; sessions carrying an older value are rejected.
+    session_version: Mapped[int] = mapped_column(default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
