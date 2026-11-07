@@ -1,8 +1,12 @@
-# Checkov configuration for IaC scanning (Terraform, Kubernetes, Dockerfile, embedded secrets).
+# Checkov configuration for IaC scanning. Run from the repo root: checkov -d . --config-file ...
+# (scanning "-d infra" makes Checkov 3.4.3 emit duplicated SARIF paths like infra/infra/k8s/...).
+# Secrets are Gitleaks' job, so the "secrets" framework is not enabled here.
 framework:
   - terraform
   - kubernetes
   - dockerfile
-  - secrets
+skip-path:
+  - .venv
+  - app/.venv
+  - security/semgrep
 compact: true
-quiet: false
