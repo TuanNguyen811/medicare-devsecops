@@ -98,7 +98,7 @@ def add_medicine(db: Session, code: str, name: str, unit: str, unit_price: str) 
     if not (1 <= len(code) <= 20 and 1 <= len(name) <= 100 and 1 <= len(unit) <= 20):
         raise PrescriptionError("Mã, tên và đơn vị thuốc là bắt buộc")
     unit_price = unit_price.strip()
-    if not (unit_price.isascii() and unit_price.isdigit()) or int(unit_price) > 10**11:
+    if not (unit_price.isascii() and unit_price.isdigit() and len(unit_price) <= 12):
         raise PrescriptionError("Đơn giá: số nguyên không âm (đồng)")
     if db.scalar(select(Medicine.id).where(Medicine.code == code)) is not None:
         raise PrescriptionError("Mã thuốc đã tồn tại")

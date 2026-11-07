@@ -33,6 +33,7 @@ Các khái niệm dùng trong ma trận:
 | Tạo / sửa bệnh án | ❌ | ❌ | phụ trách | ❌ | ❌ |
 | Kê đơn thuốc | ❌ | ❌ | phụ trách | ❌ | ❌ |
 | Xem đơn thuốc | ❌ | ❌ | cùng khoa hoặc phụ trách | cùng khoa | của mình |
+| Xem lịch hẹn | ✅ | ✅ | lịch mình khám | bệnh nhân cùng khoa | của mình |
 | Đặt lịch hẹn | ❌ | cho bất kỳ ai | ❌ | ❌ | cho chính mình |
 | Xác nhận lịch hẹn | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Hủy lịch hẹn | ✅ (khi còn hiệu lực) | ✅ (khi còn hiệu lực) | ❌ | ❌ | của mình, khi `REQUESTED` |

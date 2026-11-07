@@ -13,6 +13,7 @@ from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
 from medicare.common.errors import Conflict
+from medicare.common.ids import ObjectId
 from medicare.common.templating import flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
@@ -109,7 +110,7 @@ def create_appointment(
 @router.post("/appointments/{appointment_id}/confirm", dependencies=[Depends(verify_csrf)])
 def confirm_appointment(
     request: Request,
-    appointment_id: int,
+    appointment_id: ObjectId,
     user: User = Depends(receptionist_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -123,7 +124,7 @@ def confirm_appointment(
 @router.post("/appointments/{appointment_id}/cancel", dependencies=[Depends(verify_csrf)])
 def cancel_appointment(
     request: Request,
-    appointment_id: int,
+    appointment_id: ObjectId,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:

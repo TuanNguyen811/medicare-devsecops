@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
@@ -5,6 +7,7 @@ from sqlalchemy.orm import Session
 from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
+from medicare.common.ids import ObjectId
 from medicare.common.templating import flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
@@ -15,6 +18,8 @@ router = APIRouter()
 doctor_user = require_roles(Role.DOCTOR)
 admin_user = require_roles(Role.ADMIN)
 FORM_ROWS = 5
+_MED_ID = re.compile(r"[0-9]{1,9}")  # always < INT4_MAX
+_QTY = re.compile(r"-?[0-9]{1,9}")  # range is checked in the service
 
 
 def _ip(request: Request) -> str | None:
@@ -30,8 +35,7 @@ def _parse_rows(medicine_ids, quantities, dosages) -> list[tuple[int, int, str]]
         med, qty, dosage = med.strip(), qty.strip(), dosage.strip()
         if not (med or qty or dosage):
             continue
-        if not (med.isascii() and med.isdigit() and qty.lstrip("-").isascii()
-                and qty.lstrip("-").isdigit()):
+        if not (_MED_ID.fullmatch(med) and _QTY.fullmatch(qty)):
             raise service.PrescriptionError("Thuốc và số lượng phải là số")
         rows.append((int(med), int(qty), dosage))
     return rows
@@ -57,7 +61,7 @@ def _form_page(request, db, record, *, values=None, errors=None, status_code=200
 @router.get("/records/{record_id}/prescriptions/new")
 def new_prescription_form(
     request: Request,
-    record_id: int,
+    record_id: ObjectId,
     user: User = Depends(doctor_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -68,7 +72,7 @@ def new_prescription_form(
 @router.post("/records/{record_id}/prescriptions", dependencies=[Depends(verify_csrf)])
 def create_prescription(
     request: Request,
-    record_id: int,
+    record_id: ObjectId,
     medicine_ids: list[str] = Form([], alias="medicine_id[]"),
     quantities: list[str] = Form([], alias="quantity[]"),
     dosages: list[str] = Form([], alias="dosage[]"),
@@ -92,7 +96,7 @@ def create_prescription(
 @router.get("/prescriptions/{prescription_id}")
 def prescription_detail(
     request: Request,
-    prescription_id: int,
+    prescription_id: ObjectId,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:

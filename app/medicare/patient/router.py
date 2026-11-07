@@ -8,6 +8,7 @@ from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
 from medicare.common.errors import NotFound
+from medicare.common.ids import ObjectId
 from medicare.common.templating import flash, render
 from medicare.db import get_db
 from medicare.patient import service
@@ -125,7 +126,7 @@ def create_patient(
 @router.get("/patients/{patient_id}")
 def patient_detail(
     request: Request,
-    patient_id: int,
+    patient_id: ObjectId,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -137,7 +138,7 @@ def patient_detail(
 @router.get("/patients/{patient_id}/edit")
 def edit_patient_form(
     request: Request,
-    patient_id: int,
+    patient_id: ObjectId,
     user: User = Depends(editor_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -150,7 +151,7 @@ def edit_patient_form(
 @router.post("/patients/{patient_id}/edit", dependencies=[Depends(verify_csrf)])
 def update_patient(
     request: Request,
-    patient_id: int,
+    patient_id: ObjectId,
     full_name: str = Form(""),
     date_of_birth: str = Form(""),
     gender: str = Form(""),
@@ -194,7 +195,7 @@ def my_profile(
 
 @router.get("/api/v1/patients/{patient_id}")
 def patient_api(
-    patient_id: int,
+    patient_id: ObjectId,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:

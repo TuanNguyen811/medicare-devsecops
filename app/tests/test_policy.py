@@ -126,3 +126,21 @@ def appt(status: AppointmentStatus, patient_id: int = PATIENT_ID) -> Appointment
 )
 def test_can_cancel_appointment(role, relation, status, expected):
     assert policy.can_cancel_appointment(user_for(role, relation), appt(status)) is expected
+
+
+@pytest.mark.parametrize(
+    "role,relation,expected",
+    [
+        ("ADMIN", "any", True),
+        ("RECEPTIONIST", "any", True),
+        ("DOCTOR", "attending", True),  # the appointment's doctor
+        ("DOCTOR", "same_dept", False),
+        ("NURSE", "same_dept", True),
+        ("NURSE", "other_dept", False),
+        ("PATIENT", "self", True),
+        ("PATIENT", "other", False),
+    ],
+)
+def test_can_view_appointment(role, relation, expected):
+    a = appt(AppointmentStatus.REQUESTED)
+    assert policy.can_view_appointment(user_for(role, relation), a, make_patient()) is expected

@@ -36,7 +36,8 @@ def login(
     db: Session = Depends(get_db),
 ) -> Response:
     user = None
-    if len(username) <= 50 and len(password) <= MAX_PASSWORD_LENGTH:
+    if (len(username) <= 50 and len(password) <= MAX_PASSWORD_LENGTH
+            and "\x00" not in username and "\x00" not in password):
         user = authenticate(db, username, password, datetime.now(UTC))
     db.commit()  # persists the failed-attempt counter and lock
     if user is None:

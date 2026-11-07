@@ -10,6 +10,7 @@ from medicare.auth.models import Role, User
 from medicare.common.auth import require_roles, revoke_sessions
 from medicare.common.csrf import verify_csrf
 from medicare.common.errors import NotFound
+from medicare.common.ids import ObjectId, parse_id
 from medicare.common.passwords import hash_password
 from medicare.common.templating import flash, render
 from medicare.db import get_db
@@ -29,10 +30,6 @@ class AccountError(ValueError):
     """Invalid account data; the message is user-facing."""
 
 
-def _parse_id(value: str) -> int | None:
-    value = value.strip()
-    return int(value) if value.isascii() and value.isdigit() else None
-
 
 def _new_account(db: Session, username, full_name, role, department_id, patient_id,
                  password) -> User:
@@ -50,11 +47,11 @@ def _new_account(db: Session, username, full_name, role, department_id, patient_
         raise AccountError("Tên đăng nhập đã tồn tại")
     dept_id = pat_id = None
     if role in (Role.DOCTOR, Role.NURSE):
-        dept_id = _parse_id(department_id)
+        dept_id = parse_id(department_id)
         if dept_id is None or db.get(Department, dept_id) is None:
             raise AccountError("Bác sĩ và điều dưỡng phải thuộc một khoa")
     if role == Role.PATIENT:
-        pat_id = _parse_id(patient_id)
+        pat_id = parse_id(patient_id)
         if pat_id is None or db.get(Patient, pat_id) is None:
             raise AccountError("Tài khoản bệnh nhân phải gắn với một hồ sơ bệnh nhân")
         if db.scalar(select(User.id).where(User.patient_id == pat_id)) is not None:
@@ -118,7 +115,7 @@ def create_user(
 @router.post("/admin/users/{user_id}/deactivate", dependencies=[Depends(verify_csrf)])
 def deactivate_user(
     request: Request,
-    user_id: int,
+    user_id: ObjectId,
     user: User = Depends(admin_user),
     db: Session = Depends(get_db),
 ) -> Response:

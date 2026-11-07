@@ -2,7 +2,9 @@ import logging
 import traceback
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse, Response
+from sqlalchemy.exc import DataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -13,8 +15,10 @@ logger = logging.getLogger("medicare.errors")
 
 GENERIC_500 = "Đã có lỗi xảy ra. Vui lòng thử lại sau."
 _MESSAGES = {
+    400: "Dữ liệu gửi lên không hợp lệ.",
     403: "Bạn không có quyền thực hiện thao tác này.",
     404: "Không tìm thấy nội dung yêu cầu.",
+    405: "Thao tác không được hỗ trợ.",
 }
 
 
@@ -69,9 +73,34 @@ async def _unhandled_handler(request: Request, exc: Exception) -> Response:
     )
 
 
+async def _validation_handler(request: Request, exc: Exception) -> Response:
+    """Malformed request parameters. Never echoes the input back.
+
+    An invalid object id in the path can never exist, so it gets exactly the
+    missing-object response (R-15); anything else is a plain 400.
+    """
+    if not isinstance(exc, RequestValidationError):
+        raise TypeError(type(exc).__name__)
+    if any(err.get("loc", ("",))[0] == "path" for err in exc.errors()):
+        return await _http_exception_handler(request, NotFound())
+    return await _http_exception_handler(
+        request, StarletteHTTPException(status_code=400, detail="Bad Request")
+    )
+
+
+async def _data_error_handler(request: Request, exc: Exception) -> Response:
+    """Safety net: input the database rejects (e.g. NUL bytes) is a 400, not a 500."""
+    logger.warning("Rejected request data: %s", type(exc).__name__)
+    return await _http_exception_handler(
+        request, StarletteHTTPException(status_code=400, detail="Bad Request")
+    )
+
+
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
     app.add_exception_handler(LoginRequired, _login_required_handler)
+    app.add_exception_handler(RequestValidationError, _validation_handler)
+    app.add_exception_handler(DataError, _data_error_handler)
 
 
 class CatchAllErrorsMiddleware:

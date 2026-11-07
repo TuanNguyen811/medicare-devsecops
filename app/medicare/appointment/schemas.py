@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from medicare.common.ids import FormId
 from medicare.common.templating import VN_TZ
 
 FIELD_LABELS = {
@@ -15,8 +16,8 @@ FIELD_LABELS = {
 class AppointmentForm(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    patient_id: int | None = None
-    doctor_id: int
+    patient_id: FormId | None = None
+    doctor_id: FormId
     scheduled_at: datetime
     reason: str = Field(min_length=1, max_length=500)
 
@@ -28,5 +29,11 @@ class AppointmentForm(BaseModel):
     @field_validator("scheduled_at")
     @classmethod
     def _vietnam_wall_clock(cls, v: datetime) -> datetime:
-        """The form sends local (Vietnam) time without an offset."""
-        return v.replace(tzinfo=VN_TZ) if v.tzinfo is None else v
+        """The form sends Vietnam wall-clock time; any client-supplied offset is rejected.
+
+        Accepting offsets would let a client shift the instant off the 30-minute grid or
+        past the datetime range the database driver can read back.
+        """
+        if v.tzinfo is not None:
+            raise ValueError("thời gian hẹn không được kèm múi giờ")
+        return v.replace(tzinfo=VN_TZ)

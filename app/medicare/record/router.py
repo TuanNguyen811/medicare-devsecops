@@ -10,6 +10,7 @@ from medicare.audit import service as audit
 from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
+from medicare.common.ids import ObjectId
 from medicare.common.templating import flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
@@ -42,7 +43,7 @@ def _form_page(request, patient, *, action, title, values, errors=None, status_c
 @router.get("/patients/{patient_id}/records")
 def list_records(
     request: Request,
-    patient_id: int,
+    patient_id: ObjectId,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -60,7 +61,7 @@ def list_records(
 @router.get("/patients/{patient_id}/records/new")
 def new_record_form(
     request: Request,
-    patient_id: int,
+    patient_id: ObjectId,
     user: User = Depends(doctor_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -72,7 +73,7 @@ def new_record_form(
 @router.post("/patients/{patient_id}/records", dependencies=[Depends(verify_csrf)])
 def create_record(
     request: Request,
-    patient_id: int,
+    patient_id: ObjectId,
     visit_date: str = Form(""),
     symptoms: str = Form(""),
     diagnosis_code: str = Form(""),
@@ -99,7 +100,7 @@ def create_record(
 @router.get("/records/{record_id}")
 def record_detail(
     request: Request,
-    record_id: int,
+    record_id: ObjectId,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -118,7 +119,7 @@ def record_detail(
 @router.get("/records/{record_id}/edit")
 def edit_record_form(
     request: Request,
-    record_id: int,
+    record_id: ObjectId,
     user: User = Depends(doctor_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -134,7 +135,7 @@ def edit_record_form(
 @router.post("/records/{record_id}/edit", dependencies=[Depends(verify_csrf)])
 def update_record(
     request: Request,
-    record_id: int,
+    record_id: ObjectId,
     visit_date: str = Form(""),
     symptoms: str = Form(""),
     diagnosis_code: str = Form(""),
@@ -162,7 +163,7 @@ def update_record(
 @router.get("/api/v1/records/{record_id}")
 def record_api(
     request: Request,
-    record_id: int,
+    record_id: ObjectId,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:

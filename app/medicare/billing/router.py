@@ -6,6 +6,7 @@ from medicare.auth.models import Role, User
 from medicare.billing import service
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
+from medicare.common.ids import ObjectId
 from medicare.common.templating import flash, render
 from medicare.db import get_db
 
@@ -20,7 +21,7 @@ STATUS_LABELS = {"UNPAID": ("Chưa thanh toán", "warning"), "PAID": ("Đã than
 @router.post("/records/{record_id}/invoice", dependencies=[Depends(verify_csrf)])
 def create_invoice(
     request: Request,
-    record_id: int,
+    record_id: ObjectId,
     user: User = Depends(receptionist_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -50,7 +51,7 @@ def list_invoices(
 @router.get("/invoices/{invoice_id}")
 def invoice_detail(
     request: Request,
-    invoice_id: int,
+    invoice_id: ObjectId,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -69,7 +70,7 @@ def invoice_detail(
 @router.post("/invoices/{invoice_id}/pay", dependencies=[Depends(verify_csrf)])
 def pay_invoice(
     request: Request,
-    invoice_id: int,
+    invoice_id: ObjectId,
     user: User = Depends(receptionist_user),
     db: Session = Depends(get_db),
 ) -> Response:

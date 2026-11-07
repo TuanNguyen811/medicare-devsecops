@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import Select, false, select
 from sqlalchemy.exc import IntegrityError
@@ -12,6 +12,7 @@ from medicare.patient.models import Patient
 from medicare.patient.service import get_patient_for
 
 SLOT_MINUTES = (0, 30)
+BOOKING_HORIZON = timedelta(days=365)
 DOUBLE_BOOKED = "Bác sĩ đã có lịch hẹn vào thời gian này"
 
 
@@ -20,7 +21,7 @@ class AppointmentError(ValueError):
 
 
 def _scoped(user: User) -> Select:
-    """Appointments the user may see (R-01, R-13)."""
+    """SQL mirror of policy.can_view_appointment for list queries (R-01, R-13)."""
     stmt = select(Appointment)
     if user.role in (Role.ADMIN, Role.RECEPTIONIST):
         return stmt
@@ -42,8 +43,8 @@ def list_for(db: Session, user: User) -> list[Appointment]:
 
 def get_appointment_for(db: Session, user: User, appointment_id: int) -> Appointment:
     """Missing and not-visible both raise NotFound (R-15)."""
-    appt = db.scalar(_scoped(user).where(Appointment.id == appointment_id))
-    if appt is None:
+    appt = db.get(Appointment, appointment_id)
+    if appt is None or not policy.can_view_appointment(user, appt, appt.patient):
         raise NotFound
     return appt
 
@@ -76,6 +77,8 @@ def book(
     patient = get_patient_for(db, user, patient_id)
     if scheduled_at <= now:
         raise AppointmentError("Không thể đặt lịch hẹn trong quá khứ")
+    if scheduled_at > now + BOOKING_HORIZON:
+        raise AppointmentError("Chỉ đặt lịch trong vòng 365 ngày tới")
     if scheduled_at.minute not in SLOT_MINUTES or scheduled_at.second or scheduled_at.microsecond:
         raise AppointmentError("Giờ hẹn phải theo mốc 30 phút (:00 hoặc :30)")
     doctor = db.get(User, doctor_id)

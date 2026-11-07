@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from medicare.common.ids import FormId
 from medicare.validators import is_valid_insurance_number, is_valid_national_id
 
 FIELD_LABELS = {
@@ -32,8 +33,8 @@ class PatientForm(BaseModel):
     insurance_number: str | None = None
     phone: str = Field(pattern=_PHONE)
     address: str = Field(min_length=1, max_length=255)
-    department_id: int | None = None
-    attending_doctor_id: int | None = None
+    department_id: FormId | None = None
+    attending_doctor_id: FormId | None = None
 
     @field_validator("insurance_number", "department_id", "attending_doctor_id", mode="before")
     @classmethod

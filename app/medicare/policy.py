@@ -85,6 +85,20 @@ def can_view_identifiers(user: User, patient: Patient) -> bool:
     return _is_own(user, patient)
 
 
+def can_view_appointment(user: User, appt: Appointment, patient: Patient) -> bool:
+    """R-01, R-13: staff see all; a doctor their own; a nurse their department's; a patient theirs.
+
+    appointment.service._scoped is the SQL mirror of this rule for list queries.
+    """
+    if user.role in (Role.ADMIN, Role.RECEPTIONIST):
+        return True
+    if user.role == Role.DOCTOR:
+        return appt.doctor_id == user.id
+    if user.role == Role.NURSE:
+        return _same_department(user, patient)
+    return _is_own(user, patient) and appt.patient_id == patient.id
+
+
 def can_cancel_appointment(user: User, appt: Appointment) -> bool:
     """R-13: staff cancel active appointments; a patient only their own REQUESTED ones."""
     if user.role in (Role.ADMIN, Role.RECEPTIONIST):
