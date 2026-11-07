@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Trang chủ{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Trang chủ</h1>
+<div class="card mc-card">
+  <div class="card-header">Thông tin tài khoản</div>
+  <div class="card-body">
+    <p class="mb-1">Xin chào, <strong>{{ current_user.full_name }}</strong>.</p>
+    <p class="mb-0 text-secondary">Vai trò: {{ role_labels[current_user.role] }}{% if current_user.department %} - {{ current_user.department.name }}{% endif %}</p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập{% endblock %}
+{% block public %}
+<div class="card mc-card">
+  <div class="card-body p-4">
+    <div class="text-center mb-3">
+      <div class="mc-logo"><i class="bi bi-plus-square-fill"></i></div>
+      <h1 class="h5 mt-2 mb-0">Bệnh viện Đa khoa MediCare</h1>
+      <div class="text-secondary small">Hệ thống quản lý bệnh viện</div>
+    </div>
+    {% if error %}<div class="alert alert-danger py-2" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="mb-3">
+        <label class="form-label" for="username">Tên đăng nhập</label>
+        <input class="form-control" id="username" name="username" maxlength="50" autocomplete="username" autofocus required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="password">Mật khẩu</label>
+        <input class="form-control" id="password" name="password" type="password" maxlength="128" autocomplete="current-password" required>
+      </div>
+      <button class="btn btn-primary w-100" type="submit">Đăng nhập</button>
+    </form>
+    <p class="text-secondary small text-center mt-3 mb-0">Chỉ dành cho nhân viên và bệnh nhân đã được cấp tài khoản</p>
+  </div>
+</div>
+{% endblock %}

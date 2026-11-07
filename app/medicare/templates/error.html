@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Lỗi {{ status }}{% endblock %}
+{% macro body() %}
+<div class="card mc-card">
+  <div class="card-body text-center p-4">
+    <div class="display-6 text-secondary">{{ status }}</div>
+    <p class="mb-3">{{ message }}</p>
+    <a class="btn btn-sm btn-primary" href="/">Về trang chủ</a>
+  </div>
+</div>
+{% endmacro %}
+{% block content %}{{ body() }}{% endblock %}
+{% block public %}{{ body() }}{% endblock %}

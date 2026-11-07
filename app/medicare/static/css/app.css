@@ -1,0 +1,57 @@
+:root {
+  --mc-primary: #0b5cad;
+  --mc-primary-dark: #084a8c;
+  --mc-bg: #f4f6f9;
+  --mc-border: #dde3ea;
+
+  --bs-primary: var(--mc-primary);
+  --bs-primary-rgb: 11, 92, 173;
+  --bs-body-bg: var(--mc-bg);
+  --bs-border-color: var(--mc-border);
+  --bs-link-color: var(--mc-primary);
+  --bs-link-hover-color: var(--mc-primary-dark);
+  --bs-body-font-family: "Segoe UI", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --bs-body-font-size: 14px;
+}
+
+body { background: var(--mc-bg); }
+
+.btn-primary {
+  --bs-btn-bg: var(--mc-primary);
+  --bs-btn-border-color: var(--mc-primary);
+  --bs-btn-hover-bg: var(--mc-primary-dark);
+  --bs-btn-hover-border-color: var(--mc-primary-dark);
+  --bs-btn-active-bg: var(--mc-primary-dark);
+  --bs-btn-active-border-color: var(--mc-primary-dark);
+}
+
+.mc-topbar { background: var(--mc-primary-dark); }
+
+.mc-sidebar {
+  background: #fff;
+  border-right: 1px solid var(--mc-border);
+  min-width: 200px;
+}
+.mc-sidebar .nav-link { color: #212529; padding: .45rem 1rem; }
+.mc-sidebar .nav-link:hover { background: var(--mc-bg); color: var(--mc-primary); }
+.mc-nav-heading {
+  padding: .75rem 1rem .25rem;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #6c757d;
+  border-top: 1px solid var(--mc-border);
+  margin-top: .5rem;
+}
+
+.mc-card { border: 1px solid var(--mc-border); box-shadow: none; }
+.mc-card .card-header { background: #fff; border-bottom: 1px solid var(--mc-border); font-weight: 600; }
+.mc-logo { font-size: 2.25rem; color: var(--mc-primary); line-height: 1; }
+
+.table { --bs-table-border-color: var(--mc-border); }
+.table thead th { background: #eef1f5; }
+
+.mc-footer {
+  background: #fff;
+  border-top: 1px solid var(--mc-border);
+  color: #6c757d;
+}

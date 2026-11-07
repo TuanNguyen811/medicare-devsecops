@@ -2,9 +2,10 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import DateTime, ForeignKey, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from medicare.db import Base, str_enum
+from medicare.department.models import Department
 
 
 class Role(StrEnum):
@@ -28,6 +29,7 @@ class User(Base):
     patient_id: Mapped[int | None] = mapped_column(
         ForeignKey("patients.id", use_alter=True), unique=True
     )
+    department: Mapped[Department | None] = relationship(lazy="joined")
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
     failed_login_count: Mapped[int] = mapped_column(default=0, server_default="0")
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
