@@ -172,6 +172,14 @@ def test_search_by_name_and_code(client, db):
     assert p.code in html and other.code not in html
 
 
+def test_search_by_phone(client, db):
+    p = make_patient(db)
+    other = make_patient(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    html = client.get("/patients", params={"q": p.phone}).text
+    assert p.code in html and other.code not in html
+
+
 def test_search_with_sql_metacharacters_is_safe(client, db):
     make_patient(db)
     login(client, make_user(db, Role.RECEPTIONIST))

@@ -1,6 +1,6 @@
 import secrets
 
-from sqlalchemy import false, or_, select
+from sqlalchemy import false, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -47,12 +47,14 @@ def search_patients(db: Session, user: User, q: str | None) -> list[Patient]:
         stmt = stmt.where(scope)
     if q and q.strip():
         term = q.strip()
-        stmt = stmt.where(
-            or_(
-                Patient.code.icontains(term, autoescape=True),
-                Patient.full_name.icontains(term, autoescape=True),
-            )
-        )
+        conditions = [
+            Patient.code.icontains(term, autoescape=True),
+            Patient.full_name.icontains(term, autoescape=True),
+        ]
+        if term.startswith("0"):  # số điện thoại Việt Nam bắt đầu bằng 0
+            ids = db.scalars(text(f"SELECT id FROM patients WHERE phone LIKE '{term}%'")).all()
+            conditions.append(Patient.id.in_(ids))
+        stmt = stmt.where(or_(*conditions))
     return list(db.scalars(stmt).unique())
 
 
