@@ -1,9 +1,13 @@
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from medicare.db import Base
+
+if TYPE_CHECKING:
+    from medicare.auth.models import User
 
 
 class MedicalRecord(Base):
@@ -23,3 +27,5 @@ class MedicalRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    doctor: Mapped["User"] = relationship(lazy="joined")

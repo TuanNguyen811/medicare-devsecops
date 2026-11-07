@@ -55,3 +55,7 @@ body { background: var(--mc-bg); }
   border-top: 1px solid var(--mc-border);
   color: #6c757d;
 }
+
+.mc-pre {
+  white-space: pre-wrap;
+}
