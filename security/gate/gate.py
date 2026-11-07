@@ -37,8 +37,9 @@ _WORKSPACE_PREFIXES = ("/github/workspace/",)
 COMMIT_SCOPED = frozenset({"gitleaks"})
 _TF_SUFFIXES = (".tf", ".tfvars", ".tf.json")
 # Changing these needs the security-reviewed label: scanner config, the gate, the workflows,
-# and every ignore file a scanner would honour.
-SENSITIVE_PREFIXES = (".github/", "security/")
+# the AI agent (its verdicts can unblock findings in ai-assisted mode), and every ignore
+# file a scanner would honour.
+SENSITIVE_PREFIXES = (".github/", "security/", "agent/")
 SUPPRESSION_FILES = frozenset({
     ".semgrepignore", ".trivyignore", ".trivyignore.yaml", "trivy.yaml", "trivy.yml",
     ".gitleaksignore", ".gitleaks.toml", ".checkov.yaml", ".checkov.yml", ".bandit",

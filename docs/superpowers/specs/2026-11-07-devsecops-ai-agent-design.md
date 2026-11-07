@@ -35,7 +35,7 @@
 | Secret Scan | Gitleaks (pre-commit + PR) |
 | IaC Scan | Checkov (Terraform, K8s, Dockerfile) |
 | AI Agent | Tự xây bằng Python, dùng Function Calling trực tiếp, không dùng framework agent |
-| LLM | DeepSeek API qua thư viện `openai` (thay `base_url`), tên model cấu hình bằng biến môi trường, đổi được sang mô hình khác |
+| LLM | Mặc định DeepSeek. Đổi nhà cung cấp bằng `LLM_PROVIDER`: `deepseek`, `openai`, `gemini` (qua thư viện `openai`), `anthropic` (Claude, qua thư viện `anthropic`) hoặc `openai-compatible` (OpenRouter, Ollama…). Model cấu hình bằng `LLM_MODEL` (cập nhật 2026-11-07 theo yêu cầu người dùng) |
 | Hosting | Không cần VPS. CI chạy trên GitHub-hosted runner, staging tạm thời trên runner, demo chạy `docker compose` trên máy cá nhân |
 | Repo | Một repo duy nhất (monorepo): `github.com/TuanNguyen811/medicare-devsecops` |
 
@@ -245,8 +245,8 @@ Agent dùng mô hình **review một lượt**: chỉ có một phiên Agent duy
 
 - `--mode ci | cli | benchmark`. Chế độ `cli` hiển thị trực tiếp từng bước suy luận và từng lần gọi công cụ, dùng khi demo.
 - Cờ ablation: `--strategy single-shot` (không dùng công cụ), `--no-requirements`, `--no-ast-tools`, `--model <name>`.
-- Biến môi trường: `LLM_BASE_URL` (mặc định `https://api.deepseek.com`), `LLM_MODEL`, `LLM_API_KEY`.
-- `--thinking`: dùng chế độ suy luận của DeepSeek (chậm hơn, có thể chính xác hơn), phục vụ cấu hình C2-thinking.
+- Biến môi trường: `LLM_PROVIDER` (mặc định `deepseek`), `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL` (mặc định theo nhà cung cấp, ví dụ `https://api.deepseek.com`), `LLM_TEMPERATURE`.
+- `--thinking`: dùng chế độ suy luận của mô hình (chậm hơn, có thể chính xác hơn), phục vụ cấu hình C2-thinking. Với DeepSeek là `deepseek-reasoner`, Claude là extended thinking, OpenAI/Gemini là `reasoning_effort`.
 - `temperature = 0`. Thử lại với thời gian chờ tăng dần (3 lần), timeout cho mỗi lần gọi, ngân sách token cho mỗi lần chạy.
 
 ### 4.5 Xử lý lỗi

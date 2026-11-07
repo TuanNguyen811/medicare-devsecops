@@ -32,12 +32,12 @@ UV_IMAGE="ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
 echo "[1/6] semgrep ${SEMGREP_VERSION}"
 run "semgrep/semgrep:${SEMGREP_VERSION}" semgrep scan --metrics off --quiet --disable-nosem \
   --config p/python --config p/owasp-top-ten --config security/semgrep/medicare.yml \
-  --sarif --output /out/semgrep.sarif app
+  --sarif --output /out/semgrep.sarif app agent/src
 
 echo "[2/6] bandit ${BANDIT_VERSION}"
 run "$UV_IMAGE" uvx --quiet --exclude-newer "$TOOLS_EXCLUDE_NEWER" \
   --from "bandit[sarif]==${BANDIT_VERSION}" \
-  bandit -q -r app/medicare --ignore-nosec -f sarif -o /out/bandit.sarif --exit-zero
+  bandit -q -r app/medicare agent/src --ignore-nosec -f sarif -o /out/bandit.sarif --exit-zero
 
 echo "[3/6] trivy ${TRIVY_VERSION}"
 run "aquasec/trivy:${TRIVY_VERSION}" fs --quiet --scanners vuln \

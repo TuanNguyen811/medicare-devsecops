@@ -254,6 +254,7 @@ def test_ai_mode_conflicting_verdicts_any_non_fp_wins(order):
 @pytest.mark.parametrize("path", [
     ".trivyignore", "app/.semgrepignore", ".gitleaksignore", "trivy.yaml", ".checkov.yaml",
     "security/gate/gate.py", "security/semgrep/medicare.yml", ".github/workflows/pr-security.yml",
+    "agent/src/secagent/phases/check.py", "agent/pyproject.toml",
 ])
 def test_changing_scanner_or_pipeline_config_needs_security_review(path):
     d = decide([], mode="traditional", report=None, labels=set(), agent_exit=None, errors=[],

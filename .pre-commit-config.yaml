@@ -10,5 +10,5 @@ repos:
     rev: v0.17.4
     hooks:
       - id: ruff-check
-        files: ^(app|security/gate)/
+        files: ^(app|agent|security/gate)/
         args: ["--line-length", "100"]
