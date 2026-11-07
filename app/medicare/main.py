@@ -12,7 +12,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.engine, app.state.session_factory = create_db(settings.database_url)
-    app.state.engine, app.state.session_factory = create_db(settings.database_url)
 
     @app.get("/health")
     def health() -> dict[str, str]:

@@ -33,7 +33,7 @@ def str_enum(enum_cls: type[StrEnum], name: str) -> SAEnum:
 
 def create_db(database_url: str) -> tuple[Engine, sessionmaker[Session]]:
     """Create the engine once (lazy: no connection until first use) and its session factory."""
-    engine = create_engine(database_url, pool_pre_ping=True)
+    engine = create_engine(database_url, pool_pre_ping=True, hide_parameters=True)
     return engine, sessionmaker(bind=engine, expire_on_commit=False)
 
 
