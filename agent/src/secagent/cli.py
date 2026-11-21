@@ -8,6 +8,7 @@ gate then falls back to traditional mode.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import sys
@@ -210,3 +211,61 @@ def main_validate(argv: list[str] | None = None, *, runner=None) -> int:
 
 def run_validate() -> None:
     sys.exit(main_validate())
+
+
+# --- secagent-prepare -----------------------------------------------------------------------
+
+
+def main_prepare(argv: list[str] | None = None) -> int:
+    """Write out/context/ for the Claude Code engine. Exit 0: done. Exit 2: unexpected error."""
+    from secagent.engine.task import build_task, findings_payload, mask_worktree
+
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    p = argparse.ArgumentParser(prog="secagent-prepare",
+                                description="Dựng ngữ cảnh cho engine claude-code")
+    p.add_argument("--repo", default=".")
+    p.add_argument("--base", required=True, help="commit gốc (base của PR)")
+    p.add_argument("--head", required=True, help="commit của PR")
+    p.add_argument("--sarif-dir", default="sarif")
+    p.add_argument("--requirements", default="docs/security-requirements.md")
+    p.add_argument("--out", default="out")
+    p.add_argument("--no-requirements", action="store_true")
+    p.add_argument("--mask-worktree", action="store_true",
+                   help="che các dòng Gitleaks báo ngay trong cây làm việc")
+    args = p.parse_args(argv)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    trace = Trace(out / "trace.jsonl")
+    try:
+        prep = prepare(Path(args.repo).resolve(), args.base, args.head, Path(args.sarif_dir),
+                       args.requirements, not args.no_requirements, trace)
+        ctx = out / "context"
+        ctx.mkdir(parents=True, exist_ok=True)
+        files = {
+            "findings.json": json.dumps(findings_payload(prep.clusters, prep.diff), indent=2,
+                                        ensure_ascii=False),
+            "diff.patch": prep.diff.text(max_lines=100000),
+            "task.md": build_task(prep),
+        }
+        if prep.requirements:
+            files["requirements.md"] = prep.requirements
+        for name, text in files.items():
+            (ctx / name).write_text(text, encoding="utf-8", newline="")
+        masked = mask_worktree(prep) if args.mask_worktree else 0
+        trace.event("prepare", clusters=len(prep.clusters), findings=len(prep.findings),
+                    sarif_errors=prep.sarif_errors, masked_lines=masked,
+                    changed_files=sorted(prep.diff.changed))
+        _say(f"secagent-prepare: {len(prep.clusters)} cụm, {len(prep.diff.changed)} file đổi, "
+             f"{masked} dòng bị che")
+        return 0
+    except Exception as exc:  # fail safe: the gate falls back to traditional mode
+        trace.event("crash", error=type(exc).__name__)
+        _say(f"secagent-prepare: lỗi bất ngờ {type(exc).__name__}")
+        return 2
+    finally:
+        trace.close()
+
+
+def run_prepare() -> None:
+    sys.exit(main_prepare())
