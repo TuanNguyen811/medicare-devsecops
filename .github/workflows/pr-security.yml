@@ -273,10 +273,9 @@ jobs:
     # Fork PRs get no secrets; the gate then stays on traditional mode.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 12
     permissions:
       contents: read
-      pull-requests: read
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -295,102 +294,23 @@ jobs:
           pattern: sarif-*
           path: sarif
           merge-multiple: true
-      # Reasoning engine (spec addendum 2026-11-21, section 4): secagent's own function-calling
-      # loop, or Claude Code between secagent-prepare and secagent-finalize. Same outputs either
-      # way; anything unexpected writes agent-exit=2 and the gate falls back to traditional.
-      - name: Choose the reasoning engine (repo variable AGENT_ENGINE, default secagent)
-        id: cfg
-        env:
-          AGENT_ENGINE: ${{ vars.AGENT_ENGINE }}
-        run: |
-          # The checkout is the PR's code: an out/ committed in the PR (e.g. out/agent-exit=0
-          # with an all-FP report.json) must never be mistaken for this job's results.
-          rm -rf out
-          mkdir out
-          engine="${AGENT_ENGINE:-secagent}"
-          case "$engine" in
-            secagent|claude-code) ;;
-            *)
-              echo "::error::AGENT_ENGINE must be secagent or claude-code; gate falls back to traditional"
-              echo 2 > out/agent-exit
-              engine=none
-              ;;
-          esac
-          # Model, tools and turn limit come from one place: agent/engine.env.
-          . agent/engine.env
-          {
-            echo "engine=$engine"
-            echo "model=$CLAUDE_ENGINE_MODEL"
-            echo "prompt=${CLAUDE_ENGINE_PROMPT//\{task\}/out/context/task.md}"
-            # Values are quoted: claude_args is parsed like a shell line and the rules contain ( ) *.
-            echo "claude_args=--model \"$CLAUDE_ENGINE_MODEL\" --tools \"$CLAUDE_ENGINE_TOOLS\" --permission-mode \"$CLAUDE_ENGINE_PERMISSION_MODE\" --allowedTools \"$CLAUDE_ENGINE_ALLOWED_TOOLS\" --disallowedTools \"$CLAUDE_ENGINE_DISALLOWED_TOOLS\" --max-turns \"$CLAUDE_ENGINE_MAX_TURNS\" $CLAUDE_ENGINE_ISOLATION"
-          } >> "$GITHUB_OUTPUT"
-      - name: AI review with secagent (the only step holding the LLM key; it does not run the app or its tests)
-        if: steps.cfg.outputs.engine == 'secagent'
+      - name: AI review (the only step holding the LLM key; it does not run the app or its tests)
         env:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
           LLM_MODEL: ${{ vars.LLM_MODEL }}
           LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
         run: |
-          mkdir -p out
+          # The checkout is the PR's code: an out/ committed in the PR (e.g. out/agent-exit=0
+          # with an all-FP report.json) must never be mistaken for this job's results.
+          rm -rf out
+          mkdir out
           set +e
           uv run --project agent --locked secagent --mode ci --repo . \
             --base "$BASE_SHA" --head "$HEAD_SHA" --sarif-dir sarif \
             --requirements docs/security-requirements.md --out out
           echo "$?" > out/agent-exit
           echo "secagent exit code: $(cat out/agent-exit) (2 = agent unavailable, gate falls back)"
-      - name: Prepare context for the claude-code engine (no secret; masks Gitleaks lines on disk)
-        if: steps.cfg.outputs.engine == 'claude-code'
-        run: |
-          # A symlink committed in the PR (e.g. to .git/config or /proc/self/environ) must not
-          # let Read reach what the permission rules deny. This job never runs the app.
-          find . -path ./.git -prune -o -type l -exec rm -f {} +
-          set +e
-          uv run --project agent --locked secagent-prepare --repo . \
-            --base "$BASE_SHA" --head "$HEAD_SHA" --sarif-dir sarif \
-            --requirements docs/security-requirements.md --out out --mask-worktree
-          code=$?
-          if [ "$code" -ne 0 ]; then echo 2 > out/agent-exit; fi
-          echo "secagent-prepare exit code: $code"
-      # The only step holding the OAuth token. Claude Code gets only Read/Grep/Glob in dontAsk
-      # mode, confined to the workspace minus .git/ (the action writes the job token into the
-      # remote URL) and sarif/ (unmasked): no shell, no web, no file writes. The job token can
-      # read contents and PRs and upload SARIF; it cannot comment or push.
-      - name: Claude Code engine (tools Read, Grep, Glob only)
-        id: engine
-        if: steps.cfg.outputs.engine == 'claude-code' && hashFiles('out/agent-exit') == ''
-        continue-on-error: true
-        timeout-minutes: 20
-        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ github.token }}
-          prompt: ${{ steps.cfg.outputs.prompt }}
-          claude_args: ${{ steps.cfg.outputs.claude_args }}
-          display_report: "false"
-      - name: Finalize the claude-code report (no secret)
-        if: always() && steps.cfg.outputs.engine == 'claude-code'
-        env:
-          EXECUTION_FILE: ${{ steps.engine.outputs.execution_file }}
-          ENGINE_MODEL: ${{ steps.cfg.outputs.model }}
-        run: |
-          if [ -f out/agent-exit ]; then
-            echo "agent-exit already set to $(cat out/agent-exit)"
-            exit 0
-          fi
-          if [ -z "$EXECUTION_FILE" ] || [ ! -f "$EXECUTION_FILE" ]; then
-            echo "::warning::claude-code engine produced no execution file; gate falls back"
-            echo 2 > out/agent-exit
-            exit 0
-          fi
-          set +e
-          uv run --project agent --locked secagent-finalize --repo . \
-            --base "$BASE_SHA" --head "$HEAD_SHA" --sarif-dir sarif \
-            --requirements docs/security-requirements.md --out out \
-            --execution-file "$EXECUTION_FILE" --model "$ENGINE_MODEL"
-          echo "$?" > out/agent-exit
-          echo "secagent-finalize exit code: $(cat out/agent-exit) (2 = engine unavailable, gate falls back)"
       # Uploaded before any application or test code of the PR runs anywhere: the quality
       # gate reads only this artifact.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

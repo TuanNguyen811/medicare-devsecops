@@ -2,17 +2,19 @@
 
 - **Ngày:** 2026-11-21
 - **Bổ sung cho:** `2026-11-07-devsecops-ai-agent-design.md` (gọi tắt là *spec gốc*). Phần nào ở đây khác spec gốc thì **tài liệu này thắng**. Phần không nhắc tới giữ nguyên.
-- **Trạng thái:** bản nháp chờ duyệt.
+- **Trạng thái:** đã duyệt 2026-11-21; sửa 2026-11-22 (engine `claude-code` chỉ chạy trên máy, không chạy trên CI).
 
 ## 0. Vì sao bổ sung
 
-1. **Chưa có API key LLM**, nên `secagent` chưa chạy được trên CI và chưa có số liệu. Nhóm có gói Claude (Pro/Max), dùng được cho claude-code-action qua OAuth token. Cần một engine suy luận thay thế, **đặt đúng vị trí và giữ đúng đầu vào, đầu ra của `secagent`**, để pipeline và benchmark chạy được ngay. Khi có key, `secagent` chạy lại trên cùng hạ tầng.
+1. **Chưa có API key LLM**, nên `secagent` chưa chạy được và chưa có số liệu. Nhóm có gói Claude (Max 5x). Benchmark dùng Claude Code **chạy trên máy** làm engine suy luận thay thế (cấu hình C6), đặt trong khung `secagent`, cùng đầu vào và đầu ra. Khi có key, `secagent` chạy trên cùng bộ dữ liệu (C2).
+   - **CI không dùng engine này** (quyết định 2026-11-22): không đặt token Claude trên GitHub, và không để nội dung PR (có thể chứa prompt injection) điều khiển một coding agent ngay trong pipeline.
+   - CI vẫn chỉ chạy `secagent` bằng `LLM_API_KEY`. Chưa có key thì gate dùng chế độ truyền thống (fail-safe).
 2. **Đồ án thiếu phân tích động (DAST)** và **thiếu phần Ops** (deploy thật, kiểm soát chuỗi cung ứng, giám sát). Spec gốc để DAST ngoài phạm vi. Giờ đưa vào để luồng DevSecOps khép kín như thực tế: code → PR → build → ký → deploy → giám sát.
 3. **Benchmark cần nhiều kịch bản lỗi logic hơn**, vì đây là nhóm lỗi công cụ quét và DAST đều không bắt được, cũng là lý do tồn tại của AI Agent.
 
 **Thành công là khi:**
 
-- Một PR đi hết luồng: 6 nhóm công cụ quét + DAST → Agent (engine `claude-code`) → kiểm chứng bản vá → comment → gate. Không cần thao tác tay.
+- Một PR đi hết luồng: 6 nhóm công cụ quét + DAST → Agent (`secagent`, khi có API key; chưa có key thì gate chạy chế độ truyền thống) → kiểm chứng bản vá → comment → gate. Không cần thao tác tay.
 - `main` được build, ký, gắn SBOM, rồi deploy về cụm Kubernetes trên máy bằng một lệnh. Image không có chữ ký hợp lệ bị cụm từ chối.
 - Dashboard Grafana có số liệu, và cảnh báo dò mật khẩu bật lên khi chạy script giả lập.
 - Benchmark chạy đủ C1, C1+DAST, C6 trên khoảng 30 kịch bản. Kết quả thô và bảng tổng hợp được commit.
@@ -37,7 +39,7 @@
 1. MÁY LẬP TRÌNH VIÊN   pre-commit Gitleaks → push (GitHub push protection) → mở PR
 2. PR (pr-security.yml) build-test | Semgrep, Bandit, CodeQL | Trivy | Gitleaks | Checkov, zizmor
                         | DAST: ZAP [MỚI]
-                        → ai-security-agent (AGENT_ENGINE = secagent | claude-code [MỚI])
+                        → ai-security-agent (secagent, API key)
                         → validate-patches → agent-comment → quality-gate → review, label → merge
 3. MAIN (main-ci.yml)   build-test → full-scan → image → Trivy image → SBOM
                         → cosign ký + SBOM attestation [MỚI] → GHCR → staging tạm
@@ -53,7 +55,9 @@
 
 | Quyết định | Phương án | Đánh đổi | Chọn |
 |---|---|---|---|
-| Đặt claude-code ở đâu | (a) job song song, chỉ comment; (b) **thay đúng vị trí `secagent`, cùng đầu vào và đầu ra** | (a) không so sánh công bằng với C2, gate không dùng được; (b) phải ép đầu ra đúng schema | **(b)**, người dùng chọn |
+| Engine claude-code so với `secagent` | (a) review tự do, chỉ comment; (b) **cùng đầu vào và đầu ra như `secagent`** | (a) không so sánh công bằng với C2; (b) phải ép đầu ra đúng schema | **(b)**, người dùng chọn |
+| Engine claude-code chạy ở đâu | (a) trên CI qua claude-code-action; (b) **chỉ trên máy, cho benchmark** | (a) token Claude nằm trên GitHub, PR có thể prompt-inject một coding agent trong pipeline; (b) CI không thêm rủi ro | **(b)**, người dùng chọn 2026-11-22 (ban đầu là (a), đã làm rồi gỡ) |
+| Ai chấm benchmark C6 | (a) phiên Claude Code đang điều phối hoặc subagent của nó; (b) **tiến trình `claude -p` mới cho mỗi lượt** | (a) phiên đó viết kịch bản và đáp án, subagent thừa hưởng cài đặt, bộ nhớ, công cụ ghi; không tái lập được; (b) sạch, khóa quyền, script chạy lại được | **(b)**, mình quyết |
 | Cách engine claude-code dùng code của `secagent` | (a) claude-code tự làm mọi pha; (b) **`secagent` lo tiền xử lý và hậu kiểm, claude-code chỉ lo pha suy luận** | (a) finding id lệch với gate, mất chống bịa và kiểm tra độ phủ; (b) tái dùng code đã test | **(b)**, mình quyết |
 | Deploy về máy | (a) **script kéo về + Kyverno**; (b) Argo CD + Kyverno; (c) self-hosted runner | (b) nặng hơn ~1 GB, CI phải ghi vào repo; (c) repo public → PR từ fork chạy code trên máy | **(a)**, người dùng chọn |
 | Giám sát | (a) kube-prometheus-stack; (b) **manifest Prometheus + Grafana + Alertmanager gọn** | (a) ~2 GB RAM, cần Helm | **(b)**, mình quyết |
@@ -70,13 +74,13 @@
 ```
 secagent-prepare (không LLM)    →  ENGINE suy luận                       →  secagent-finalize (không LLM)
 pha 0 của spec gốc:                  secagent:    vòng lặp function calling     pha 2 + 3 của spec gốc:
- đọc SARIF, chuẩn hóa, gộp trùng,    claude-code: claude-code-action (CI)       độ phủ, chống bịa, schema
- tính finding id, che secret,                     hoặc `claude -p` (máy)        → report.json, report.md,
+ đọc SARIF, chuẩn hóa, gộp trùng,    claude-code: `claude -p` trên máy          độ phủ, chống bịa, schema
+ tính finding id, che secret,                     (chỉ benchmark, không CI)      → report.json, report.md,
  ghi out/context/                    trả JSON ở câu trả lời cuối                  agent.sarif, review.json, verdicts.json
 ```
 
-- `AGENT_ENGINE=secagent` (mặc định) giữ nguyên lệnh `secagent --mode ...` hiện có. Bên trong nó vẫn chạy cả 3 bước, nên không đổi hành vi.
-- `AGENT_ENGINE=claude-code` chạy 3 bước riêng như trên.
+- Lệnh `secagent --mode ...` (CI và máy) giữ nguyên hành vi; bên trong dùng chung code của bước 1 và 3.
+- Engine `claude-code` chạy 3 bước riêng như trên, **chỉ trên máy**.
 - Hai lệnh mới: `secagent-prepare` và `secagent-finalize`. Lệnh `secagent-validate` giữ nguyên.
 
 ### 4.2 Hợp đồng giữa các bước
@@ -106,28 +110,32 @@ pha 0 của spec gốc:                  secagent:    vòng lặp function calli
 - Sinh `report.json`, `report.md`, `agent.sarif`, `review.json` bằng chính `secagent.report`. Thoát `0`.
 - `report.md` ghi rõ dòng "Engine: claude-code (model …)".
 
-### 4.3 Trên CI (`pr-security.yml`, job `ai-security-agent`)
+### 4.3 Không chạy trên CI
 
-- Giữ nguyên tên job, `needs` (thêm `dast`), điều kiện bỏ qua PR từ fork, artifact `agent-report` và upload SARIF category `ai-agent`.
-- Đọc `vars.AGENT_ENGINE` (mặc định `secagent`). Nhánh `claude-code`:
-  1. `secagent-prepare`.
-  2. `anthropics/claude-code-action` (ghim theo commit SHA) với `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`; `prompt` trỏ tới `out/context/task.md`; chỉ có 3 công cụ Read, Grep, Glob (`--tools`), chế độ quyền `dontAsk` (mọi thứ ngoài danh sách cho phép đều bị từ chối), chỉ đọc trong thư mục làm việc, cấm `.git/` (action ghi token vào remote URL) và `sarif/` (SARIF thô chưa che secret); không nạp cài đặt, hook, plugin, MCP của người dùng. Model, công cụ, quyền và số lượt lấy từ `agent/engine.env`. Truyền `github_token` là `GITHUB_TOKEN` của job (quyền `contents: read`, `pull-requests: read`, `security-events: write` để upload SARIF). Action không comment, không push. Mọi job checkout code PR đều xóa `out/` trước khi dùng, vì `out/` trong code PR do người mở PR kiểm soát.
-  3. `secagent-finalize`, rồi ghi `out/agent-exit` (mọi lỗi ở bước 1–3 → `2`).
-- Ghi `model` cụ thể trong `claude_args` (`--model claude-sonnet-5-5`, xem mục 8.3) để số liệu tái lập được.
-- Timeout bước engine: 20 phút.
-- `checkout` dùng `persist-credentials: false` như hiện nay.
+- `pr-security.yml` không có engine `claude-code` và không có secret Claude. Job `ai-security-agent` chỉ chạy `secagent` bằng `LLM_API_KEY`.
+- **Vá kèm, độc lập với engine:** mọi job checkout code PR (`ai-security-agent`, `validate-patches`, `quality-gate`) đều xóa `out/` trước khi dùng, vì `out/` trong code PR do người mở PR kiểm soát. Trước đây một PR, kể cả từ fork, commit `out/agent-exit=0` cùng một `report.json` toàn FP có thể qua gate ở chế độ `ai-assisted`.
 
-Kiểm tra bắt buộc khi làm: chạy thử một PR có comment prompt injection (S15). Xác nhận engine không ghi được file nào và không chạy được lệnh nào.
+### 4.4 Trên máy (benchmark)
 
-### 4.4 Trên máy (benchmark và demo CLI)
+`agent/scripts/claude-engine.sh <repo> <out>` chạy `claude -p` với `task.md` và cấu hình trong `agent/engine.env`, xuất `--output-format stream-json --verbose` vào `<out>/engine-execution.jsonl` làm execution file. Benchmark gọi `prepare` → script này → `finalize`.
 
-`agent/scripts/claude-engine.sh <repo> <out>` chạy `claude -p` với cùng `task.md` và cùng cấu hình trong `agent/engine.env` (model, công cụ, quyền, tách khỏi cài đặt cá nhân), xuất `--output-format stream-json --verbose` vào `<out>/engine-execution.jsonl` làm execution file. Benchmark gọi `prepare` → script này → `finalize`, giống hệt CI trừ chỗ chạy.
+**Khóa quyền** (đã thử với Claude Code 2.1.330 thật):
+- Chỉ có 3 công cụ Read, Grep, Glob (`--tools`), chế độ `dontAsk`: mọi thứ ngoài danh sách cho phép đều bị từ chối.
+- Chỉ đọc trong thư mục làm việc. Cấm `.git/` và `sarif/` (SARIF thô chưa che secret; engine đọc phát hiện đã che ở `out/context/findings.json`).
+- Không có công cụ chạy lệnh hay ghi file.
+- Kết quả thử: đọc file ngoài repo, `.git/config`, `sarif/` và grep ra ngoài repo đều bị chặn.
 
-### 4.5 Cấu hình repo
+**Mỗi lượt là một phiên mới và sạch:**
+- không có lịch sử hội thoại;
+- không nạp cài đặt, hook, plugin, MCP cá nhân (`--setting-sources project --strict-mcp-config --disable-slash-commands --no-session-persistence`);
+- thư mục chạy không chứa đáp án.
 
-- Secret `CLAUDE_CODE_OAUTH_TOKEN`: người dùng tự tạo bằng `claude setup-token`, Claude không đọc giá trị này.
-- Biến `AGENT_ENGINE=claude-code`.
-- Secret `LLM_API_KEY` và các biến `LLM_*` giữ nguyên cho khi bật lại `secagent`.
+Không dùng phiên Claude Code đang điều phối hay subagent của nó để chấm, vì phiên đó viết kịch bản và đáp án.
+
+### 4.5 Cấu hình
+
+- CLI `claude` trên máy, đăng nhập bằng tài khoản Claude. Máy đã có sẵn bản đi kèm extension VS Code (`claude.exe`), hoặc cài bằng `npm install -g @anthropic-ai/claude-code`. Script nhận đường dẫn qua `CLAUDE_BIN`.
+- Secret `LLM_API_KEY` và các biến `LLM_*` giữ nguyên cho `secagent` trên CI.
 
 ## 5. DAST với OWASP ZAP
 
@@ -331,7 +339,7 @@ Mỗi luật có `annotations.description` ngắn bằng tiếng Việt. Cảnh 
 
 **Một model cho toàn bộ C6: `claude-sonnet-5-5`.**
 - Lý do chọn: gói Max 5x; Sonnet dùng ít hạn mức hơn Opus nhiều, chạy nhanh hơn, và là lựa chọn thực tế cho review mỗi PR.
-- Model ghi ở một chỗ là `agent/engine.env`, script máy và workflow cùng đọc, ghi vào `meta.model`.
+- Model ghi ở một chỗ là `agent/engine.env`, script máy đọc, ghi vào `meta.model`.
 
 **Khối lượng ước tính** (khoảng 105–110 lượt engine):
 - C6: 25 × 3 + 5 × 1;
@@ -354,6 +362,7 @@ Chi phí của C6 là **chi phí quy đổi theo bảng giá API** do Claude Cod
 - `evaluate.py` sinh `summary.csv`, bảng Markdown và biểu đồ.
 - Kết quả thô **được commit** để lưu vĩnh viễn. Artifact GitHub chỉ giữ tối đa 90 ngày.
 - Ngoài ra mở **khoảng 5 PR trưng bày** (mỗi nhóm một kịch bản tiêu biểu) để chạy toàn bộ luồng trên GitHub. Comment và check được lưu cả khi PR đã đóng. Nhánh có lỗi không bao giờ được deploy.
+- Phần AI trên PR trưng bày chỉ có khi `secagent` có API key; chưa có key thì gate chạy chế độ truyền thống. Kết quả của C6 nằm ở `benchmark/results/`.
 
 **Chấm DAST:** finding `zap` khớp đáp án nếu cùng `route` (method + đường dẫn mẫu) và cùng nhóm CWE. Các luật chấm khác giữ như spec gốc mục 5.3.
 
@@ -362,7 +371,7 @@ Chi phí của C6 là **chi phí quy đổi theo bảng giá API** do Claude Cod
 | Giai đoạn | PR | Cần label `security-reviewed` |
 |---|---|---|
 | 0 | Tài liệu này + kế hoạch | Không |
-| 1 | Engine claude-code: prepare/finalize, prompt, job CI, script máy | Có (`.github/`, `agent/`) |
+| 1 | Engine claude-code chạy trên máy (prepare/finalize, prompt, script) + vá `out/` trong workflow | Có (`.github/`, `agent/`) |
 | 2 | DAST: `security/dast/`, job `dast-zap`/`dast`, gate nhận `zap` | Có |
 | 3 | Ký image + `deploy/` + Kyverno | Có |
 | 4 | Metrics trong app + `deploy/monitoring/` + script giả lập | Có thể không (nếu không sửa `.github/`, `security/`) |
@@ -370,7 +379,6 @@ Chi phí của C6 là **chi phí quy đổi theo bảng giá API** do Claude Cod
 | 6 | Tài liệu (`docs/pipeline.md`, README), kịch bản demo | Không |
 
 **Việc người dùng làm:**
-- tạo secret `CLAUDE_CODE_OAUTH_TOKEN` và đặt biến `AGENT_ENGINE` (giai đoạn 1);
 - gắn label cho các PR cần;
 - giữ Docker Desktop và Kubernetes chạy khi deploy hoặc chạy benchmark.
 
@@ -384,6 +392,6 @@ Chi phí của C6 là **chi phí quy đổi theo bảng giá API** do Claude Cod
 
 ## 11. Hạn chế bổ sung (ghi vào báo cáo)
 
-- C6 dùng một coding agent thương mại làm engine suy luận. Kết quả đo năng lực của engine đó trong khung `secagent` (tiền xử lý, hậu kiểm, gate), không đo vòng lặp function calling tự viết. Vòng lặp này được đánh giá ở C2 khi có key.
+- C6 dùng một coding agent thương mại (chạy trên máy, không chạy trên CI) làm engine suy luận. Kết quả đo năng lực của engine đó trong khung `secagent` (tiền xử lý, hậu kiểm, gate), không đo vòng lặp function calling tự viết. Vòng lặp này được đánh giá ở C2 khi có key.
 - ZAP không thấy lỗi phân quyền giữa các vai trò, vì mỗi lần quét chỉ dùng một vai trò. Đây là giới hạn vốn có của DAST tự động và là điểm để so sánh với Agent.
 - Deploy và giám sát chạy trên một cụm một node trên máy cá nhân. Tính sẵn sàng cao và lưu trữ lâu dài nằm ngoài phạm vi.

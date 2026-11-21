@@ -366,7 +366,8 @@ def main_finalize(argv: list[str] | None = None) -> int:
     p.add_argument("--sarif-dir", default="sarif")
     p.add_argument("--requirements", default="docs/security-requirements.md")
     p.add_argument("--out", default="out")
-    p.add_argument("--execution-file", required=True, help="execution file của claude-code-action")
+    p.add_argument("--execution-file", required=True,
+                   help="execution file của Claude Code (claude -p, json hoặc stream-json)")
     p.add_argument("--engine", choices=("claude-code",), default="claude-code")
     p.add_argument("--model", help="model dự phòng khi execution file không ghi model")
     p.add_argument("--no-requirements", action="store_true")

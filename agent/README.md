@@ -49,7 +49,7 @@ Các biến khác:
 
 ## Engine `claude-code`
 
-Ngoài vòng lặp function calling tự viết, phần suy luận còn có thể giao cho Claude Code (spec bổ sung `docs/superpowers/specs/2026-11-21-ops-dast-engine-design.md` mục 4). `secagent` vẫn làm phần tiền xử lý và hậu kiểm, nên `report.json` và gate không đổi. Báo cáo ghi rõ `Engine: claude-code (model …)`.
+Cho benchmark (cấu hình C6), phần suy luận còn có thể giao cho Claude Code chạy **trên máy** (spec bổ sung `docs/superpowers/specs/2026-11-21-ops-dast-engine-design.md` mục 4). `secagent` vẫn làm phần tiền xử lý và hậu kiểm, nên `report.json` và gate không đổi. Báo cáo ghi rõ `Engine: claude-code (model …)`.
 
 1. `secagent-prepare`: đọc SARIF, gộp trùng, che secret, ghi `out/context/` (`task.md`, `findings.json`, `diff.patch`, `requirements.md`).
 2. Claude Code chỉ được dùng Read, Grep, Glob và trả kết luận dạng một khối JSON trong câu trả lời cuối.
@@ -69,7 +69,9 @@ uv run --project agent secagent-finalize --repo . --base origin/main --head HEAD
   --execution-file out/engine-execution.jsonl --model "$CLAUDE_ENGINE_MODEL"
 ```
 
-**Trên GitHub:** đặt biến repo `AGENT_ENGINE=claude-code` và secret `CLAUDE_CODE_OAUTH_TOKEN` (tạo bằng `claude setup-token`). Job `ai-security-agent` chạy ba bước trên bằng `anthropics/claude-code-action`.
+Engine này **không chạy trên CI**: GitHub không giữ token Claude, và nội dung PR không thể điều khiển một coding agent trong pipeline. Trên CI, job `ai-security-agent` chỉ chạy `secagent` bằng `LLM_API_KEY`.
+
+Mỗi lượt là một phiên `claude -p` mới, chỉ đọc được trong repo, không nạp cài đặt, hook, plugin hay MCP cá nhân. Có thể dùng bản `claude.exe` đi kèm extension VS Code: `CLAUDE_BIN=<đường dẫn tới claude.exe>`.
 
 ## Tham số
 

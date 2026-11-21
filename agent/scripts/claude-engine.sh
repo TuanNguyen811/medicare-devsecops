@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Chạy engine claude-code trên máy (benchmark, demo) giống hệt bước engine trên CI.
+# Chạy engine claude-code trên máy cho benchmark (cấu hình C6). CI không chạy engine này.
 # Cách dùng: agent/scripts/claude-engine.sh <repo> <out>
 #   <out>/context/task.md do `secagent-prepare` tạo trước; kết quả ghi vào
 #   <out>/engine-execution.jsonl để `secagent-finalize --execution-file` đọc.

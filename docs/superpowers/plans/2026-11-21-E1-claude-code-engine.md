@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Cập nhật 2026-11-22:** người dùng quyết định **không chạy engine `claude-code` trên CI** (không đặt token Claude trên GitHub). Task 6 và 7 (nhánh `AGENT_ENGINE`, claude-code-action, kiểm chứng trên GitHub) đã làm rồi gỡ. Workflow chỉ giữ phần vá xóa `out/`. Engine dùng trên máy cho benchmark qua `agent/scripts/claude-engine.sh`. Xem spec bổ sung mục 4.3–4.4.
+
 **Goal:** `secagent` dùng được engine suy luận `claude-code` (claude-code-action trên CI, `claude -p` trên máy). Engine đặt đúng vị trí, cùng đầu vào và đầu ra như `secagent` hiện tại, chọn bằng biến repo `AGENT_ENGINE`.
 
 **Architecture:** Tách `secagent` thành 3 bước:
