@@ -72,7 +72,7 @@ secagent-prepare (không LLM)    →  ENGINE suy luận                       �
 pha 0 của spec gốc:                  secagent:    vòng lặp function calling     pha 2 + 3 của spec gốc:
  đọc SARIF, chuẩn hóa, gộp trùng,    claude-code: claude-code-action (CI)       độ phủ, chống bịa, schema
  tính finding id, che secret,                     hoặc `claude -p` (máy)        → report.json, report.md,
- ghi out/context/                    ghi out/verdicts.json                        agent.sarif, review.json
+ ghi out/context/                    trả JSON ở câu trả lời cuối                  agent.sarif, review.json, verdicts.json
 ```
 
 - `AGENT_ENGINE=secagent` (mặc định) giữ nguyên lệnh `secagent --mode ...` hiện có. Bên trong nó vẫn chạy cả 3 bước, nên không đổi hành vi.
@@ -86,9 +86,9 @@ pha 0 của spec gốc:                  secagent:    vòng lặp function calli
 - `out/context/findings.json`: danh sách phát hiện sau gộp trùng, mỗi phần tử có `cluster_id`, `finding_ids`, công cụ, rule, mức độ, file, dòng, thông điệp đã che secret, cờ "nằm trong diff".
 - `out/context/diff.patch`: diff base...head đã che secret.
 - `out/context/requirements.md`: bản sao tài liệu quy tắc (không có nếu dùng `--no-requirements`).
-- `out/context/task.md`: nhiệm vụ cho engine, dựng từ `prompts/system.md` + `prompts/review.md` cộng phần hướng dẫn riêng cho engine file (`prompts/engine_file.md`). Nội dung: đọc 3 file trên và code trong repo; với mỗi `cluster_id` nộp đúng một kết luận; săn thêm lỗi trong phần thay đổi; ghi kết quả đúng schema vào `out/verdicts.json`.
+- `out/context/task.md`: nhiệm vụ cho engine, dựng từ `prompts/system.md` + `prompts/review.md` cộng phần hướng dẫn riêng cho engine file (`prompts/engine_file.md`). Nội dung: đọc 3 file trên và code trong repo; với mỗi `cluster_id` nộp đúng một kết luận; săn thêm lỗi trong phần thay đổi; trả kết quả đúng schema trong **một khối JSON ở câu trả lời cuối** (engine không có quyền ghi file).
 
-**`out/verdicts.json`** (engine ghi):
+**`out/verdicts.json`** (`secagent-finalize` trích từ câu trả lời cuối của engine rồi ghi ra, để lưu vết):
 
 ```json
 {
@@ -97,7 +97,7 @@ pha 0 của spec gốc:                  secagent:    vòng lặp function calli
 }
 ```
 
-**`secagent-finalize --repo . --out out --engine claude-code [--execution-file <path>]`**:
+**`secagent-finalize --repo . --base <sha> --head <sha> --sarif-dir sarif --requirements … --out out --execution-file <path> [--model <tên>] [--no-requirements]`**: gọi lại pha 0 với cùng tham số để cluster id trùng khớp, rồi:
 
 - Kiểm tra schema bằng Pydantic. File thiếu hoặc không parse được → thoát `2`.
 - **Độ phủ:** `cluster_id` không có kết luận → `NEEDS_REVIEW`. Engine file không hỏi lại được, nên khác `secagent` ở chỗ không có lượt bổ sung.
@@ -111,13 +111,13 @@ pha 0 của spec gốc:                  secagent:    vòng lặp function calli
 - Giữ nguyên tên job, `needs` (thêm `dast`), điều kiện bỏ qua PR từ fork, artifact `agent-report` và upload SARIF category `ai-agent`.
 - Đọc `vars.AGENT_ENGINE` (mặc định `secagent`). Nhánh `claude-code`:
   1. `secagent-prepare`.
-  2. `anthropics/claude-code-action` (ghim theo commit SHA) với `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`; `prompt` trỏ tới `out/context/task.md`; công cụ cho phép **chỉ** Read, Grep, Glob và ghi đúng `out/verdicts.json`; cấm Bash, WebFetch, WebSearch, sửa file khác. Truyền `github_token` là `GITHUB_TOKEN` của job, job chỉ có `contents: read`. Action không được comment, không push.
+  2. `anthropics/claude-code-action` (ghim theo commit SHA) với `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`; `prompt` trỏ tới `out/context/task.md`; công cụ cho phép **chỉ** Read, Grep, Glob (không ghi file nào); cấm Bash, Edit, Write, WebFetch, WebSearch, Task. Model, công cụ và số lượt lấy từ `agent/engine.env`. Truyền `github_token` là `GITHUB_TOKEN` của job, job chỉ có `contents: read`, `pull-requests: read`. Action không được comment, không push.
   3. `secagent-finalize`, rồi ghi `out/agent-exit` (mọi lỗi ở bước 1–3 → `2`).
 - Ghi `model` cụ thể trong `claude_args` (`--model claude-sonnet-5-5`, xem mục 8.3) để số liệu tái lập được.
 - Timeout bước engine: 20 phút.
 - `checkout` dùng `persist-credentials: false` như hiện nay.
 
-Kiểm tra bắt buộc khi làm: chạy thử một PR có comment prompt injection (S15). Xác nhận engine không ghi được file nào ngoài `out/verdicts.json` và không chạy được lệnh nào.
+Kiểm tra bắt buộc khi làm: chạy thử một PR có comment prompt injection (S15). Xác nhận engine không ghi được file nào và không chạy được lệnh nào.
 
 ### 4.4 Trên máy (benchmark và demo CLI)
 
