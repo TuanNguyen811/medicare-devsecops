@@ -88,12 +88,14 @@ def write_outputs(raw: Report, prepared: Prepared, out: Path, head: str) -> Repo
     """Redact the whole report, write report.json/report.md/agent.sarif/review.json, return it."""
     # Defence in depth: whatever the model wrote, no secret-shaped string leaves the run.
     report = Report.model_validate(redact_value(raw.model_dump(mode="json")))
-    (out / "report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
-    (out / "report.md").write_text(render_markdown(report, head_sha=head), encoding="utf-8")
+    (out / "report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8",
+                                     newline="")
+    (out / "report.md").write_text(render_markdown(report, head_sha=head), encoding="utf-8",
+                                   newline="")
     (out / "agent.sarif").write_text(json.dumps(to_sarif(report), indent=2, ensure_ascii=False),
-                                     encoding="utf-8")
+                                     encoding="utf-8", newline="")
     review = build_review(report, prepared.diff, head, head_reader(prepared.repo, head))
     if review is not None:
         (out / "review.json").write_text(json.dumps(review, indent=2, ensure_ascii=False),
-                                         encoding="utf-8")
+                                         encoding="utf-8", newline="")
     return report

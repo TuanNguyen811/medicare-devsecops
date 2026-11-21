@@ -8,6 +8,7 @@ gate then falls back to traditional mode.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import shlex
@@ -15,7 +16,7 @@ import sys
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from secagent.config import ConfigError, Settings, cost_usd
@@ -269,3 +270,115 @@ def main_prepare(argv: list[str] | None = None) -> int:
 
 def run_prepare() -> None:
     sys.exit(main_prepare())
+
+
+# --- secagent-finalize ----------------------------------------------------------------------
+
+
+def _fail_finalize(out: Path, trace: Trace | None, kind: str, reason: str, **data) -> int:
+    """Exit 2 for secagent-finalize: best-effort trace and failure report, never a traceback."""
+    if trace is not None:
+        with contextlib.suppress(Exception):  # nothing left to report to; the exit code speaks
+            trace.event(kind, error=reason, **data)
+    with contextlib.suppress(OSError):
+        (out / "report.md").write_text(render_failure(reason), encoding="utf-8", newline="")
+    _say(f"secagent-finalize: {reason}")
+    return 2
+
+
+def _outcome_from_engine(engine, summary, clusters, trace: Trace):
+    """ReviewOutcome from the engine's answer: known clusters only, the most severe verdict."""
+    from secagent.phases.check import VERDICT_ORDER
+    from secagent.phases.review import ReviewOutcome
+
+    known = {c.id for c in clusters}
+    verdicts: dict = {}
+    for v in engine.verdicts:
+        if v.cluster_id not in known:
+            trace.event("unknown_cluster", cluster_id=v.cluster_id)
+            continue
+        current = verdicts.get(v.cluster_id)
+        if current is None or VERDICT_ORDER[v.verdict] < VERDICT_ORDER[current.verdict]:
+            verdicts[v.cluster_id] = v
+    return ReviewOutcome(verdicts=verdicts, new_findings=list(engine.new_findings),
+                         llm_calls=summary.num_turns, tool_calls=summary.tool_calls,
+                         tokens_in=summary.tokens_in, tokens_out=summary.tokens_out)
+
+
+def _finalize(args: argparse.Namespace, trace: Trace, out: Path) -> int:
+    from secagent.context.redact import redact_value
+    from secagent.engine.output import (
+        EngineOutput,
+        EngineOutputError,
+        extract_engine_output,
+        parse_execution,
+    )
+
+    prep = prepare(Path(args.repo).resolve(), args.base, args.head, Path(args.sarif_dir),
+                   args.requirements, not args.no_requirements, trace)
+    try:
+        summary = parse_execution(Path(args.execution_file))
+        engine = extract_engine_output(summary)
+    except EngineOutputError as exc:
+        return _fail_finalize(out, trace, "engine_failed", str(exc))
+    for event in summary.tool_events:
+        trace.event("engine_tool", name=event["name"], input=event["input"])
+    engine = EngineOutput.model_validate(redact_value(engine.model_dump(mode="json")))
+    (out / "verdicts.json").write_text(engine.model_dump_json(indent=2), encoding="utf-8",
+                                       newline="")
+    model = summary.model or args.model or "claude-code"
+    trace.event("start", engine="claude-code", model=model, clusters=len(prep.clusters),
+                findings=len(prep.findings), relevant_findings=len(prep.relevant),
+                sarif_errors=prep.sarif_errors, changed_files=sorted(prep.diff.changed))
+    outcome = _outcome_from_engine(engine, summary, prep.clusters, trace)
+    uncovered = sum(1 for c in prep.clusters if c.id not in outcome.verdicts)
+    entries = build_entries(prep.clusters, outcome, prep.fs, trace)
+    started_at = datetime.now(UTC) - timedelta(seconds=summary.duration_s)
+    raw = Report(meta=Meta(
+        model=model, strategy="claude-code", started_at=started_at.isoformat(timespec="seconds"),
+        duration_s=round(summary.duration_s, 2), llm_calls=outcome.llm_calls,
+        tool_calls=outcome.tool_calls, tokens_in=outcome.tokens_in, tokens_out=outcome.tokens_out,
+        cost_usd=round(summary.cost_usd, 6), step_limit=0, limit_hit=False,
+        uncovered_before_check=uncovered, error=None), findings=entries)
+    report = write_outputs(raw, prep, out, args.head)
+    counts = Counter(e.verdict for e in report.findings)
+    trace.event("done", verdicts=dict(counts), duration_s=report.meta.duration_s,
+                cost_usd=report.meta.cost_usd)
+    _say(f"secagent-finalize: {counts['TP']} TP · {counts['NEEDS_REVIEW']} NEEDS_REVIEW · "
+         f"{counts['FP']} FP · {sum(e.source == 'agent' for e in report.findings)} phát hiện mới "
+         f"· {report.meta.llm_calls} lượt · {report.meta.duration_s:.1f} s")
+    return 0
+
+
+def main_finalize(argv: list[str] | None = None) -> int:
+    """Turn the Claude Code execution file into the classic outputs (exit 0, else exit 2)."""
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    p = argparse.ArgumentParser(prog="secagent-finalize",
+                                description="Hậu kiểm và sinh báo cáo cho engine claude-code")
+    p.add_argument("--repo", default=".")
+    p.add_argument("--base", required=True, help="commit gốc (base của PR)")
+    p.add_argument("--head", required=True, help="commit của PR")
+    p.add_argument("--sarif-dir", default="sarif")
+    p.add_argument("--requirements", default="docs/security-requirements.md")
+    p.add_argument("--out", default="out")
+    p.add_argument("--execution-file", required=True, help="execution file của claude-code-action")
+    p.add_argument("--engine", choices=("claude-code",), default="claude-code")
+    p.add_argument("--model", help="model dự phòng khi execution file không ghi model")
+    p.add_argument("--no-requirements", action="store_true")
+    args = p.parse_args(argv)
+    out = Path(args.out)
+    trace: Trace | None = None
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+        trace = Trace(out / "trace.jsonl")
+        return _finalize(args, trace, out)
+    except Exception as exc:  # fail safe: the gate falls back to traditional mode
+        return _fail_finalize(out, trace, "crash", type(exc).__name__)
+    finally:
+        if trace is not None:
+            trace.close()
+
+
+def run_finalize() -> None:
+    sys.exit(main_finalize())
