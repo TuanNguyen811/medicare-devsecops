@@ -27,3 +27,6 @@ benchmark/results/raw/
 
 # AI agent output (secagent --out)
 /out/
+
+# DAST working directory (security/dast/run-dast.sh)
+dast-out/
