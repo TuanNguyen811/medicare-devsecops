@@ -99,3 +99,23 @@ def test_prepare_crash_exits_2(tmp_path, capsys):
     bad_base = "0" * 40
     assert main_prepare(prepare_argv(repo, bad_base, head, sarif_dir, tmp_path / "out")) == 2
     assert "Traceback" not in capsys.readouterr().err
+
+
+def test_mask_worktree_counts_lines_by_newline_only(tmp_path):
+    repo = miniapp_repo(tmp_path)
+    base = git(repo, "rev-parse", "HEAD")
+    odd = "ODD = 'a\x0cb\u2028c\x85d'\r\n"
+    text = f'{odd}import os\r\nAPI_KEY = "{LEAKED}"\r\nOTHER = 1\r\n'
+    target = repo / KEYS
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(text.encode("utf-8"))
+    head = commit_all(repo, "thêm khóa")
+    sarif_dir = tmp_path / "sarif"
+    sarif_dir.mkdir()
+    (sarif_dir / "gitleaks.sarif").write_text(json.dumps(sarif_doc("gitleaks", [(KEYS, 3, "x")])))
+    out = tmp_path / "out"
+    assert main_prepare(prepare_argv(repo, base, head, sarif_dir, out, "--mask-worktree")) == 0
+    rows = target.read_bytes().decode("utf-8").split("\n")
+    assert rows[0] == odd.rstrip("\n") and rows[1] == "import os\r"
+    assert LEAKED not in rows[2] and "REDACTED" in rows[2] and rows[2].endswith("\r")
+    assert rows[3] == "OTHER = 1\r"

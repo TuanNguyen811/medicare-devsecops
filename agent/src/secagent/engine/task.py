@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from secagent.context.diff import PrDiff
 from secagent.context.redact import mask_line, redact
@@ -61,7 +62,9 @@ def mask_worktree(prepared: Prepared) -> int:
         if not path.is_relative_to(root) or not path.is_file():
             continue
         with open(path, encoding="utf-8", errors="replace", newline="") as handle:
-            rows = handle.read().splitlines(keepends=True)
+            # Gitleaks numbers lines by LF only; str.splitlines would also split on form feed,
+            # U+2028, lone CR ... and shift every later index.
+            rows = [r for r in re.split(r"(?<=\n)", handle.read()) if r]
         changed = False
         for number in lines:
             if 1 <= number <= len(rows):
