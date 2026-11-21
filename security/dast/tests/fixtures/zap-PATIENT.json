@@ -1,0 +1,6 @@
+{"@programName": "ZAP", "site": [{"@name": "http://app:8000", "alerts": [
+  {"pluginid": "40018", "name": "SQL Injection", "riskcode": "3", "confidence": "2", "cweid": "89",
+   "instances": [{"uri": "http://app:8000/patients/7", "method": "GET", "param": "q", "evidence": "x"}]},
+  {"pluginid": "10020", "name": "Missing Anti-clickjacking Header", "riskcode": "1", "confidence": "2", "cweid": "1021",
+   "instances": [{"uri": "http://app:8000/patients", "method": "GET"}]}
+]}]}
