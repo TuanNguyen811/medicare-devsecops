@@ -5,16 +5,20 @@ from __future__ import annotations
 import json
 import re
 
-from secagent.context.diff import PrDiff
+from secagent.context.diff import TRUNCATED, PrDiff
 from secagent.context.redact import mask_line, redact
 from secagent.context.sarif import Cluster
 from secagent.engine.output import EngineOutput
-from secagent.phases.review import HUNT, _fill, load_prompt
+from secagent.phases.review import _fill, load_prompt
 from secagent.stages import Prepared
 from secagent.tools.fs import wrap_untrusted
 from secagent.tools.registry import format_findings
 
 NO_REQUIREMENTS = "(cấu hình này không cung cấp tài liệu quy tắc nghiệp vụ)"
+# The engine has no report_finding / get_diff tools (phases/review.py wording is for secagent).
+ENGINE_HUNT = ("Also hunt for vulnerabilities the scanners missed in the code changed by this "
+               "PR (see item 2 above) and put each one in `new_findings`.")
+ENGINE_TRUNCATED = "… (diff bị cắt bớt; bản đầy đủ ở out/context/diff.patch, đọc bằng Read)"
 
 
 def findings_payload(clusters: list[Cluster], diff: PrDiff) -> list[dict]:
@@ -33,6 +37,22 @@ def findings_payload(clusters: list[Cluster], diff: PrDiff) -> list[dict]:
     } for c in clusters]
 
 
+# The model docstrings describe secagent's submit_verdict / report_finding tools.
+_DEF_DESCRIPTIONS = {
+    "VerdictArgs": "The verdict for one finding cluster (one element of `verdicts`).",
+    "NewFindingArgs": "A vulnerability no scanner reported (one element of `new_findings`).",
+}
+
+
+def engine_schema() -> dict:
+    """JSON schema of EngineOutput, worded for an engine without submission tools."""
+    schema = EngineOutput.model_json_schema()
+    for name, text in _DEF_DESCRIPTIONS.items():
+        if name in schema.get("$defs", {}):
+            schema["$defs"][name]["description"] = text
+    return schema
+
+
 def build_task(prepared: Prepared, hunt: bool = True) -> str:
     diff = prepared.diff
     changed = "\n".join(f"- {path} (+{len(fd.added)} dòng)"
@@ -41,11 +61,12 @@ def build_task(prepared: Prepared, hunt: bool = True) -> str:
                     if prepared.requirements else NO_REQUIREMENTS)
     return _fill(load_prompt("engine_file.md"), {
         "changed_files": changed,
-        "diff": wrap_untrusted("PR diff", diff.text(max_lines=600)),
+        "diff": wrap_untrusted("PR diff", diff.text(max_lines=600).replace(TRUNCATED,
+                                                                         ENGINE_TRUNCATED)),
         "findings_table": format_findings(prepared.clusters),
         "requirements": requirements,
-        "hunt": HUNT if hunt else "",
-        "schema": json.dumps(EngineOutput.model_json_schema()),
+        "hunt": ENGINE_HUNT if hunt else "",
+        "schema": json.dumps(engine_schema()),
     })
 
 

@@ -111,7 +111,7 @@ pha 0 của spec gốc:                  secagent:    vòng lặp function calli
 - Giữ nguyên tên job, `needs` (thêm `dast`), điều kiện bỏ qua PR từ fork, artifact `agent-report` và upload SARIF category `ai-agent`.
 - Đọc `vars.AGENT_ENGINE` (mặc định `secagent`). Nhánh `claude-code`:
   1. `secagent-prepare`.
-  2. `anthropics/claude-code-action` (ghim theo commit SHA) với `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`; `prompt` trỏ tới `out/context/task.md`; công cụ cho phép **chỉ** Read, Grep, Glob (không ghi file nào); cấm Bash, Edit, Write, WebFetch, WebSearch, Task. Model, công cụ và số lượt lấy từ `agent/engine.env`. Truyền `github_token` là `GITHUB_TOKEN` của job, job chỉ có `contents: read`, `pull-requests: read`. Action không được comment, không push.
+  2. `anthropics/claude-code-action` (ghim theo commit SHA) với `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`; `prompt` trỏ tới `out/context/task.md`; chỉ có 3 công cụ Read, Grep, Glob (`--tools`), chế độ quyền `dontAsk` (mọi thứ ngoài danh sách cho phép đều bị từ chối), chỉ đọc trong thư mục làm việc, cấm `.git/` (action ghi token vào remote URL) và `sarif/` (SARIF thô chưa che secret); không nạp cài đặt, hook, plugin, MCP của người dùng. Model, công cụ, quyền và số lượt lấy từ `agent/engine.env`. Truyền `github_token` là `GITHUB_TOKEN` của job (quyền `contents: read`, `pull-requests: read`, `security-events: write` để upload SARIF). Action không comment, không push. Mọi job checkout code PR đều xóa `out/` trước khi dùng, vì `out/` trong code PR do người mở PR kiểm soát.
   3. `secagent-finalize`, rồi ghi `out/agent-exit` (mọi lỗi ở bước 1–3 → `2`).
 - Ghi `model` cụ thể trong `claude_args` (`--model claude-sonnet-5-5`, xem mục 8.3) để số liệu tái lập được.
 - Timeout bước engine: 20 phút.
@@ -121,7 +121,7 @@ Kiểm tra bắt buộc khi làm: chạy thử một PR có comment prompt injec
 
 ### 4.4 Trên máy (benchmark và demo CLI)
 
-`agent/scripts/claude-engine.sh <out>` chạy `claude -p` với cùng `task.md`, cùng danh sách công cụ cho phép và cùng model, xuất `--output-format json` làm execution file. Benchmark gọi `prepare` → script này → `finalize`, giống hệt CI trừ chỗ chạy.
+`agent/scripts/claude-engine.sh <repo> <out>` chạy `claude -p` với cùng `task.md` và cùng cấu hình trong `agent/engine.env` (model, công cụ, quyền, tách khỏi cài đặt cá nhân), xuất `--output-format stream-json --verbose` vào `<out>/engine-execution.jsonl` làm execution file. Benchmark gọi `prepare` → script này → `finalize`, giống hệt CI trừ chỗ chạy.
 
 ### 4.5 Cấu hình repo
 
@@ -331,7 +331,7 @@ Mỗi luật có `annotations.description` ngắn bằng tiếng Việt. Cảnh 
 
 **Một model cho toàn bộ C6: `claude-sonnet-5-5`.**
 - Lý do chọn: gói Max 5x; Sonnet dùng ít hạn mức hơn Opus nhiều, chạy nhanh hơn, và là lựa chọn thực tế cho review mỗi PR.
-- Model ghi trong `agent/scripts/claude-engine.sh` và workflow, dùng chung một giá trị, ghi vào `meta.model`.
+- Model ghi ở một chỗ là `agent/engine.env`, script máy và workflow cùng đọc, ghi vào `meta.model`.
 
 **Khối lượng ước tính** (khoảng 105–110 lượt engine):
 - C6: 25 × 3 + 5 × 1;

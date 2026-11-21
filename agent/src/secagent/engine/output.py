@@ -141,21 +141,26 @@ def _balanced_span(text: str, start: int) -> int | None:
 
 
 def _balanced_object(text: str) -> str | None:
-    """The longest brace-balanced {...} span near the end of text; work is bounded."""
+    """The LAST top-level brace-balanced {...} span near the end of text.
+
+    The last one, not the longest: the answer comes at the end, while an earlier object may be
+    quoted from the PR's (attacker-controlled) code. Work is bounded: balanced spans do not
+    overlap, so scanning them is linear, and at most MAX_CANDIDATES unbalanced starts are
+    retried.
+    """
     text = text[-SCAN_LIMIT:]
-    best = None
+    last = None
+    failures = 0
     start = text.find("{")
-    for _ in range(MAX_CANDIDATES):
-        if start == -1:
-            break
+    while start != -1 and failures < MAX_CANDIDATES:
         end = _balanced_span(text, start)
         if end is None:
+            failures += 1
             start = text.find("{", start + 1)
             continue
-        if best is None or end - start > len(best):
-            best = text[start:end]
+        last = text[start:end]
         start = text.find("{", end)
-    return best
+    return last
 
 
 def extract_engine_output(summary: ExecutionSummary) -> EngineOutput:

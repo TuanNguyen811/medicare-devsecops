@@ -5,6 +5,7 @@ from test_cli import scenario
 
 from secagent.cli import main_prepare
 from secagent.context.diff import TRUNCATED
+from secagent.engine.task import ENGINE_TRUNCATED
 
 LEAKED = "zq7XwM2pL9tK4vR8nB3cY6"
 KEYS = "app/medicare/demo/keys.py"
@@ -37,6 +38,8 @@ def test_prepare_cli_writes_context(tmp_path):
     task = (ctx / "task.md").read_text(encoding="utf-8")
     assert "F1" in task and "<untrusted-code" in task and '"verdicts"' in task
     assert "{findings_table}" not in task
+    # The engine only has Read/Grep/Glob: no secagent tool names in its task.
+    assert "report_finding" not in task and "get_diff" not in task and "new_findings" in task
 
 
 def test_prepare_no_requirements(tmp_path):
@@ -89,7 +92,9 @@ def test_large_pr_task_is_bounded(tmp_path):
     out = tmp_path / "out"
     assert main_prepare(prepare_argv(repo, base, head, sarif_dir, out, "--no-requirements")) == 0
     ctx = out / "context"
-    assert TRUNCATED in (ctx / "task.md").read_text(encoding="utf-8")
+    task = (ctx / "task.md").read_text(encoding="utf-8")
+    assert ENGINE_TRUNCATED in task and TRUNCATED not in task
+    assert "out/context/diff.patch" in ENGINE_TRUNCATED
     assert len(json.loads((ctx / "findings.json").read_text(encoding="utf-8"))) == 40
     assert len((ctx / "diff.patch").read_text(encoding="utf-8").splitlines()) > 2000
 
@@ -98,6 +103,14 @@ def test_prepare_crash_exits_2(tmp_path, capsys):
     repo, _, head, sarif_dir, _ = scenario(tmp_path)
     bad_base = "0" * 40
     assert main_prepare(prepare_argv(repo, bad_base, head, sarif_dir, tmp_path / "out")) == 2
+    assert "Traceback" not in capsys.readouterr().err
+
+
+def test_prepare_out_not_creatable_exits_2(tmp_path, capsys):
+    repo, base, head, sarif_dir, _ = scenario(tmp_path)
+    blocker = tmp_path / "blocker"
+    blocker.write_text("x", encoding="utf-8")
+    assert main_prepare(prepare_argv(repo, base, head, sarif_dir, blocker / "out")) == 2
     assert "Traceback" not in capsys.readouterr().err
 
 

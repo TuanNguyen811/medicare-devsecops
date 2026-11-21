@@ -303,7 +303,10 @@ jobs:
         env:
           AGENT_ENGINE: ${{ vars.AGENT_ENGINE }}
         run: |
-          mkdir -p out
+          # The checkout is the PR's code: an out/ committed in the PR (e.g. out/agent-exit=0
+          # with an all-FP report.json) must never be mistaken for this job's results.
+          rm -rf out
+          mkdir out
           engine="${AGENT_ENGINE:-secagent}"
           case "$engine" in
             secagent|claude-code) ;;
@@ -319,7 +322,8 @@ jobs:
             echo "engine=$engine"
             echo "model=$CLAUDE_ENGINE_MODEL"
             echo "prompt=${CLAUDE_ENGINE_PROMPT//\{task\}/out/context/task.md}"
-            echo "claude_args=--model $CLAUDE_ENGINE_MODEL --allowedTools $CLAUDE_ENGINE_ALLOWED_TOOLS --disallowedTools $CLAUDE_ENGINE_DISALLOWED_TOOLS --max-turns $CLAUDE_ENGINE_MAX_TURNS"
+            # Values are quoted: claude_args is parsed like a shell line and the rules contain ( ) *.
+            echo "claude_args=--model \"$CLAUDE_ENGINE_MODEL\" --tools \"$CLAUDE_ENGINE_TOOLS\" --permission-mode \"$CLAUDE_ENGINE_PERMISSION_MODE\" --allowedTools \"$CLAUDE_ENGINE_ALLOWED_TOOLS\" --disallowedTools \"$CLAUDE_ENGINE_DISALLOWED_TOOLS\" --max-turns \"$CLAUDE_ENGINE_MAX_TURNS\" $CLAUDE_ENGINE_ISOLATION"
           } >> "$GITHUB_OUTPUT"
       - name: AI review with secagent (the only step holding the LLM key; it does not run the app or its tests)
         if: steps.cfg.outputs.engine == 'secagent'
@@ -346,8 +350,10 @@ jobs:
           code=$?
           if [ "$code" -ne 0 ]; then echo 2 > out/agent-exit; fi
           echo "secagent-prepare exit code: $code"
-      # The only step holding the OAuth token. Claude Code may only Read/Grep/Glob: no shell, no
-      # web, no file writes; the job token is read-only, so it cannot comment or push either.
+      # The only step holding the OAuth token. Claude Code gets only Read/Grep/Glob in dontAsk
+      # mode, confined to the workspace minus .git/ (the action writes the job token into the
+      # remote URL) and sarif/ (unmasked): no shell, no web, no file writes. The job token can
+      # read contents and PRs and upload SARIF; it cannot comment or push.
       - name: Claude Code engine (tools Read, Grep, Glob only)
         id: engine
         if: steps.cfg.outputs.engine == 'claude-code' && hashFiles('out/agent-exit') == ''
@@ -419,6 +425,9 @@ jobs:
           cache-dependency-glob: |
             agent/uv.lock
             app/uv.lock
+      # out/ from the PR checkout is attacker-controlled: only the downloaded artifact counts.
+      - name: Discard any out/ committed in the PR
+        run: rm -rf out
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:
@@ -532,6 +541,9 @@ jobs:
               exit 1
             fi
           done
+      # out/ from the PR checkout is attacker-controlled: only the downloaded artifact counts.
+      - name: Discard any out/ committed in the PR
+        run: rm -rf out
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:

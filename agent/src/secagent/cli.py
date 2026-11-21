@@ -233,12 +233,14 @@ def main_prepare(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default="out")
     p.add_argument("--no-requirements", action="store_true")
     p.add_argument("--mask-worktree", action="store_true",
-                   help="che các dòng Gitleaks báo ngay trong cây làm việc")
+                   help="che các dòng Gitleaks báo ngay trong file của cây làm việc "
+                        "(chỉ dùng trên bản checkout tạm: file bị ghi đè)")
     args = p.parse_args(argv)
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    trace = Trace(out / "trace.jsonl")
+    trace: Trace | None = None
     try:
+        out.mkdir(parents=True, exist_ok=True)
+        trace = Trace(out / "trace.jsonl")
         prep = prepare(Path(args.repo).resolve(), args.base, args.head, Path(args.sarif_dir),
                        args.requirements, not args.no_requirements, trace)
         ctx = out / "context"
@@ -261,11 +263,13 @@ def main_prepare(argv: list[str] | None = None) -> int:
              f"{masked} dòng bị che")
         return 0
     except Exception as exc:  # fail safe: the gate falls back to traditional mode
-        trace.event("crash", error=type(exc).__name__)
+        if trace is not None:
+            trace.event("crash", error=type(exc).__name__)
         _say(f"secagent-prepare: lỗi bất ngờ {type(exc).__name__}")
         return 2
     finally:
-        trace.close()
+        if trace is not None:
+            trace.close()
 
 
 def run_prepare() -> None:

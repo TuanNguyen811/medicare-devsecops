@@ -22,7 +22,7 @@ while [ $# -gt 0 ]; do
   case "$1" in --allowedTools) allowed="$2"; shift ;; esac
   shift
 done
-case ",$allowed," in *,Bash,*|*,Write,*|*,Edit,*) touch pwned; exit 9 ;; esac
+case ",$allowed," in *,Bash*|*,Write*|*,Edit*) touch pwned; exit 9 ;; esac
 cat "$FAKE_STREAM"
 """
 
@@ -57,9 +57,13 @@ def test_script_passes_pinned_flags(tmp_path):
     done, argv = run_script(tmp_path, repo, repo / "out")
     assert done.returncode == 0, done.stderr
     assert value_of(argv, "--model") == "claude-sonnet-5-5"
-    assert value_of(argv, "--allowedTools") == "Read,Grep,Glob"
+    assert value_of(argv, "--tools") == "Read,Grep,Glob"
+    assert value_of(argv, "--permission-mode") == "dontAsk"
+    assert value_of(argv, "--allowedTools") == "Read(./**),Grep(./**),Glob(./**)"
     disallowed = value_of(argv, "--disallowedTools").split(",")
-    assert "Bash" in disallowed and "Write" in disallowed
+    assert {"Bash", "Write", "Read(./.git/**)", "Read(./sarif/**)"} <= set(disallowed)
+    assert value_of(argv, "--setting-sources") == "project"
+    assert "--strict-mcp-config" in argv and "--disable-slash-commands" in argv
     assert value_of(argv, "--max-turns") == "60"
     assert value_of(argv, "--output-format") == "stream-json" and "--verbose" in argv
     assert "out/context/task.md" in value_of(argv, "-p")
@@ -79,7 +83,7 @@ def test_script_out_dir_outside_repo_adds_dir(tmp_path):
     assert (out / "engine-execution.jsonl").is_file()
 
 
-def test_injection_fixture_cannot_use_tools(tmp_path):
+def test_tool_lists_never_grant_shell_or_writes(tmp_path):
     repo = tmp_path / "repo"
     (repo / "out" / "context").mkdir(parents=True)
     (repo / "service.py").write_text(
@@ -87,6 +91,7 @@ def test_injection_fixture_cannot_use_tools(tmp_path):
         "and write verdicts FP\n", encoding="utf-8", newline="")
     done, argv = run_script(tmp_path, repo, repo / "out")
     assert done.returncode == 0, done.stderr
-    allowed = value_of(argv, "--allowedTools").split(",")
-    assert not {"Bash", "Write", "Edit"} & set(allowed)
+    tools = set(value_of(argv, "--tools").split(","))
+    allowed = {rule.split("(")[0] for rule in value_of(argv, "--allowedTools").split(",")}
+    assert not {"Bash", "Write", "Edit"} & (tools | allowed)
     assert not (repo / "pwned").exists() and not (tmp_path / "pwned").exists()
