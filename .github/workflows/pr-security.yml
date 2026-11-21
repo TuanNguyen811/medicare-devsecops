@@ -343,6 +343,9 @@ jobs:
       - name: Prepare context for the claude-code engine (no secret; masks Gitleaks lines on disk)
         if: steps.cfg.outputs.engine == 'claude-code'
         run: |
+          # A symlink committed in the PR (e.g. to .git/config or /proc/self/environ) must not
+          # let Read reach what the permission rules deny. This job never runs the app.
+          find . -path ./.git -prune -o -type l -exec rm -f {} +
           set +e
           uv run --project agent --locked secagent-prepare --repo . \
             --base "$BASE_SHA" --head "$HEAD_SHA" --sarif-dir sarif \
