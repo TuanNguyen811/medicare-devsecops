@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -101,3 +102,52 @@ def test_schema_violation_raises():
     text = "```json\n" + json.dumps(verdict_doc(confidence=1.5)) + "\n```"
     with pytest.raises(EngineOutputError):
         extract_engine_output(summary(result_text=text))
+
+
+DEEP = 100_000
+
+
+def write_bytes(tmp_path, data: bytes):
+    f = tmp_path / "hostile.json"
+    f.write_bytes(data)
+    return f
+
+
+@pytest.mark.parametrize("data", [
+    pytest.param(b"[" * DEEP, id="deep-array-file"),
+    pytest.param(b'{"a":' * DEEP, id="deep-object-file"),
+    pytest.param(b"\xff\xfe\x00 not utf-8 \xc3\x28", id="bad-utf8"),
+    pytest.param(b"", id="empty"),
+    pytest.param(json.dumps([{"type": "assistant", "message": "x"}]).encode(), id="no-result"),
+])
+def test_hostile_file_raises_only_engine_output_error(tmp_path, data):
+    with pytest.raises(EngineOutputError):
+        parse_execution(write_bytes(tmp_path, data))
+
+
+@pytest.mark.parametrize("message", ["x", 5, None, ["a"], {"content": "x"},
+                                     {"content": [None, "s", 3]}])
+def test_non_dict_message_is_ignored(tmp_path, message):
+    msgs = [{"type": "assistant", "message": message}, {"type": "result", "result": "x"}]
+    f = tmp_path / "m.json"
+    f.write_text(json.dumps(msgs), encoding="utf-8")
+    assert parse_execution(f).tool_calls == 0
+
+
+@pytest.mark.parametrize("text", [
+    pytest.param("```json\n" + '{"a":' * DEEP + "\n```", id="deep-fenced"),
+    pytest.param('{"a":' * DEEP, id="deep-unfenced"),
+    pytest.param("{" * 200_000, id="huge-brace-run"),
+    pytest.param('{"' * 100_000, id="huge-quote-brace-run"),
+    pytest.param("{ x " * 50_000, id="many-open-braces"),
+])
+def test_hostile_result_text_raises_fast(text):
+    started = time.monotonic()
+    with pytest.raises(EngineOutputError):
+        extract_engine_output(summary(result_text=text))
+    assert time.monotonic() - started < 2
+
+
+def test_valid_json_after_long_prose_still_found():
+    text = "x " * 50_000 + json.dumps(verdict_doc())
+    assert extract_engine_output(summary(result_text=text)).verdicts[0].cluster_id == "F1"

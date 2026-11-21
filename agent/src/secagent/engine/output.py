@@ -12,6 +12,10 @@ from pydantic import BaseModel, Field, ValidationError
 from secagent.models import NewFindingArgs, VerdictArgs
 
 TOOL_INPUT_LIMIT = 300
+# Bounds for the brace-balanced fallback, so hostile model text cannot stall the gate.
+SCAN_LIMIT = 200_000
+MAX_CANDIDATES = 10
+MAX_DEPTH = 64
 JSON_BLOCK = re.compile(r"```json[ \t]*\r?\n(.*?)```", re.DOTALL)
 
 
@@ -42,14 +46,14 @@ class ExecutionSummary:
 def _load_messages(path: Path) -> list[dict]:
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise EngineOutputError(f"cannot read execution file: {exc}") from exc
     try:
         data = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):
         try:
             data = [json.loads(line) for line in text.splitlines() if line.strip()]
-        except ValueError as exc:
+        except (ValueError, RecursionError) as exc:
             raise EngineOutputError("execution file is not JSON") from exc
     if isinstance(data, dict):
         data = [data]
@@ -80,7 +84,8 @@ def parse_execution(path: Path) -> ExecutionSummary:
         if kind == "system" and message.get("subtype") == "init" and not model:
             model = message.get("model") or None
         elif kind == "assistant":
-            content = (message.get("message") or {}).get("content")
+            inner = message.get("message")
+            content = inner.get("content") if isinstance(inner, dict) else None
             for block in content if isinstance(content, list) else []:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     raw = json.dumps(block.get("input"), ensure_ascii=False)
@@ -110,36 +115,46 @@ def parse_execution(path: Path) -> ExecutionSummary:
     )
 
 
+def _balanced_span(text: str, start: int) -> int | None:
+    """End index of the brace-balanced span opening at start, or None (strings respected)."""
+    depth, in_string, escaped = 0, False, False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+            if depth > MAX_DEPTH:
+                return None
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return None
+
+
 def _balanced_object(text: str) -> str | None:
-    """The longest brace-balanced {...} span in text (string literals respected)."""
+    """The longest brace-balanced {...} span near the end of text; work is bounded."""
+    text = text[-SCAN_LIMIT:]
     best = None
     start = text.find("{")
-    while start != -1:
-        depth, in_string, escaped, end = 0, False, False, None
-        for i in range(start, len(text)):
-            ch = text[i]
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif ch == "\\":
-                    escaped = True
-                elif ch == '"':
-                    in_string = False
-            elif ch == '"':
-                in_string = True
-            elif ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    end = i + 1
-                    break
-        if end is not None:
-            if best is None or end - start > len(best):
-                best = text[start:end]
-            start = text.find("{", end)
-        else:
+    for _ in range(MAX_CANDIDATES):
+        if start == -1:
+            break
+        end = _balanced_span(text, start)
+        if end is None:
             start = text.find("{", start + 1)
+            continue
+        if best is None or end - start > len(best):
+            best = text[start:end]
+        start = text.find("{", end)
     return best
 
 
@@ -157,10 +172,12 @@ def extract_engine_output(summary: ExecutionSummary) -> EngineOutput:
             raise EngineOutputError("no JSON verdicts found in the engine answer")
         try:
             data = json.loads(raw)
-        except ValueError as exc:
+        except (ValueError, RecursionError) as exc:
             raise EngineOutputError("engine answer JSON is malformed") from exc
     try:
         return EngineOutput.model_validate(data)
     except ValidationError as exc:
         raise EngineOutputError(
             f"engine output violates the schema: {exc.error_count()} error(s)") from exc
+    except RecursionError as exc:
+        raise EngineOutputError("engine output is nested too deeply") from exc
