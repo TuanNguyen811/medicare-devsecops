@@ -2,9 +2,14 @@
 
     python3 zap2sarif.py --routes routes.json --out zap.sarif DOCTOR=zap-DOCTOR.json ...
 
-- Tool name `zap` (the file name), ruleId = ZAP pluginId, severity in rule
-  properties.security-severity: High 8.0, Medium 5.0, Low 2.0. Informational alerts are dropped.
-- Location: artifactLocation.uri = "dast:<METHOD> <path template>", no region. The template is
+- Tool name `zap` (the file name), ruleId = ZAP pluginId. Severity (High 8.0, Medium 5.0,
+  Low 2.0) is written on every result as properties.security-severity, from the HIGHEST risk any
+  role saw for that (plugin, method, route): one plugin can raise alerts of different risks, and
+  the gate must never see a High as Medium. The rule carries the highest risk of the plugin.
+  Informational alerts are dropped.
+- Location: artifactLocation.uri = "dast:<METHOD> <path template>", percent-encoded (a valid
+  URI for code scanning; gate and agent decode it, so finding ids read
+  "zap:<plugin>:dast:GET /patients/{patient_id}:0"), no region. The template is
   the FastAPI route path matching the URL (routes.json from export_routes.py), else the path
   with all-digit segments replaced by {id}. Query strings are dropped.
 - relatedLocations: the route handler's file and line, so the AI agent's anti-hallucination
@@ -21,7 +26,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 SEVERITY = {"3": "8.0", "2": "5.0", "1": "2.0"}  # ZAP riskcode → security-severity
 LEVEL = {"3": "error", "2": "warning", "1": "note"}
@@ -51,8 +56,9 @@ def template(path: str, routes: list[dict], method: str) -> tuple[str, dict | No
 
 def _alerts(report: dict) -> list[dict]:
     sites = report.get("site")
-    if not isinstance(sites, list):
-        raise ReportError("report has no 'site' list")
+    if not isinstance(sites, list) or not sites:
+        # A real scan always reports the site it scanned; an empty list is a broken report.
+        raise ReportError("report has no 'site' entries")
     return [a for site in sites if isinstance(site, dict)
             for a in site.get("alerts") or [] if isinstance(a, dict)]
 
@@ -69,10 +75,12 @@ def convert(reports: dict[str, dict], routes: list[dict]) -> dict:
             name = str(alert.get("name") or alert.get("alert") or plugin)
             cwe = str(alert.get("cweid") or "")
             tags = ["security"] + ([f"CWE-{int(cwe)}"] if cwe.isdigit() and int(cwe) > 0 else [])
-            rules.setdefault(plugin, {
+            rule = rules.setdefault(plugin, {
                 "id": plugin, "name": name, "shortDescription": {"text": name},
                 "properties": {"security-severity": SEVERITY[risk], "tags": tags},
             })
+            if float(SEVERITY[risk]) > float(rule["properties"]["security-severity"]):
+                rule["properties"]["security-severity"] = SEVERITY[risk]
             for inst in alert.get("instances") or []:
                 if not isinstance(inst, dict):
                     continue
@@ -83,9 +91,10 @@ def convert(reports: dict[str, dict], routes: list[dict]) -> dict:
                 if entry is None:
                     entry = merged[key] = {
                         "ruleId": plugin, "level": LEVEL[risk], "message": {"text": name},
-                        "locations": [{"physicalLocation": {
-                            "artifactLocation": {"uri": f"dast:{method} {tmpl}"}}}],
+                        "locations": [{"physicalLocation": {"artifactLocation": {
+                            "uri": "dast:" + quote(f"{method} {tmpl}", safe="/")}}}],
                         "properties": {
+                            "security-severity": SEVERITY[risk],
                             "roles": [], "cwe": f"CWE-{cwe}" if tags[1:] else None,
                             "param": str(inst.get("param") or ""),
                             "evidence": str(inst.get("evidence") or "")[:EVIDENCE_CHARS],
@@ -96,6 +105,10 @@ def convert(reports: dict[str, dict], routes: list[dict]) -> dict:
                         entry["relatedLocations"] = [{"physicalLocation": {
                             "artifactLocation": {"uri": route["file"]},
                             "region": {"startLine": int(route.get("line") or 1)}}}]
+                props = entry["properties"]
+                if float(SEVERITY[risk]) > float(props["security-severity"]):
+                    props["security-severity"] = SEVERITY[risk]
+                    entry["level"] = LEVEL[risk]
                 if role not in entry["properties"]["roles"]:
                     entry["properties"]["roles"] = sorted([*entry["properties"]["roles"], role])
     return {

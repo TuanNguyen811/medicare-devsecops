@@ -1,0 +1,163 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "zap",
+          "informationUri": "https://www.zaproxy.org/",
+          "rules": [
+            {
+              "id": "10020",
+              "name": "Missing Anti-clickjacking Header",
+              "shortDescription": {
+                "text": "Missing Anti-clickjacking Header"
+              },
+              "properties": {
+                "security-severity": "2.0",
+                "tags": [
+                  "security",
+                  "CWE-1021"
+                ]
+              }
+            },
+            {
+              "id": "10038",
+              "name": "Content Security Policy (CSP) Header Not Set",
+              "shortDescription": {
+                "text": "Content Security Policy (CSP) Header Not Set"
+              },
+              "properties": {
+                "security-severity": "5.0",
+                "tags": [
+                  "security",
+                  "CWE-693"
+                ]
+              }
+            },
+            {
+              "id": "40018",
+              "name": "SQL Injection",
+              "shortDescription": {
+                "text": "SQL Injection"
+              },
+              "properties": {
+                "security-severity": "8.0",
+                "tags": [
+                  "security",
+                  "CWE-89"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "10020",
+          "level": "note",
+          "message": {
+            "text": "Missing Anti-clickjacking Header"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "dast:GET%20/patients"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "2.0",
+            "roles": [
+              "PATIENT"
+            ],
+            "cwe": "CWE-1021",
+            "param": "",
+            "evidence": "",
+            "confidence": "2"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/patient/router.py"
+                },
+                "region": {
+                  "startLine": 20
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "10038",
+          "level": "warning",
+          "message": {
+            "text": "Content Security Policy (CSP) Header Not Set"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "dast:GET%20/static/x/%7Bid%7D"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.0",
+            "roles": [
+              "DOCTOR"
+            ],
+            "cwe": "CWE-693",
+            "param": "",
+            "evidence": "",
+            "confidence": "3"
+          }
+        },
+        {
+          "ruleId": "40018",
+          "level": "error",
+          "message": {
+            "text": "SQL Injection"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "dast:GET%20/patients/%7Bpatient_id%7D"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "roles": [
+              "DOCTOR",
+              "PATIENT"
+            ],
+            "cwe": "CWE-89",
+            "param": "q",
+            "evidence": "syntax error",
+            "confidence": "2"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/patient/router.py"
+                },
+                "region": {
+                  "startLine": 40
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

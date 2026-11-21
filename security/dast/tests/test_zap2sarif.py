@@ -2,6 +2,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 import zap2sarif
 
@@ -18,17 +19,21 @@ def sarif():
     return zap2sarif.convert(reports, load("routes.json"))
 
 
+def uri(result):
+    return unquote(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"])
+
+
 def results_by_uri(doc):
-    return {r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]: r
-            for r in doc["runs"][0]["results"]}
+    return {uri(r): r for r in doc["runs"][0]["results"]}
 
 
 def test_merges_roles_and_maps_route():
     sqli = [r for r in sarif()["runs"][0]["results"] if r["ruleId"] == "40018"]
     assert len(sqli) == 1
     (r,) = sqli
-    assert r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == (
-        "dast:GET /patients/{patient_id}")
+    raw = r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+    assert raw == "dast:GET%20/patients/%7Bpatient_id%7D"  # a valid URI for code scanning
+    assert uri(r) == "dast:GET /patients/{patient_id}"
     assert r["properties"]["roles"] == ["DOCTOR", "PATIENT"]
     assert r["properties"]["cwe"] == "CWE-89" and r["properties"]["param"] == "q"
     related = r["relatedLocations"][0]["physicalLocation"]
@@ -83,3 +88,23 @@ def test_cli_ok_and_fails_on_broken_report(tmp_path):
         code = zap2sarif.main(["--routes", str(FIX / "routes.json"), "--out", str(target),
                                f"DOCTOR={FIX / 'zap-DOCTOR.json'}", f"NURSE={report}"])
         assert code == 1 and not target.exists()
+
+
+def test_highest_risk_wins_per_result_and_rule():
+    """One plugin can raise alerts of different risks: a High must never reach the gate as Low."""
+    def report(risk):
+        return {"site": [{"@name": "http://app:8000", "alerts": [
+            {"pluginid": "10097", "name": "Hash Disclosure", "riskcode": risk, "cweid": "200",
+             "instances": [{"uri": "http://app:8000/patients/3", "method": "GET"}]}]}]}
+
+    doc = zap2sarif.convert({"ADMIN": report("1"), "DOCTOR": report("3")}, load("routes.json"))
+    (result,) = doc["runs"][0]["results"]
+    assert result["properties"]["security-severity"] == "8.0" and result["level"] == "error"
+    assert doc["runs"][0]["tool"]["driver"]["rules"][0]["properties"]["security-severity"] == "8.0"
+
+
+def test_empty_site_list_is_a_broken_report():
+    import pytest
+
+    with pytest.raises(zap2sarif.ReportError):
+        zap2sarif.convert({"DOCTOR": {"site": []}}, [])
