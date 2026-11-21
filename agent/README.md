@@ -47,6 +47,32 @@ Các biến khác:
 
 Đổi nhà cung cấp không làm đổi kết quả của gate: gate chỉ đọc `report.json`.
 
+## Engine `claude-code`
+
+Cho benchmark (cấu hình C6), phần suy luận còn có thể giao cho Claude Code chạy **trên máy** (spec bổ sung `docs/superpowers/specs/2026-11-21-ops-dast-engine-design.md` mục 4). `secagent` vẫn làm phần tiền xử lý và hậu kiểm, nên `report.json` và gate không đổi. Báo cáo ghi rõ `Engine: claude-code (model …)`.
+
+1. `secagent-prepare`: đọc SARIF, gộp trùng, che secret, ghi `out/context/` (`task.md`, `findings.json`, `diff.patch`, `requirements.md`).
+2. Claude Code chỉ được dùng Read, Grep, Glob và trả kết luận dạng một khối JSON trong câu trả lời cuối.
+3. `secagent-finalize`: trích JSON, kiểm tra độ phủ và chống bịa, rồi sinh `report.json`, `report.md`, `agent.sarif`, `review.json`, `verdicts.json`. Engine lỗi thì thoát `2` và gate quay về `traditional`.
+
+Model, danh sách công cụ và số lượt tối đa nằm ở một chỗ duy nhất: `agent/engine.env`.
+
+**Chạy trên máy:** cần CLI `claude` (`npm install -g @anthropic-ai/claude-code`) đã đăng nhập bằng tài khoản Claude, sau đó chạy:
+
+```bash
+. agent/engine.env
+uv run --project agent secagent-prepare --repo . --base origin/main --head HEAD \
+  --sarif-dir sarif --requirements docs/security-requirements.md --out out
+bash agent/scripts/claude-engine.sh . out          # ghi out/engine-execution.jsonl
+uv run --project agent secagent-finalize --repo . --base origin/main --head HEAD \
+  --sarif-dir sarif --requirements docs/security-requirements.md --out out \
+  --execution-file out/engine-execution.jsonl --model "$CLAUDE_ENGINE_MODEL"
+```
+
+Engine này **không chạy trên CI**: GitHub không giữ token Claude, và nội dung PR không thể điều khiển một coding agent trong pipeline. Trên CI, job `ai-security-agent` chỉ chạy `secagent` bằng `LLM_API_KEY`.
+
+Mỗi lượt là một phiên `claude -p` mới, chỉ đọc được trong repo, không nạp cài đặt, hook, plugin hay MCP cá nhân. Có thể dùng bản `claude.exe` đi kèm extension VS Code: `CLAUDE_BIN=<đường dẫn tới claude.exe>`.
+
 ## Tham số
 
 | Tham số | Ý nghĩa |
