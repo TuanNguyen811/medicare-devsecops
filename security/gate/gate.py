@@ -35,6 +35,8 @@ _WORKSPACE_PREFIXES = ("/github/workspace/",)
 # Tools that scan the PR's commits (not the tree): the path is the one of the commit that added
 # the finding, which a later commit may rename or delete, so the tree diff must not filter it.
 COMMIT_SCOPED = frozenset({"gitleaks"})
+# Tools that test the running build of the PR (DAST): a finding has no file to diff against.
+RUNTIME_SCOPED = frozenset({"zap"})
 _TF_SUFFIXES = (".tf", ".tfvars", ".tf.json")
 # Changing these needs the security-reviewed label: scanner config, the gate, the workflows,
 # the AI agent (its verdicts can unblock findings in ai-assisted mode), and every ignore
@@ -218,14 +220,15 @@ def _tf_dir(path: str) -> str | None:
 
 def filter_changed(findings: list[Finding], changed: set[str]) -> list[Finding]:
     """Keep the findings the PR can have caused:
-    - location-less findings, and findings of commit-scoped tools (Gitleaks);
+    - location-less findings, findings of commit-scoped tools (Gitleaks) and of runtime
+      tools (ZAP, which scans the PR's running build);
     - any location (primary, related, code-flow step) in a changed file;
     - a Terraform finding when any file of the same module directory changed (Checkov
       evaluates variables, so editing variables.tf surfaces findings in main.tf)."""
     tf_dirs = {d for d in map(_tf_dir, changed) if d is not None}
 
     def keep(x: Finding) -> bool:
-        if x.file == "" or x.tool in COMMIT_SCOPED:
+        if x.file == "" or x.tool in COMMIT_SCOPED or x.tool in RUNTIME_SCOPED:
             return True
         if x.file in changed or any(p in changed for p in x.related):
             return True

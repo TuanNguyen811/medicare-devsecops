@@ -125,6 +125,13 @@ def test_filter_changed_keeps_commit_scoped_gitleaks_findings():
     assert filter_changed([leak, other], {"app/y.py"}) == [leak]
 
 
+def test_zap_findings_kept_regardless_of_diff():
+    """DAST scans the running build of the PR: its findings have no file to diff against."""
+    zap = f(tool="zap", rule="40018", file="dast:GET /patients/{patient_id}", line=0)
+    other = f(tool="semgrep", file="app/x.py")
+    assert filter_changed([zap, other], {"app/y.py"}) == [zap]
+
+
 def test_flow_through_a_changed_file_keeps_the_finding():
     """CodeQL reports a path-problem at the sink; the PR may only have added the source."""
     flow, related = load_sarif(FIX / "codeflow.sarif", "codeql", None)
