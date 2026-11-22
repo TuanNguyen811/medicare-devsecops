@@ -9,4 +9,18 @@
     <p class="mb-0 text-secondary">Vai trò: {{ role_labels[current_user.role] }}{% if current_user.department %} - {{ current_user.department.name }}{% endif %}</p>
   </div>
 </div>
+{% if announcements %}
+<div class="card mc-card mt-3">
+  <div class="card-header"><i class="bi bi-megaphone"></i> Thông báo</div>
+  <ul class="list-group list-group-flush">
+    {% for a in announcements %}
+    <li class="list-group-item">
+      <div class="fw-semibold">{{ a.title }}</div>
+      <div class="small text-secondary">{{ a.created_at | datetime_vn }}</div>
+      <div class="mt-1">{{ a.body_html | safe }}</div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 {% endblock %}
