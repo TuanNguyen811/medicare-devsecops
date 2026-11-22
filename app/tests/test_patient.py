@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy import select
 
 from medicare.auth.models import Role
@@ -195,3 +197,38 @@ def test_me_shows_own_profile(client, db):
     login(client, make_user(db, Role.PATIENT, patient=me))
     r = client.get("/me")
     assert r.status_code == 200 and me.code in r.text and me.national_id in r.text
+
+
+def test_filter_by_birth_year(client, db):
+    old = make_patient(db)
+    young = make_patient(db)
+    young.date_of_birth = date(2001, 5, 20)
+    db.flush()
+    login(client, make_user(db, Role.RECEPTIONIST))
+    html = client.get("/patients", params={"year": "2001"}).text
+    assert young.code in html and old.code not in html
+
+
+def test_filter_by_admission_year(client, db):
+    p = make_patient(db)
+    db.refresh(p)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    this_year = str(p.created_at.year)
+    html = client.get("/patients", params={"year": this_year, "year_field": "admitted"}).text
+    assert p.code in html
+    html = client.get("/patients", params={"year": "1990", "year_field": "admitted"}).text
+    assert p.code not in html
+
+
+def test_unknown_year_field_falls_back_to_birth_year(client, db):
+    p = make_patient(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    r = client.get("/patients", params={"year": "1990", "year_field": "discharged"})
+    assert r.status_code == 200 and p.code in r.text
+
+
+def test_invalid_year_is_ignored(client, db):
+    p = make_patient(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    r = client.get("/patients", params={"year": "90"})
+    assert r.status_code == 200 and p.code in r.text

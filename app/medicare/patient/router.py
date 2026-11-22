@@ -68,10 +68,14 @@ def _submitted(full_name, date_of_birth, gender, national_id, insurance_number, 
 def list_patients(
     request: Request,
     q: str | None = None,
+    year: str = "",
+    year_field: str = "dob",
     user: User = Depends(staff_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    patients = service.search_patients(db, user, q)
+    year = year.strip()
+    year_value = int(year) if year.isascii() and year.isdigit() and len(year) == 4 else None
+    patients = service.search_patients(db, user, q, year=year_value, year_field=year_field)
     rows = [(p, _identifiers(user, p)) for p in patients]
     return render(
         request,
@@ -79,6 +83,8 @@ def list_patients(
         {
             "rows": rows,
             "q": q or "",
+            "year": year_value or "",
+            "year_field": year_field if year_field in service.YEAR_FIELDS else "dob",
             "can_create": policy.can_edit_patient(user),
             "breadcrumbs": [("Trang chủ", "/"), ("Bệnh nhân", None)],
         },
