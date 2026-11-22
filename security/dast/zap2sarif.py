@@ -16,21 +16,28 @@
   check can anchor an FP verdict on the code that serves the URL.
 - One result per (pluginId, METHOD, template); properties.roles lists every role that saw it.
 
+- --code-scanning-out: a second SARIF for GitHub code scanning only, which accepts file
+  locations alone (it rejects the dast: scheme). There each result sits at its route handler
+  (or app/medicare/main.py when no route matched) and the message names the route. The gate
+  and the AI agent always read the primary file.
+
 Standard library only: runs on the CI runner and inside the ZAP container.
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import sys
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 SEVERITY = {"3": "8.0", "2": "5.0", "1": "2.0"}  # ZAP riskcode → security-severity
 LEVEL = {"3": "error", "2": "warning", "1": "note"}
 EVIDENCE_CHARS = 200
+FALLBACK_FILE = "app/medicare/main.py"  # where unmatched URLs are shown in code scanning
 
 
 class ReportError(Exception):
@@ -122,6 +129,18 @@ def convert(reports: dict[str, dict], routes: list[dict]) -> dict:
     }
 
 
+def for_code_scanning(sarif: dict) -> dict:
+    """Same results, but located at the route handler file (code scanning needs file URIs)."""
+    doc = copy.deepcopy(sarif)
+    for result in doc["runs"][0]["results"]:
+        route = unquote(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"])
+        related = result.pop("relatedLocations", None)
+        result["locations"] = related or [{"physicalLocation": {
+            "artifactLocation": {"uri": FALLBACK_FILE}, "region": {"startLine": 1}}}]
+        result["message"] = {"text": f"{result['message']['text']} ({route.removeprefix('dast:')})"}
+    return doc
+
+
 def _load(path: Path) -> dict:
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
@@ -137,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--routes", required=True)
     p.add_argument("--out", required=True)
+    p.add_argument("--code-scanning-out", help="extra SARIF with file locations for upload-sarif")
     p.add_argument("reports", nargs="+", help="ROLE=path/to/zap-ROLE.json")
     args = p.parse_args(argv)
     try:
@@ -153,6 +173,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     Path(args.out).write_text(json.dumps(sarif, indent=2, ensure_ascii=False), encoding="utf-8",
                               newline="")
+    if args.code_scanning_out:
+        Path(args.code_scanning_out).write_text(
+            json.dumps(for_code_scanning(sarif), indent=2, ensure_ascii=False), encoding="utf-8",
+            newline="")
     results = sarif["runs"][0]["results"]
     print(f"zap2sarif: {len(results)} results from {len(reports)} roles", file=sys.stderr)
     return 0

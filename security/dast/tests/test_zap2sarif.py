@@ -108,3 +108,24 @@ def test_empty_site_list_is_a_broken_report():
 
     with pytest.raises(zap2sarif.ReportError):
         zap2sarif.convert({"DOCTOR": {"site": []}}, [])
+
+
+def test_code_scanning_variant_uses_file_locations(tmp_path):
+    """GitHub code scanning rejects the dast: scheme: the upload copy is located at handlers."""
+    doc = zap2sarif.for_code_scanning(sarif())
+    uris = [r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+            for r in doc["runs"][0]["results"]]
+    assert not any(u.startswith("dast:") for u in uris)
+    sqli = next(r for r in doc["runs"][0]["results"] if r["ruleId"] == "40018")
+    loc = sqli["locations"][0]["physicalLocation"]
+    assert loc["artifactLocation"]["uri"] == "app/medicare/patient/router.py"
+    assert loc["region"]["startLine"] == 40 and "relatedLocations" not in sqli
+    assert "GET /patients/{patient_id}" in sqli["message"]["text"]
+    assert zap2sarif.FALLBACK_FILE in uris  # /static/x/{id} matched no route
+    # The primary SARIF, read by the gate and the agent, is unchanged.
+    assert uri(sarif()["runs"][0]["results"][0]).startswith("dast:")
+    out, cs = tmp_path / "zap.sarif", tmp_path / "cs.sarif"
+    assert zap2sarif.main(["--routes", str(FIX / "routes.json"), "--out", str(out),
+                           "--code-scanning-out", str(cs),
+                           f"DOCTOR={FIX / 'zap-DOCTOR.json'}"]) == 0
+    assert cs.is_file() and "dast:" not in cs.read_text(encoding="utf-8").split('"uri"')[1]
