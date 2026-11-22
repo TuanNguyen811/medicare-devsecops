@@ -41,8 +41,9 @@ HUNT = ("Also hunt for vulnerabilities the scanners missed in the code changed b
         "report each one with `report_finding`.")
 NO_HUNT = ("Hunting for new vulnerabilities happens in another session; only judge the "
            "clusters listed.")
-RESUMED = ("Phiên này tiếp tục một phiên trước đã dừng giữa chừng. Các kết luận và phát hiện "
-           "mới đã nộp vẫn được giữ, đừng nộp lại. {instruction}")
+RESUMED = ("Phiên này tiếp tục một phiên review trước đó của cùng Pull Request, chỉ cho các cụm "
+           "liệt kê ở trên. Đã nộp (được giữ nguyên): {done}. Không nộp lại các mục này và "
+           "không báo thêm phát hiện mới. {instruction}")
 MISSING = "Chưa có kết luận cho: {missing}. Dùng submit_verdict cho từng cụm này, rồi gọi finish."
 CONTEXT_LINES = 800
 
@@ -142,8 +143,10 @@ class Session:
                  clock: Callable[[], float], single_shot: bool) -> None:
         self.ctx, self.outcome, self.llm, self.trace = ctx, outcome, llm, trace
         self.on_event, self.clock = on_event, clock
+        self.batch = batch
         self.batch_ids = {c.id for c in batch}
         self.hunt = hunt
+        self.last_subtype: str | None = None  # claude-mcp: how the last process ended
         self.finished = False
         self.forced = False
         self._finish_warned = False
@@ -185,6 +188,10 @@ class Session:
                                                              if replaced else "")
 
     def _report(self, args: NewFindingArgs) -> str:
+        key = _finding_key(args)
+        for index, known in enumerate(self.outcome.new_findings, start=1):
+            if _finding_key(known) == key:
+                return f"OK: trùng với phát hiện mới #{index}, không ghi thêm"
         self.outcome.new_findings.append(args)
         self.trace.event("new_finding", title=args.title, severity=args.severity)
         return f"OK: đã ghi phát hiện mới #{len(self.outcome.new_findings)}"
@@ -245,12 +252,29 @@ class Session:
         self.on_event("tool", event)
         return result
 
+    def _submitted(self) -> str:
+        verdicts = [f"{cid}={self.outcome.verdicts[cid].verdict}"
+                    for cid in sorted(self.batch_ids & set(self.outcome.verdicts),
+                                      key=_cluster_key)]
+        found = [f"{f.cwe} {f.evidence[0].file}:{f.evidence[0].start_line}"
+                 for f in self.outcome.new_findings]
+        parts = ([", ".join(verdicts)] if verdicts else []) + (
+            [f"phát hiện mới: {'; '.join(found)}"] if found else [])
+        return "; ".join(parts) or "chưa có"
+
     def _external(self, limit: int, instruction: str | None = None) -> bool:
-        """One `claude -p` process for this session (claude-mcp). False when it failed."""
+        """One `claude -p` process for this session (claude-mcp). False when it failed.
+
+        A follow-up (instruction given) is a new process: its prompt covers only the clusters
+        still missing, never hunts, and lists what was already submitted.
+        """
         outcome, settings = self.outcome, self.ctx.settings
         prompt = self.messages[1]["content"]
         if instruction:
-            prompt += "\n\n" + RESUMED.format(instruction=instruction)
+            pending = set(self.missing())
+            clusters = [c for c in self.batch if c.id in pending]
+            prompt = (build_user_prompt(self.ctx, clusters, hunt=False, single_shot=False)
+                      + "\n\n" + RESUMED.format(done=self._submitted(), instruction=instruction))
         remaining = settings.time_budget_s - (self.clock() - outcome.started)
         run = self.llm.run_session(system=self.messages[0]["content"], prompt=prompt,
                                    tools=self.registry.schemas(), call=self._execute,
@@ -260,6 +284,7 @@ class Session:
         outcome.tokens_out += run.tokens_out
         outcome.cost_usd = (outcome.cost_usd or 0.0) + run.cost_usd
         outcome.model = run.model or outcome.model
+        self.last_subtype = run.subtype
         info = {"step": outcome.llm_calls, "limit": limit, "content": "", "tool_calls": [],
                 "tokens_in": run.tokens_in, "tokens_out": run.tokens_out,
                 "turns": run.turns, "subtype": run.subtype}
@@ -267,8 +292,18 @@ class Session:
         self.on_event("llm", info)
         if not run.ok:
             outcome.error = run.error
-            self.trace.event("llm_error", error=run.error)
+            self.trace.event("llm_error", error=run.error, stderr=run.stderr_tail)
             return False
+        return True
+
+    def _drive_external(self, limit: int) -> bool:
+        if not self._external(limit):
+            return False
+        if self.last_subtype == "error_max_turns":
+            return self.finished  # the step limit, as in API mode
+        if not self.finished:  # the model stopped without calling finish: the session is over
+            self.finished = True
+            self.trace.event("finish", summary="", missing=self.missing(), implicit=True)
         return True
 
     def drive(self, limit: int) -> bool:
@@ -277,7 +312,7 @@ class Session:
             if not budget_left(self.outcome, self.ctx.settings, self.clock):
                 self.outcome.limit_hit = True
                 return False
-            return self._external(limit) and self.finished
+            return self._drive_external(limit)
         for _ in range(limit):
             if not budget_left(self.outcome, self.ctx.settings, self.clock):
                 self.outcome.limit_hit = True
@@ -306,9 +341,15 @@ class Session:
         if self.external:
             if budget_left(self.outcome, self.ctx.settings, self.clock):
                 self._external(limit, instruction)
+                self.finished = True
             return
         self.messages.append({"role": "user", "content": instruction})
         self.drive(limit)
+
+
+def _finding_key(f: NewFindingArgs) -> tuple[str, str, int]:
+    first = f.evidence[0]
+    return f.cwe, first.file, first.start_line
 
 
 def run_review(ctx: ReviewContext, llm: LLMClient, trace: Trace,

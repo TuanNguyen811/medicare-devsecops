@@ -93,7 +93,8 @@ class Settings:
                               f"Chọn một trong: {', '.join(PROVIDERS)}.")
         api_key = get("LLM_API_KEY") or ""
         if provider in KEYLESS:
-            if mode == "ci":
+            on_ci = (env.get("GITHUB_ACTIONS") or "").lower() == "true" or bool(get("CI"))
+            if mode == "ci" or on_ci:
                 raise ConfigError(f"LLM_PROVIDER={provider} chỉ chạy trên máy, không chạy trên CI.")
             if thinking:
                 raise ConfigError(f"LLM_PROVIDER={provider} không hỗ trợ --thinking.")

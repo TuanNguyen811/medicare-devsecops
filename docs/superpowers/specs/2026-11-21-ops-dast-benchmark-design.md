@@ -86,7 +86,7 @@ secagent (y nguyên): pha 0 (SARIF, diff, che secret) → review theo lô cluste
    lớp LLM = claude-mcp:
      claude -p  --system-prompt <prompts/system.md>  --model <LLM_MODEL>
                 --tools ""  --strict-mcp-config --mcp-config <cầu MCP>
-                --allowedTools mcp__secagent__*  --permission-mode dontAsk
+                --allowedTools mcp__secagent  --permission-mode dontAsk
                 --output-format stream-json
         │  gọi công cụ qua MCP (stdio)
         ▼
@@ -96,20 +96,20 @@ secagent (y nguyên): pha 0 (SARIF, diff, che secret) → review theo lô cluste
                      read_security_requirements
         công cụ nộp: submit_verdict, report_finding, finish → vào trạng thái phiên
      (trạng thái phiên nằm trong tiến trình secagent; cầu chỉ chuyển tiếp qua socket 127.0.0.1
-      có token dùng một lần)
+      có token riêng của phiên)
 ```
 
 - **Cùng prompt:** system prompt là `prompts/system.md`; tin nhắn đầu dựng bằng `review.md` như chế độ API.
 - **Cùng công cụ:** cầu MCP phục vụ đúng các công cụ mà chế độ API đưa cho model, với cùng giới hạn đường dẫn, cùng cách che secret và cùng vỏ bọc `<untrusted-code>`. Cờ `--no-ast-tools` và `--no-requirements` bỏ công cụ tương ứng khỏi danh sách.
 - **Cùng các pha:** mỗi lô cluster chạy một `claude -p`. Cluster còn thiếu kết luận được hỏi lại trong một phiên mới, chỉ gồm các cluster đó. Sau đó là chống bịa, `validate_patch` và báo cáo, bằng đúng code của secagent.
 - **`--strategy single-shot`:** như chế độ API, cầu MCP chỉ có các công cụ nộp kết luận (không có công cụ đọc). Toàn bộ ngữ cảnh nằm trong prompt `single_shot.md`. Giới hạn 2 lượt, vì Claude Code tính câu trả lời kết thúc sau kết quả công cụ là một lượt riêng.
-- **`meta`:** lấy từ đầu ra stream-json: model thật, số lượt gọi, token vào và ra, thời gian, chi phí quy đổi theo bảng giá API. `report.md` ghi dòng "LLM: claude-mcp (model …)".
+- **`meta`:** lấy từ đầu ra stream-json: model thật, số lượt gọi, token vào và ra, thời gian, chi phí quy đổi theo bảng giá API. `report.md` ghi chế độ và model ở chân báo cáo (dạng "LLM claude-mcp · model …").
 
 ### 4.3 Khóa quyền
 
 - `--tools ""`: không có công cụ có sẵn nào của Claude Code (không đọc hay ghi file trực tiếp, không chạy lệnh, không vào web).
 - `--strict-mcp-config`: chỉ nạp cầu MCP của secagent. Các công cụ của cầu chỉ đọc trong repo; `.git/` và `sarif/` bị cấm (SARIF thô chưa che secret).
-- `--permission-mode dontAsk` cộng `--allowedTools mcp__secagent__*`: mọi thứ khác bị từ chối, không hỏi.
+- `--permission-mode dontAsk` cộng `--allowedTools mcp__secagent`: mọi thứ khác bị từ chối, không hỏi.
 - **Mỗi lượt là một phiên sạch** (`--setting-sources project --disable-slash-commands --no-session-persistence`): không nạp cài đặt, hook, plugin hay MCP cá nhân, không có lịch sử hội thoại.
 - **Trong benchmark:** thư mục chạy không chứa đáp án. Phiên Claude Code điều phối benchmark không chấm thay.
 - Thông tin đăng nhập là của Claude Code trên máy. `secagent` không đọc, không chép và không truyền nó đi đâu.

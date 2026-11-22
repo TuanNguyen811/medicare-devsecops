@@ -56,7 +56,7 @@ secagent ── phiên review (registry công cụ, nộp kết luận, trace, n
    │ claude -p --system-prompt-file <prompts/system.md> --tools ""              │ gọi công cụ
    │          --strict-mcp-config --mcp-config <cầu MCP> --allowedTools mcp__secagent
    ▼                                                                            │
-secagent/mcp_bridge.py (MCP stdio) ── socket 127.0.0.1, token dùng một lần ─────┘
+secagent/mcp_bridge.py (MCP stdio) ── socket 127.0.0.1, token riêng của phiên ──┘
 ```
 
 - **Cùng prompt, cùng công cụ, cùng các pha** như các chế độ API: model chỉ thấy công cụ của Agent (`read_file`, `search_code`, `list_routes`, `get_function`, `find_callers`, `get_dependency_usage`, `read_security_requirements`, `submit_verdict`, `report_finding`, `finish`…), và mọi lần gọi chạy bằng chính `ToolRegistry` của Agent. Các cờ `--strategy single-shot`, `--no-requirements`, `--no-ast-tools` giữ nguyên ý nghĩa.

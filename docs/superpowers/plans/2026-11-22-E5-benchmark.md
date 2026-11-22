@@ -40,7 +40,7 @@
   - Gỡ các file, lệnh và test không còn dùng trong `agent/`.
   - `meta.provider` được thêm vào Hợp đồng 2.
 - [x] `secagent/llm/claude_mcp.py`:
-  - `ToolRelay`: socket 127.0.0.1, token dùng một lần, gọi công cụ tuần tự;
+  - `ToolRelay`: socket 127.0.0.1, token riêng của phiên, gọi công cụ tuần tự;
   - `ClaudeMcpRunner.run_session`: `claude -p` với cờ cách ly, cwd là thư mục tạm, prompt qua stdin;
   - `summarize`: đọc stream-json lấy số lượt, token, chi phí, model;
   - transcript chỉ lưu hội thoại và các con số tổng kết.

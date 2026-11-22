@@ -85,7 +85,9 @@ def _run(args: argparse.Namespace, settings: Settings, llm_factory: LLMFactory, 
     if hasattr(llm, "transcript_dir"):  # claude-mcp: keep each session's conversation
         llm.transcript_dir = out / "claude-mcp"
     outcome = run_review(ctx, llm, trace, on_event=_printer(settings.mode))
-    if outcome.llm_calls == 0 and outcome.error:
+    # Nothing was judged and the LLM failed (no answer, not logged in, usage limit, timeout
+    # before any tool call): the run failed, the gate falls back to traditional mode.
+    if outcome.error and (outcome.llm_calls == 0 or outcome.tool_calls == 0):
         (out / "report.md").write_text(render_failure(outcome.error), encoding="utf-8")
         _say(f"secagent: không gọi được LLM ({outcome.error})")
         return 2

@@ -3,26 +3,30 @@
 import json
 import os
 import socket
-import subprocess
+import subprocess as sp
 import sys
 from pathlib import Path
 
 from fakes import MINIAPP, miniapp_repo
 
+from secagent.cli import main as cli_main
 from secagent.config import Settings
 from secagent.context.diff import parse_unified_diff
 from secagent.context.sarif import ScanFinding, cluster_findings
 from secagent.llm.claude_mcp import (
     BRIDGE,
+    CWD,
     ClaudeMcpRunner,
+    Completed,
     SessionRun,
     ToolRelay,
+    child_env,
     mcp_tools,
     summarize,
 )
 from secagent.phases.check import ensure_coverage
 from secagent.phases.review import STEP_EXHAUSTED, ReviewContext, run_review
-from secagent.tools.fs import RepoFS
+from secagent.tools.fs import AccessDenied, RepoFS
 from secagent.trace import Trace
 
 SERVICE = "app/medicare/demo/service.py"
@@ -116,7 +120,7 @@ def test_bridge_speaks_mcp_over_stdio():
              "params": {"name": "bad", "arguments": {}}},
             {"jsonrpc": "2.0", "id": 5, "method": "server/discover"},
         ]
-        done = subprocess.run([sys.executable, "-I", str(BRIDGE)], env=env, timeout=30,
+        done = sp.run([sys.executable, "-I", str(BRIDGE)], env=env, timeout=30,
                               input="".join(json.dumps(m) + "\n" for m in messages),
                               capture_output=True, text=True, encoding="utf-8")
         replies = {r["id"]: r for r in map(json.loads, done.stdout.splitlines())}
@@ -156,21 +160,24 @@ def test_summarize_reads_totals_and_errors():
     run = summarize([json.dumps(failed)])
     assert not run.ok and "error_during_execution" in run.error and "sk-ant-" + "a" * 30 \
         not in run.error
+    assert run.error.startswith("claude-mcp: usage-limit")
+    login = dict(failed, result="Invalid API key · Please run /login")
+    assert summarize([json.dumps(login)]).error.startswith("claude-mcp: auth")
     assert not summarize([]).ok
 
 
 def test_runner_command_is_isolated(tmp_path):
     seen = {}
 
-    def fake_run(cmd, **kw):
-        seen.update(cmd=cmd, **kw)
+    def fake_spawn(cmd, stdin, cwd, env, timeout_s):
         config = json.loads(Path(cmd[cmd.index("--mcp-config") + 1]).read_text(encoding="utf-8"))
-        seen["config"] = config
-        seen["system"] = Path(cmd[cmd.index("--system-prompt-file") + 1]).read_text(
-            encoding="utf-8")
-        return subprocess.CompletedProcess(cmd, 0, "\n".join(json.dumps(m) for m in STREAM), "")
+        workdir = Path(cmd[cmd.index("--mcp-config") + 1]).parent
+        system = Path(cmd[cmd.index("--system-prompt-file") + 1]).read_text(encoding="utf-8")
+        seen.update(cmd=cmd, stdin=stdin, cwd=cwd, env=env, timeout=timeout_s, config=config,
+                    system=system, workdir=workdir)
+        return Completed(0, "\n".join(json.dumps(m) for m in STREAM), "")
 
-    runner = ClaudeMcpRunner(mcp_settings(), claude_bin="claude", run=fake_run)
+    runner = ClaudeMcpRunner(mcp_settings(), claude_bin="claude", spawn=fake_spawn)
     runner.transcript_dir = tmp_path / "t"
     run = runner.run_session(system="SYS", prompt="USER", tools=SCHEMA,
                              call=lambda n, a: "", max_turns=13, timeout_s=10)
@@ -183,13 +190,39 @@ def test_runner_command_is_isolated(tmp_path):
     assert cmd[cmd.index("--model") + 1] == "claude-sonnet-5-5"
     assert {"--strict-mcp-config", "--no-session-persistence",
             "--disable-slash-commands"} <= set(cmd)
-    assert seen["input"] == "USER" and seen["system"] == "SYS" and seen["timeout"] == 60
+    assert seen["stdin"] == "USER" and seen["system"] == "SYS" and seen["timeout"] == 30
+    assert seen["cwd"] == CWD and "SECAGENT_RELAY_TOKEN" not in seen["env"]
     server = seen["config"]["mcpServers"]["secagent"]
     assert server["args"] == ["-I", str(BRIDGE)] and set(server["env"]) == {
         "SECAGENT_RELAY_PORT", "SECAGENT_RELAY_TOKEN"}
-    assert not Path(seen["cwd"]).exists()  # the session's temporary directory is removed
+    assert not seen["workdir"].exists()  # config and system prompt are removed afterwards
     saved = (tmp_path / "t" / "session-01.jsonl").read_text(encoding="utf-8")
     assert "C:/Users/x" not in saved and '"init"' not in saved and "tool_use" in saved
+
+
+def test_runner_timeout_keeps_partial_usage():
+    partial = "\n".join(json.dumps(m) for m in STREAM[:3])
+    runner = ClaudeMcpRunner(mcp_settings(), claude_bin="claude",
+                             spawn=lambda *a: Completed(None, partial, "boom", timed_out=True))
+    run = runner.run_session(system="", prompt="", tools=[], call=lambda n, a: "", max_turns=5,
+                             timeout_s=100)
+    assert not run.ok and run.error.startswith("claude-mcp: timeout") and run.turns == 1
+    assert run.stderr_tail == "boom"
+
+
+def test_child_env_drops_keys_and_parent_session_variables():
+    env = child_env({"PATH": "p", "ANTHROPIC_API_KEY": "x", "anthropic_auth_token": "y",
+                     "LLM_API_KEY": "z", "CLAUDECODE": "1", "CLAUDE_CODE_ENTRYPOINT": "cli",
+                     "SECAGENT_RELAY_TOKEN": "t", "USERPROFILE": "u"})
+    assert env == {"PATH": "p", "USERPROFILE": "u"}
+
+
+def test_relay_refuses_calls_once_closed():
+    calls = []
+    relay = ToolRelay(mcp_tools(SCHEMA), lambda n, a: calls.append(n) or "ok")
+    relay.close()
+    assert relay._answer({"op": "call", "name": "echo", "arguments": {}})["error"]
+    assert calls == []
 
 
 def test_runner_without_claude_cli_fails_cleanly(monkeypatch):
@@ -226,7 +259,7 @@ def test_step_limit_then_forced_session_refuses_read_tools(tmp_path):
     forced = runner.sessions[1]
     assert out.limit_hit and out.verdicts["F1"].verdict == "TP"
     assert forced["max_turns"] == 2 and forced["results"][0] == STEP_EXHAUSTED
-    assert "Đã hết số bước" in forced["prompt"] and "đừng nộp lại" in forced["prompt"]
+    assert "Đã hết số bước" in forced["prompt"] and "Không nộp lại" in forced["prompt"]
 
 
 def test_coverage_check_asks_again_in_a_new_session(tmp_path):
@@ -258,3 +291,75 @@ def test_runner_failure_keeps_submitted_verdicts(tmp_path):
     out = run_review(context(tmp_path), Failing([[("submit_verdict", verdict("F1"))]]),
                      Trace(None))
     assert out.error == "claude-mcp: hết thời gian" and out.verdicts["F1"].verdict == "TP"
+
+
+def test_ending_without_finish_is_not_a_step_limit(tmp_path):
+    runner = FakeRunner([[("submit_verdict", verdict("F1"))]])
+    out = run_review(context(tmp_path), runner, Trace(None))
+    assert not out.limit_hit and len(runner.sessions) == 1 and out.sessions[0].finished
+
+
+def test_follow_up_covers_only_missing_clusters_without_hunting(tmp_path):
+    runner = FakeRunner([[("submit_verdict", verdict("F1"))],
+                         [("submit_verdict", verdict("F2"))]])
+    ctx = context(tmp_path, n=2)
+    out = run_review(ctx, runner, Trace(None))
+    ensure_coverage(out, ctx.clusters, ctx.settings)
+    follow_up = runner.sessions[1]["prompt"]
+    assert "F1=TP" in follow_up and "\nF2 | " in follow_up and "\nF1 | " not in follow_up
+    assert "Also hunt" not in follow_up and set(out.verdicts) == {"F1", "F2"}
+
+
+def test_duplicate_new_findings_are_recorded_once(tmp_path):
+    finding = json.dumps({"title": "IDOR", "severity": "HIGH", "confidence": 0.8,
+                          "cwe": "CWE-639", "reasoning": "x",
+                          "evidence": [{"file": SERVICE, "start_line": 1, "end_line": 1}]})
+    runner = FakeRunner([[("report_finding", finding), ("report_finding", finding),
+                          ("submit_verdict", verdict("F1")), ("finish", "{}")]])
+    out = run_review(context(tmp_path), runner, Trace(None))
+    assert len(out.new_findings) == 1 and "trùng" in runner.sessions[0]["results"][1]
+
+
+def test_claude_mcp_refused_on_github_actions():
+    import pytest
+
+    from secagent.config import ConfigError
+    with pytest.raises(ConfigError):
+        Settings.from_env({"LLM_PROVIDER": "claude-mcp", "GITHUB_ACTIONS": "true"},
+                          mode="benchmark")
+    with pytest.raises(ConfigError):
+        Settings.from_env({"LLM_PROVIDER": "claude-mcp", "CI": "1"}, mode="cli")
+
+
+def test_sarif_and_out_are_off_limits(tmp_path):
+    root = miniapp_repo(tmp_path)
+    for rel in ("sarif/semgrep.sarif", "out/report.json"):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text("{}", encoding="utf-8")
+    fs = RepoFS(root)
+    for rel in ("sarif/semgrep.sarif", "out/report.json"):
+        assert rel not in fs.files()
+        try:
+            fs.read_file(rel)
+        except AccessDenied:
+            continue
+        raise AssertionError(rel)
+
+
+def test_cli_fails_when_nothing_was_judged(tmp_path, monkeypatch):
+    """Not logged in / usage limit: Claude answered, but no tool ran → exit 2 (gate fallback)."""
+
+    class LimitRunner:
+        def run_session(self, **kw):
+            return SessionRun(ok=False, error="claude-mcp: usage-limit: x", turns=1)
+
+    repo = miniapp_repo(tmp_path)
+    sp.run(["git", "init", "-q"], cwd=repo, check=True)
+    sp.run(["git", "-c", "user.name=t", "-c", "user.email=t@localhost", "commit", "-q",
+            "--allow-empty", "-m", "b"], cwd=repo, check=True)
+    out = tmp_path / "out"
+    code = cli_main(["--mode", "benchmark", "--repo", str(repo), "--base", "HEAD",
+                     "--head", "HEAD", "--sarif-dir", str(tmp_path / "none"),
+                     "--out", str(out)],
+                    llm_factory=lambda s: LimitRunner(), env={"LLM_PROVIDER": "claude-mcp"})
+    assert code == 2 and "usage-limit" in (out / "report.md").read_text(encoding="utf-8")
