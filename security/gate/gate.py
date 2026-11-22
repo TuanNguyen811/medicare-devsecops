@@ -288,24 +288,30 @@ def _ai_assisted(findings: list[Finding], report: dict, labels: set[str]) -> Dec
                 verdicts[fid] = entry
     decision = Decision(False, "ai-assisted")
     for item in findings:
-        if item.severity not in BLOCKING:
-            continue
         entry = verdicts.get(item.id)
         verdict = (entry or {}).get("verdict")
+        if item.severity not in BLOCKING:
+            # A low-rated scanner finding the agent confirms as a severe vulnerability
+            # (e.g. bandit B310 LOW that is an SSRF) blocks like the agent's own findings.
+            if entry is not None and _severe_tp(entry):
+                decision.blocking.append(item.id)
+            continue
         if verdict != "FP" or (item.severity == "CRITICAL" and REVIEWED_LABEL not in labels):
             decision.blocking.append(item.id)
         else:
             decision.notes.append(f"Agent kết luận FP: {item.id}")
     for entry in entries:
-        if (
-            entry.get("source") == "agent"
-            and entry.get("verdict") == "TP"
-            and entry.get("severity") in BLOCKING
-            and float(entry.get("confidence") or 0) >= AGENT_CONFIDENCE
-        ):
+        if entry.get("source") == "agent" and _severe_tp(entry):
             decision.blocking.append(f"agent:{entry.get('title') or entry.get('cwe') or 'finding'}")
     decision.block = bool(decision.blocking)
     return decision
+
+
+def _severe_tp(entry: dict) -> bool:
+    """The agent judged it a real HIGH/CRITICAL vulnerability with enough confidence."""
+    return (entry.get("verdict") == "TP"
+            and entry.get("severity") in BLOCKING
+            and float(entry.get("confidence") or 0) >= AGENT_CONFIDENCE)
 
 
 def render_summary(decision: Decision, findings: list[Finding]) -> str:

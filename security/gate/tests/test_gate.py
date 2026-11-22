@@ -245,6 +245,25 @@ def test_ai_mode_agent_new_tp_high_blocks(confidence, blocks):
                   errors=[]).block is blocks
 
 
+@pytest.mark.parametrize("sev,confidence,blocks", [
+    ("HIGH", 0.9, True), ("CRITICAL", 0.7, True), ("HIGH", 0.5, False), ("MEDIUM", 0.9, False),
+])
+def test_ai_mode_agent_raises_a_low_scanner_finding(sev, confidence, blocks):
+    """bandit rates B310 LOW; the agent confirms it is an SSRF (HIGH): the agent's rating counts."""
+    low = f(tool="bandit", rule="B310", sev="LOW")
+    report = {"findings": [verdict([low.id], "TP", sev=sev, source="bandit",
+                                   confidence=confidence)]}
+    d = decide([low], mode="ai-assisted", report=report, labels=set(), agent_exit=0, errors=[])
+    assert d.block is blocks and d.blocking == ([low.id] if blocks else [])
+
+
+def test_ai_mode_agent_rating_only_counts_for_findings_of_this_pr():
+    """A raised verdict on a finding the gate did not keep (e.g. unchanged code) does not block."""
+    report = {"findings": [verdict([f(sev="LOW").id], "TP", sev="HIGH")]}
+    assert not decide([], mode="ai-assisted", report=report, labels=set(), agent_exit=0,
+                      errors=[]).block
+
+
 def test_ai_mode_agent_new_medium_does_not_block():
     report = {"findings": [verdict([], "TP", sev="MEDIUM", source="agent")]}
     assert not decide([], mode="ai-assisted", report=report, labels=set(), agent_exit=0,
