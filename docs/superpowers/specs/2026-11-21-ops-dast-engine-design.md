@@ -226,7 +226,8 @@ Chạy trong Git Bash trên Windows (cũng chạy được trên Linux):
 5. `kubectl apply -k deploy/local`, rồi `kubectl set image` theo digest. Kyverno kiểm tra lại.
 6. `kubectl rollout status --timeout=180s`. Port-forward tạm, rồi smoke test giống job staging (`/health`, `/login`, chuyển hướng, 401 của API).
 7. Smoke test lỗi → `kubectl rollout undo`, thoát mã khác 0.
-8. Thành công → `run-dast.sh` vào bản vừa deploy. Ghi lịch sử vào `deploy/.history` (không commit).
+8. Thành công → ghi lịch sử vào `deploy/.history` (không commit). Với cờ `--dast`: `run-dast.sh` quét bản vừa deploy.
+   *(Sửa 2026-11-22: DAST sau deploy là tùy chọn, vì quét 5 vai trò lần lượt mất khoảng 25 phút, trong khi mỗi PR đã được quét trên CI trước khi merge.)*
 
 Thêm `deploy/demo-unsigned.sh`: thử deploy một image thẻ `sha` (chưa ký) và in lỗi Kyverno trả về.
 

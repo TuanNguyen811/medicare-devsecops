@@ -9,7 +9,7 @@ main-ci (GitHub)                                  máy này
                                                       → Kyverno (admission) kiểm tra lại
                                                       → apply deploy/local → rollout
                                                       → smoke test (lỗi: rollback)
-                                                      → ZAP quét bản vừa deploy
+                                                      → (--dast) ZAP quét bản vừa deploy
 ```
 
 ## Yêu cầu
@@ -21,9 +21,9 @@ main-ci (GitHub)                                  máy này
 ## Lệnh
 
 ```bash
-bash deploy/pull-deploy.sh                 # bản main mới nhất (:latest → digest)
+bash deploy/pull-deploy.sh                 # bản main mới nhất (:latest → digest), 1-2 phút
 bash deploy/pull-deploy.sh --digest sha256:<...>
-bash deploy/pull-deploy.sh --skip-dast     # bỏ bước ZAP (khoảng 25 phút)
+bash deploy/pull-deploy.sh --dast          # thêm ZAP quét bản vừa deploy, 5 vai trò (~25 phút)
 bash deploy/demo-unsigned.sh               # demo: cụm từ chối image không do main-ci ký
 ```
 

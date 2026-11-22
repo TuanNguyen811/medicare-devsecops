@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pull-based deploy of MediCare HMS to the local Kubernetes of Docker Desktop (spec addendum 6.4).
 #
-#   bash deploy/pull-deploy.sh [--digest sha256:<64 hex>] [--skip-dast]
+#   bash deploy/pull-deploy.sh [--digest sha256:<64 hex>] [--dast]
 #
 # CI never reaches this machine: this script pulls. Steps:
 #   1. kube context must be docker-desktop;
@@ -14,7 +14,8 @@
 #   5. render deploy/local with that digest, apply, wait for the rollout, seed (idempotent);
 #   6. smoke tests on the new pod through kubectl port-forward on 127.0.0.1; on failure, roll
 #      back if this run changed the running version;
-#   7. DAST: ZAP scans the deployed version with every role (security/dast/run-dast.sh).
+#   7. with --dast only: ZAP scans the deployed version with every role (~25 min; every PR
+#      was already scanned by the PR pipeline before merge).
 # There is deliberately no option to skip the signature checks.
 set -euo pipefail
 
@@ -30,12 +31,12 @@ NS="medicare"
 PORT="18001"  # script-only port: users' own port-forwards use 18000 (README)
 ZERO="sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
-usage() { echo "usage: pull-deploy.sh [--digest sha256:<64 hex>] [--skip-dast]" >&2; exit 2; }
-digest="" skip_dast=0
+usage() { echo "usage: pull-deploy.sh [--digest sha256:<64 hex>] [--dast]" >&2; exit 2; }
+digest="" dast=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --digest) [ $# -ge 2 ] || usage; digest="$2"; shift 2 ;;
-    --skip-dast) skip_dast=1; shift ;;
+    --dast) dast=1; shift ;;
     *) usage ;;
   esac
 done
@@ -205,7 +206,7 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $ref deployed" >> "$here/.history"
 say "Deployed $ref"
 
 # --- 7. DAST on the deployed version --------------------------------------------------------------
-if [ "$skip_dast" = 1 ]; then
+if [ "$dast" != 1 ]; then
   exit 0
 fi
 work="$here/reports/$(date -u +%Y%m%dT%H%M%SZ)"
