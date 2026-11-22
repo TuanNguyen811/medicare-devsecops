@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
@@ -177,3 +178,52 @@ def test_nurse_list_scoped_to_department(client, db):
     login(client, make_user(db, Role.NURSE, department=noi))
     html = client.get("/appointments").text
     assert p_noi.code in html and p_ngoai.code not in html
+
+
+def test_doctor_directory_grouped_by_department(client, db):
+    noi, nhi = make_department(db, "NOI"), make_department(db, "NHI")
+    d_noi = make_user(db, Role.DOCTOR, department=noi)
+    d_nhi = make_user(db, Role.DOCTOR, department=nhi)
+    retired = make_user(db, Role.DOCTOR, department=noi)
+    retired.is_active = False
+    nurse = make_user(db, Role.NURSE, department=noi)
+    db.flush()
+    login(client, make_user(db, Role.RECEPTIONIST))
+    html = client.get("/appointments/doctors").text
+    rows = re.findall(r'<th colspan="2">(.*?)</th>|<tr data-doctor-row>\s*<td>(.*?)</td>', html)
+    assert ["".join(r) for r in rows] == ["Khoa NHI", d_nhi.full_name, "Khoa NOI", d_noi.full_name]
+    assert retired.full_name not in html and nurse.full_name not in html
+    assert f'href="/appointments/new?doctor_id={d_noi.id}"' in html
+    assert 'href="/appointments/doctors"' in client.get("/appointments").text
+
+
+def test_doctor_directory_department_filter(client, db):
+    noi, nhi = make_department(db, "NOI"), make_department(db, "NHI")
+    d_noi = make_user(db, Role.DOCTOR, department=noi)
+    d_nhi = make_user(db, Role.DOCTOR, department=nhi)
+    login(client, make_user(db, Role.ADMIN))
+    html = client.get("/appointments/doctors", params={"department_id": str(nhi.id)}).text
+    assert d_nhi.full_name in html and d_noi.full_name not in html
+    assert "/appointments/new?doctor_id=" not in html
+    html = client.get("/appointments/doctors", params={"department_id": "abc"}).text
+    assert d_nhi.full_name in html and d_noi.full_name in html
+
+
+def test_doctor_directory_roles(client, db):
+    dept = make_department(db)
+    for user in (make_user(db, Role.DOCTOR, department=dept),
+                 make_user(db, Role.NURSE, department=dept),
+                 make_user(db, Role.PATIENT, patient=make_patient(db))):
+        client.cookies.clear()
+        login(client, user)
+        assert client.get("/appointments/doctors").status_code == 403
+        assert 'href="/appointments/doctors"' not in client.get("/appointments").text
+
+
+def test_new_appointment_prefills_doctor(client, db):
+    doc = setup_doctor(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    html = client.get("/appointments/new", params={"doctor_id": str(doc.id)}).text
+    assert f'<option value="{doc.id}" selected>' in html
+    html = client.get("/appointments/new", params={"doctor_id": "x"}).text
+    assert " selected>" not in html.split('id="doctor_id"')[1].split("</select>")[0]

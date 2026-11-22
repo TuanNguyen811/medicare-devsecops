@@ -3,7 +3,10 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h5 mb-0">Lịch hẹn khám</h1>
-  {% if can_book %}<a class="btn btn-primary btn-sm" href="/appointments/new"><i class="bi bi-calendar-plus"></i> Đặt lịch hẹn</a>{% endif %}
+  <div class="d-flex gap-2">
+    {% if can_view_doctors %}<a class="btn btn-outline-secondary btn-sm" href="/appointments/doctors"><i class="bi bi-person-badge"></i> Danh sách bác sĩ</a>{% endif %}
+    {% if can_book %}<a class="btn btn-primary btn-sm" href="/appointments/new"><i class="bi bi-calendar-plus"></i> Đặt lịch hẹn</a>{% endif %}
+  </div>
 </div>
 <div class="card mc-card">
   <div class="table-responsive">
