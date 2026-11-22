@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from medicare.audit.models import AuditLog
 from medicare.auth.models import Role
+from medicare.billing import service as billing_service
 from medicare.billing.models import Invoice, InvoiceStatus
 from medicare.prescription.models import Prescription, PrescriptionItem
 from tests.conftest import csrf_token, login
@@ -166,4 +167,49 @@ def test_patient_cannot_mark_paid(client, db):
     client.cookies.clear()
     login(client, make_user(db, Role.PATIENT, patient=me))
     r = client.post(f"/invoices/{inv.id}/pay", data={"csrf_token": csrf_token(client, "/")})
+    assert r.status_code == 403
+
+
+def adjust(client, inv, rate):
+    data = {"coverage_rate": rate, "csrf_token": csrf_token(client, f"/invoices/{inv.id}")}
+    return client.post(f"/invoices/{inv.id}/coverage", data=data, follow_redirects=False)
+
+
+def test_reception_adjusts_coverage_of_unpaid_invoice(client, db):
+    _, record = visit(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    create_invoice(client, record)
+    inv = invoice_of(db, record)
+    assert adjust(client, inv, "0.40").status_code == 303
+    db.refresh(inv)
+    assert (inv.coverage_rate, inv.insurance_amount, inv.patient_amount) == (
+        Decimal("0.40"), Decimal(92000), Decimal(138000))
+
+
+def test_coverage_of_paid_invoice_is_locked(client, db):
+    _, record = visit(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    create_invoice(client, record)
+    inv = invoice_of(db, record)
+    inv.status = InvoiceStatus.PAID
+    db.flush()
+    assert adjust(client, inv, "1.00").status_code == 409
+
+
+def test_coverage_rate_out_of_range_is_rejected(client, db):
+    _, record = visit(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    create_invoice(client, record)
+    inv = invoice_of(db, record)
+    assert adjust(client, inv, "1.5").status_code == 409
+    assert adjust(client, inv, "abc").status_code == 409
+
+
+def test_patient_cannot_adjust_coverage(client, db):
+    patient, record = visit(db)
+    inv = billing_service.create_invoice(db, make_user(db, Role.RECEPTIONIST), record.id)
+    login(client, make_user(db, Role.PATIENT, patient=patient))
+    r = client.post(f"/invoices/{inv.id}/coverage",
+                    data={"coverage_rate": "1.00", "csrf_token": csrf_token(client, "/invoices")},
+                    follow_redirects=False)
     assert r.status_code == 403

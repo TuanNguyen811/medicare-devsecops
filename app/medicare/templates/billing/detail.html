@@ -24,4 +24,23 @@
   </table>
   <div class="card-footer small text-secondary">Lập lúc {{ invoice.created_at | datetime_vn }}. Tỷ lệ BHYT được hệ thống tính theo mã thẻ.</div>
 </div>
+{% if can_pay and invoice.status.value == "UNPAID" %}
+<div class="card mc-card mt-3" style="max-width: 640px;">
+  <div class="card-header">Điều chỉnh mức hưởng BHYT</div>
+  <div class="card-body">
+    <form class="row g-2 align-items-center" method="post" action="/invoices/{{ invoice.id }}/coverage">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-sm-8">
+        <select class="form-select form-select-sm" name="coverage_rate">
+          {% for value, label in coverage_choices %}
+          <option value="{{ value }}"{% if "%.2f" | format(invoice.coverage_rate) == value %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit">Cập nhật</button></div>
+    </form>
+    <div class="form-text">Dùng khi người bệnh xuất trình giấy chuyển tuyến hoặc khám trái tuyến.</div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
