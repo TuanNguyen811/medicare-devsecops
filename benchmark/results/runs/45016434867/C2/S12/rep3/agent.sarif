@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-532",
+              "name": "secagent/CWE-532",
+              "shortDescription": {
+                "text": "Ghi PII (CCCD, mã BHYT, chẩn đoán) vào log"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-532"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "secagent/CWE-779",
+              "name": "secagent/CWE-779",
+              "shortDescription": {
+                "text": "Job bảo trì xóa dòng audit log (audit log không còn bất biến)"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-779"
+                ],
+                "security-severity": "5.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-532",
+          "level": "error",
+          "message": {
+            "text": "Ghi PII (CCCD, mã BHYT, chẩn đoán) vào log: _log_event ghi national_id, insurance_number và diagnosis vào log JSON (JsonFormatter đưa mọi trường extra lên top-level, gửi tới Loki). Vi phạm R-10; đồng thời bỏ qua việc che dữ liệu của R-11 vì log ghi giá trị đầy đủ, ai đọc log cũng thấy, kể cả bác sĩ/y tá vốn chỉ được xem bản bị che."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/record/service.py"
+                },
+                "region": {
+                  "startLine": 23
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-779",
+          "level": "warning",
+          "message": {
+            "text": "Job bảo trì xóa dòng audit log (audit log không còn bất biến): compact_repeated_views thực hiện DELETE trên bảng AuditLog. R-06 quy định audit log chỉ được thêm, không có chức năng xóa. R-05 yêu cầu ghi mọi lần truy cập bệnh án, nên việc xóa các lần xem lặp làm mất bằng chứng truy cập. Chỉ bản ghi đầu của mỗi đợt còn lại, nên không thể tái dựng đầy đủ các lần xem."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/audit/maintenance.py"
+                },
+                "region": {
+                  "startLine": 40
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "verdict": "TP",
+            "confidence": 0.85
+          }
+        }
+      ]
+    }
+  ]
+}

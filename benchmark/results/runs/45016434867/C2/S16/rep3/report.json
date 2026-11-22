@@ -1,0 +1,219 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:20:43+00:00",
+    "duration_s": 43.48,
+    "llm_calls": 23,
+    "tool_calls": 13,
+    "tokens_in": 112819,
+    "tokens_out": 7003,
+    "cost_usd": 0.120332,
+    "step_limit": 37,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm trong toàn repo không thấy nơi nào đặt X-Frame-Options, Content-Security-Policy hay frame-ancestors, nên ứng dụng không chống clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm một middleware dùng chung trong app factory của FastAPI để đặt X-Frame-Options: DENY và CSP frame-ancestors 'none' cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Trang /login thiếu header chống clickjacking. Repo không có cấu hình header bảo mật nào.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng chung middleware security headers: X-Frame-Options DENY và CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở bất kỳ đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm header Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none') trong middleware dùng chung."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/reschedule:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/reschedule:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Route reschedule mới trả HTML mà không có CSP. Repo không có cấu hình CSP nào.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt CSP trong middleware dùng chung để áp dụng cho cả route reschedule."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/reschedule",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt CSP ở bất kỳ đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt CSP trong middleware dùng chung."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt CSP ở bất kỳ đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt CSP trong middleware dùng chung."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có nơi nào đặt X-Content-Type-Options trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Trong middleware security headers, đặt X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Endpoint /health thiếu X-Content-Type-Options. Mức ảnh hưởng thấp vì đây là endpoint JSON. Cách sửa vẫn là dùng chung middleware.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware security headers dùng chung cần đặt nosniff cho cả /health."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có nơi nào đặt X-Content-Type-Options trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Trong middleware security headers, đặt X-Content-Type-Options: nosniff cho mọi response."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

@@ -1,0 +1,281 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:38:21+00:00",
+    "duration_s": 37.28,
+    "llm_calls": 15,
+    "tool_calls": 14,
+    "tokens_in": 86302,
+    "tokens_out": 5516,
+    "cost_usd": 0.145939,
+    "step_limit": 40,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "SSTI: render mẫu Jinja do bác sĩ nhập bằng Environment không sandbox",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "CRITICAL",
+      "cwe": "CWE-1336",
+      "owasp": "A05",
+      "violated_rule": null,
+      "reasoning": "printing.py dùng jinja2.Environment(autoescape=True) thường (không SandboxedEnvironment) và gọi _env.from_string(body).render(...) với body do bác sĩ gửi qua POST /account/print-template. validate() chỉ parse cú pháp, không hạn chế thuộc tính/gọi hàm. Bác sĩ có thể dùng {{ ''.__class__.__mro__[1].__subclasses__() }} để thực thi mã tùy ý trên server (RCE), đọc biến môi trường (SECRET_KEY, DB URL) và toàn bộ dữ liệu bệnh án.",
+      "evidence": [
+        {
+          "file": "app/medicare/record/printing.py",
+          "start_line": 97,
+          "end_line": 97,
+          "snippet": "    return _env.from_string(body).render(_context(record, patient))"
+        },
+        {
+          "file": "app/medicare/record/printing.py",
+          "start_line": 49,
+          "end_line": 49,
+          "snippet": "        _env.parse(body)"
+        }
+      ],
+      "exploit_scenario": "Bác sĩ (hoặc tài khoản bác sĩ bị chiếm) lưu mẫu chứa payload SSTI truy cập __class__/__globals__ để chạy lệnh hệ thống, rồi mở /records/{id}/print để kích hoạt.",
+      "fix": {
+        "description": "Trong printing.py thay Environment bằng jinja2.sandbox.ImmutableSandboxedEnvironment(autoescape=True) cho cả validate() và render_slip(); chặn truy cập thuộc tính dạng dunder. Tốt hơn nữa: bỏ Jinja do người dùng nhập, dùng mẫu chỉ có placeholder được allowlist (string.Template/thay thế biến cố định). Thêm timeout/giới hạn tài nguyên khi render và test payload SSTI."
+      },
+      "file": "app/medicare/record/printing.py",
+      "line": 97
+    },
+    {
+      "finding_id": "semgrep:security.semgrep.medicare.jinja-safe-filter:app/medicare/templates/record/slip.html:17",
+      "finding_ids": [
+        "semgrep:security.semgrep.medicare.jinja-safe-filter:app/medicare/templates/record/slip.html:17"
+      ],
+      "source": "semgrep",
+      "title": "security.semgrep.medicare.jinja-safe-filter (semgrep)",
+      "verdict": "TP",
+      "confidence": 0.85,
+      "severity": "HIGH",
+      "cwe": "CWE-79",
+      "owasp": "A05",
+      "violated_rule": null,
+      "reasoning": "slip.html chèn {{ slip | safe }}, trong đó slip là đầu ra của mẫu HTML do người dùng viết; nội dung này không được sanitize nên cho phép script tùy ý (stored XSS/HTML injection) trong origin của ứng dụng. Ngoài ra còn kết hợp với SSTI.",
+      "evidence": [
+        {
+          "file": "app/medicare/templates/record/slip.html",
+          "start_line": 17,
+          "end_line": 17,
+          "snippet": "  {{ slip | safe }}"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Không dùng |safe trên đầu ra của mẫu do người dùng nhập. Sanitize HTML bằng allowlist thẻ/thuộc tính (ví dụ bleach/nh3) trong printing.render_slip, hoặc chỉ cho phép định dạng hạn chế; đồng thời thêm CSP chặn script inline cho trang in."
+      },
+      "file": "app/medicare/templates/record/slip.html",
+      "line": 17
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm trong code không thấy middleware nào đặt X-Frame-Options/CSP frame-ancestors; main.py chỉ có CatchAllErrors, Session, Metrics. Thiếu header chống clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware security headers trong app/medicare/main.py đặt X-Frame-Options: DENY (hoặc CSP frame-ancestors 'none') cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Như F2: không có header chống clickjacking trên trang /login.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng chung middleware security headers trong main.py: X-Frame-Options DENY / CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP nào được đặt; với tính năng slip chèn HTML người dùng, CSP càng cần thiết.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy (default-src 'self', script-src không cho inline) trong middleware ở main.py."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu CSP toàn ứng dụng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware chung trong main.py."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu CSP toàn ứng dụng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware chung trong main.py."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu CSP toàn ứng dụng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware chung trong main.py."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options (không có trong code).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở main.py."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options trên /health; rủi ro thấp nhưng sửa chung bằng middleware.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff cho mọi response qua middleware chung."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có code nào đặt X-Content-Type-Options trong ứng dụng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Trong middleware security headers ở main.py thêm X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

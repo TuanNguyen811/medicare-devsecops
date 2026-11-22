@@ -1,0 +1,246 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:33:14+00:00",
+    "duration_s": 32.73,
+    "llm_calls": 15,
+    "tool_calls": 14,
+    "tokens_in": 81039,
+    "tokens_out": 4813,
+    "cost_usd": 0.116725,
+    "step_limit": 37,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "IDOR: can_reschedule_appointment thiếu kiểm tra quyền sở hữu của bệnh nhân",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "cwe": "CWE-639",
+      "owasp": "A01",
+      "violated_rule": "R-13",
+      "reasoning": "Với vai trò PATIENT, hàm chỉ kiểm tra user.patient_id is not None và status == REQUESTED, không so sánh user.patient_id với appt.patient_id (khác với can_cancel_appointment). Vì vậy mọi bệnh nhân đều đổi lịch được lịch hẹn REQUESTED của bệnh nhân khác qua GET/POST /appointments/{id}/reschedule (get_for_reschedule dùng đúng policy này). Trang reschedule.html còn lộ tên và mã bệnh nhân khác.",
+      "evidence": [
+        {
+          "file": "app/medicare/policy.py",
+          "start_line": 119,
+          "end_line": 120,
+          "snippet": "    if user.role == Role.PATIENT:\n        return user.patient_id is not None and appt.status == AppointmentStatus.REQUESTED"
+        }
+      ],
+      "exploit_scenario": "Bệnh nhân A đoán/duyệt appointment_id tuần tự, mở GET /appointments/<id của B>/reschedule để xem tên, mã bệnh nhân B, rồi POST thời gian mới để dời hoặc phá lịch hẹn của B.",
+      "fix": {
+        "description": "Trong policy.can_reschedule_appointment, nhánh PATIENT phải thêm điều kiện user.patient_id == appt.patient_id, giống can_cancel_appointment. Bổ sung test_policy cho trường hợp bệnh nhân khác (relation 'other') phải trả về False và test route trả 404 khi bệnh nhân đổi lịch của người khác."
+      },
+      "file": "app/medicare/policy.py",
+      "line": 119
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không tìm thấy nơi nào trong repo đặt X-Frame-Options hay frame-ancestors, nên ứng dụng có thể bị nhúng iframe (clickjacking).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware security headers toàn cục trong app (main/app factory): X-Frame-Options: DENY và CSP có frame-ancestors 'none'."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Trang /login không có header chống clickjacking; không có cấu hình header nào trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware security headers toàn cục: X-Frame-Options: DENY và CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware toàn cục (default-src 'self', frame-ancestors 'none'), áp dụng cho mọi response gồm cả POST và trang lỗi."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/reschedule:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/reschedule:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo; route reschedule mới cũng không có header này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware toàn cục để áp dụng cho cả route reschedule."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/reschedule",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware toàn cục."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware toàn cục."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options; không có middleware đặt header.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware toàn cục."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "/health cũng thiếu X-Content-Type-Options; không có middleware đặt header.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục đặt X-Content-Type-Options: nosniff cho mọi response."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers toàn cục."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

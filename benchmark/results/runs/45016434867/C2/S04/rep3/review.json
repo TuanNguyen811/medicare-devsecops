@@ -1,0 +1,25 @@
+{
+  "commit_id": "f029194ff1e2eb7aa8f848d97db5eee337cbd180",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — B506 (bandit)\nCWE-502\n\nCùng vị trí với F2: `yaml.load` với `yaml.Loader` trên dữ liệu upload, cho phép tạo object tùy ý (RCE). Bandit đánh LOW nhưng thực tế nghiêm trọng hơn.\n\n**Đề xuất sửa:** Dùng `yaml.safe_load` trong `_parse_yaml` của legacy_import.py."
+    },
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — python.lang.security.deserialization.avoid-pyyaml-load.avoid-pyyaml-load (semgrep)\nCWE-502\n\n`_parse_yaml` gọi `yaml.load(data, Loader=yaml.Loader)` trên nội dung file do người dùng upload. `yaml.Loader` cho phép tag `!!python/object/apply:...`, dẫn tới thực thi mã tùy ý trên server. Route chỉ cho ADMIN, nhưng tài khoản admin bị chiếm hoặc CSRF/social engineering vẫn dẫn tới RCE.\n\n**Đề xuất sửa:** Trong `_parse_yaml` (legacy_import.py) dùng `yaml.safe_load` (hoặc `yaml.SafeLoader`) thay cho `yaml.Loader`. Dữ liệu import chỉ gồm dict/list/scalar nên đủ dùng."
+    },
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 49,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — XXE: lxml XMLParser bật resolve_entities khi nhập file XML\nCWE-611\n\n`_parse_xml` dùng `etree.XMLParser(resolve_entities=True)` trên XML do người dùng upload, không tắt `no_network`, không chặn DTD. Kẻ tấn công có thể khai báo external entity `file:///etc/passwd` và nội dung được đưa vào trường ten_thuoc/don_vi, sau đó hiển thị ở danh mục thuốc hoặc trong thông báo lỗi (đọc file); cũng có thể SSRF và billion laughs (DoS).\n\n**Đề xuất sửa:** Trong `_parse_xml` tạo parser với `resolve_entities=False, no_network=True, load_dtd=False, huge_tree=False`, và từ chối tài liệu có DOCTYPE; hoặc dùng `defusedxml.lxml`. Nếu cần ký tự có dấu, yêu cầu UTF-8 thay vì entity."
+    }
+  ],
+  "body": "<!-- secagent-review:f029194ff1e2eb7aa8f848d97db5eee337cbd180 -->\nAI Security Agent nêu 3 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

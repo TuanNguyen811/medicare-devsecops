@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-778",
+              "name": "secagent/CWE-778",
+              "shortDescription": {
+                "text": "Job maintenance xóa audit log, vi phạm tính bất biến"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-778"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "secagent/CWE-532",
+              "name": "secagent/CWE-532",
+              "shortDescription": {
+                "text": "Ghi PII (CCCD, BHYT, chẩn đoán) vào log trong _log_event"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-532"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-778",
+          "level": "error",
+          "message": {
+            "text": "Job maintenance xóa audit log, vi phạm tính bất biến: compact_repeated_views thực hiện delete(AuditLog) trên các dòng VIEW_RECORD. R-06 quy định audit log chỉ được thêm, không có chức năng sửa/xóa; R-05 yêu cầu ghi mọi lần truy cập bệnh án. Xóa các lần xem lặp làm mất dấu vết truy cập (thời điểm, IP) và có thể bị lợi dụng để che giấu việc truy cập trái phép."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/audit/maintenance.py"
+                },
+                "region": {
+                  "startLine": 41
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-532",
+          "level": "error",
+          "message": {
+            "text": "Ghi PII (CCCD, BHYT, chẩn đoán) vào log trong _log_event: _log_event đưa national_id, insurance_number và diagnosis vào extra; JsonFormatter đẩy mọi trường extra lên top-level và ghi ra stderr cho log agent (Loki). Vi phạm R-10 (không ghi PII vào log) và R-11 (không che CCCD/BHYT). Log còn ghi dữ liệu mà bác sĩ/y tá không được xem đầy đủ."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/record/service.py"
+                },
+                "region": {
+                  "startLine": 21
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,268 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:41:20+00:00",
+    "duration_s": 39.25,
+    "llm_calls": 17,
+    "tool_calls": 15,
+    "tokens_in": 140107,
+    "tokens_out": 5688,
+    "cost_usd": 0.165424,
+    "step_limit": 40,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "change_status cho phép chuyển hóa đơn PAID → UNPAID (vi phạm luồng R-17)",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-840",
+      "owasp": "A06",
+      "violated_rule": "R-17",
+      "reasoning": "service.change_status chỉ kiểm tra status hợp lệ và khác trạng thái hiện tại, nên POST status=UNPAID trên hóa đơn đã PAID sẽ đưa hóa đơn quay ngược lại. R-17 chỉ cho phép UNPAID → PAID, không quay ngược. Sau khi hoàn tác, add_lines lại cho thêm dòng và đổi tổng tiền của hóa đơn đã thu.",
+      "evidence": [
+        {
+          "file": "app/medicare/billing/service.py",
+          "start_line": 151,
+          "end_line": 154,
+          "snippet": "    new_status = InvoiceStatus(status)\n    if invoice.status == new_status:\n        raise Conflict(\"Hóa đơn đã ở trạng thái này\")\n    invoice.status = new_status"
+        }
+      ],
+      "exploit_scenario": "Lễ tân thu tiền (PAID), rồi POST /invoices/{id}/status với status=UNPAID, thêm hoặc sửa dòng dịch vụ, rồi đặt lại PAID. Tổng tiền thay đổi sau khi đã thu, có thể dùng để biển thủ hoặc gian lận.",
+      "fix": {
+        "description": "Trong service.change_status, dùng bảng chuyển trạng thái cho phép chỉ có UNPAID → PAID. Mọi chuyển khác, gồm PAID → UNPAID, phải bị từ chối bằng Conflict. Thêm test cho việc từ chối quay ngược."
+      },
+      "file": "app/medicare/billing/service.py",
+      "line": 151
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không tìm thấy X-Frame-Options hay CSP frame-ancestors ở bất kỳ đâu trong repo, nên ứng dụng có thể bị nhúng iframe (clickjacking).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt header bảo mật cho mọi response: X-Frame-Options: DENY hoặc CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có X-Frame-Options hay frame-ancestors trong repo; trang /login có thể bị nhúng iframe.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt X-Frame-Options: DENY và CSP frame-ancestors 'none' cho mọi response."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không có Content-Security-Policy ở bất kỳ đâu, nên không có lớp giảm thiểu XSS.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none') trong middleware header bảo mật dùng chung."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không có Content-Security-Policy ở bất kỳ đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy trong middleware header bảo mật dùng chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không có Content-Security-Policy ở bất kỳ đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy trong middleware header bảo mật dùng chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không có Content-Security-Policy ở bất kỳ đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy trong middleware header bảo mật dùng chung."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không có Content-Security-Policy ở bất kỳ đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy trong middleware header bảo mật dùng chung."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options trên toàn ứng dụng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt X-Content-Type-Options: nosniff trong middleware header bảo mật dùng chung."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options trên toàn ứng dụng, gồm cả /health.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt X-Content-Type-Options: nosniff trong middleware header bảo mật dùng chung."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở bất kỳ đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Trong middleware header bảo mật dùng chung, đặt X-Content-Type-Options: nosniff cho mọi response."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

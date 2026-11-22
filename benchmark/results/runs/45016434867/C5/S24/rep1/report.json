@@ -1,0 +1,274 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:42:15+00:00",
+    "duration_s": 52.67,
+    "llm_calls": 26,
+    "tool_calls": 15,
+    "tokens_in": 144489,
+    "tokens_out": 7988,
+    "cost_usd": 0.186778,
+    "step_limit": 40,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Cookie remember-me (không gắn thiết bị) bỏ qua khóa tài khoản và đếm sai mật khẩu",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-307",
+      "owasp": "A07",
+      "violated_rule": "R-07",
+      "reasoning": "authenticate() nhận remembered_device do client điều khiển: chỉ cần cookie medicare_remember hợp lệ (bất kỳ token nào còn hạn, của bất kỳ user nào, vì is_remembered_device không gắn token với username đang đăng nhập). Khi đó tài khoản bị khóa vẫn được thử mật khẩu và sai mật khẩu không tăng failed_login_count, nên brute-force không giới hạn. Kẻ tấn công chỉ cần một remember token hợp lệ (tự đăng nhập bằng tài khoản của mình có tích 'ghi nhớ') để vô hiệu hóa R-07 cho mọi tài khoản.",
+      "evidence": [
+        {
+          "file": "app/medicare/common/auth.py",
+          "start_line": 54,
+          "end_line": 66,
+          "snippet": "    locked = user.locked_until is not None and user.locked_until > now\n    if locked and not remembered_device:"
+        },
+        {
+          "file": "app/medicare/auth/router.py",
+          "start_line": 44,
+          "end_line": 45,
+          "snippet": "remembered_device=remember.is_remembered_device(db, request, now))"
+        }
+      ],
+      "exploit_scenario": "Kẻ tấn công có tài khoản bệnh nhân, đăng nhập với remember_me để lấy cookie, rồi gửi hàng loạt POST /login kèm cookie này với username của bác sĩ và danh sách mật khẩu; không bị khóa, không bị đếm lỗi.",
+      "fix": {
+        "description": "Xóa tham số remembered_device khỏi authenticate() trong app/medicare/common/auth.py và router.login: luôn áp dụng khóa 15 phút và đếm failed_login_count như R-07 bất kể cookie. Không dùng cookie do client gửi để miễn trừ kiểm soát brute-force."
+      },
+      "file": "app/medicare/common/auth.py",
+      "line": 54
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có X-Frame-Options hay frame-ancestors ở đâu trong mã; main.py chỉ thêm middleware lỗi/session/metrics.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware trong app/medicare/main.py (create_app) đặt X-Frame-Options: DENY hoặc CSP frame-ancestors 'none' cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Trang /login thiếu chống clickjacking; không header nào được đặt trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware security headers chung trong app/medicare/main.py (X-Frame-Options DENY / frame-ancestors 'none')."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware security headers chung trong main.py đặt Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none')."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware CSP chung trong main.py."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware CSP chung trong main.py."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware CSP chung trong main.py."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware CSP chung trong main.py."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu nosniff trên mọi response.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware security headers chung trong main.py đặt X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu nosniff trên /health; cùng nguyên nhân gốc, không có middleware đặt header.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware security headers chung trong main.py đặt X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có X-Content-Type-Options: nosniff trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware security headers chung trong main.py đặt X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

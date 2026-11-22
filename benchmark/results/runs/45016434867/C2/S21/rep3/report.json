@@ -1,0 +1,350 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:21:58+00:00",
+    "duration_s": 39.33,
+    "llm_calls": 19,
+    "tool_calls": 18,
+    "tokens_in": 100754,
+    "tokens_out": 6212,
+    "cost_usd": 0.1024,
+    "step_limit": 46,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Token đặt lại mật khẩu không hết hạn và không dùng một lần",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "cwe": "CWE-613",
+      "owasp": "A07",
+      "violated_rule": "R-18",
+      "reasoning": "RESET_TOKEN_TTL được định nghĩa nhưng chỉ dùng để in số phút trong email. user_for_token không so sánh created_at với thời gian hiện tại, và reset_password không xóa hoặc đánh dấu token đã dùng. Vì vậy token có hiệu lực vô thời hạn và dùng được nhiều lần. Điều này vi phạm R-18 (một lần, hết hạn sau 15 phút).",
+      "evidence": [
+        {
+          "file": "app/medicare/auth/reset.py",
+          "start_line": 50,
+          "end_line": 62,
+          "snippet": "    reset = db.scalar(\n        select(PasswordResetToken).where(PasswordResetToken.token_hash == _digest(token))\n    )"
+        }
+      ],
+      "exploit_scenario": "Kẻ tấn công lấy được link cũ (lịch sử trình duyệt, mailbox bị lộ) từ nhiều ngày trước, hoặc dùng lại link đã dùng, để đặt lại mật khẩu và chiếm tài khoản.",
+      "fix": {
+        "description": "Trong reset.user_for_token, từ chối token có created_at cũ hơn RESET_TOKEN_TTL (15 phút). Trong reset.reset_password, xóa token vừa dùng (và mọi token khác của user) trong cùng transaction để chỉ dùng một lần. Khi tạo token mới trong request_reset, nên xóa token cũ của user."
+      },
+      "file": "app/medicare/auth/reset.py",
+      "line": 50
+    },
+    {
+      "finding_id": "agent:2",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Liệt kê tài khoản qua phản hồi quên mật khẩu khác nhau",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "MEDIUM",
+      "cwe": "CWE-204",
+      "owasp": "A07",
+      "violated_rule": "R-18",
+      "reasoning": "POST /forgot-password trả lỗi \"Không tìm thấy tài khoản nào đăng ký với email này\" khi email không tồn tại, còn nếu có thì redirect 303. Phản hồi khác nhau cho phép dò email nhân viên và bệnh nhân. Điều này vi phạm R-18 và R-07. Endpoint cũng không giới hạn tốc độ.",
+      "evidence": [
+        {
+          "file": "app/medicare/auth/router.py",
+          "start_line": 123,
+          "end_line": 130,
+          "snippet": "        return render(request, \"forgot_password.html\", {\n            \"email\": email, \"error\": \"Không tìm thấy tài khoản nào đăng ký với email này\",\n        })"
+        }
+      ],
+      "exploit_scenario": "Kẻ tấn công thử danh sách email và dựa vào thông báo lỗi để xác định ai có tài khoản trong hệ thống bệnh viện.",
+      "fix": {
+        "description": "Trong router.forgot_password luôn trả cùng một phản hồi (flash thông báo chung rồi redirect /login 303) dù email có tồn tại hay không, và bỏ thông báo lỗi riêng. Nên đồng bộ thời gian xử lý giữa hai nhánh và thêm giới hạn tốc độ cho endpoint."
+      },
+      "file": "app/medicare/auth/router.py",
+      "line": 123
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Tìm trong code Python không thấy middleware nào đặt X-Frame-Options, CSP frame-ancestors, X-Content-Type-Options. Trang bị nhúng iframe, nguy cơ clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm một middleware chung trong app factory để đặt X-Frame-Options: DENY (hoặc CSP frame-ancestors 'none'), X-Content-Type-Options: nosniff và Content-Security-Policy cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /forgot-password:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /forgot-password:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking nào trong app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware header bảo mật chung: X-Frame-Options DENY / CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /forgot-password",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Trang đăng nhập không có header chống clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware header bảo mật chung: X-Frame-Options DENY / CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /reset-password:0",
+      "finding_ids": [
+        "zap:10038:dast:GET /reset-password:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào. Trang /reset-password nhận token qua query string nên cần CSP chặt, kèm Referrer-Policy no-referrer.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt trong middleware header bảo mật chung, và Referrer-Policy: no-referrer cho trang reset-password."
+      },
+      "file": "dast:GET /reset-password",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /forgot-password:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /forgot-password:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy trong app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy trong middleware header bảo mật chung."
+      },
+      "file": "dast:POST /forgot-password",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /reset-password:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /reset-password:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy trong app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy trong middleware header bảo mật chung."
+      },
+      "file": "dast:POST /reset-password",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options, app không đặt header này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware header bảo mật chung."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /forgot-password:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /forgot-password:0",
+        "zap:10038:dast:GET /forgot-password:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options trên mọi response vì app không có middleware đặt header này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware header bảo mật chung."
+      },
+      "file": "dast:GET /forgot-password",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options, app không đặt header này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware header bảo mật chung."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options, app không đặt header này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware header bảo mật chung."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "bandit:B107:app/medicare/auth/router.py:134",
+      "finding_ids": [
+        "bandit:B107:app/medicare/auth/router.py:134"
+      ],
+      "source": "bandit",
+      "title": "B107 (bandit)",
+      "verdict": "FP",
+      "confidence": 0.9,
+      "severity": "LOW",
+      "cwe": "CWE-259",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Giá trị mặc định rỗng của tham số token là giá trị mặc định của query param, không phải mật khẩu cứng. Chuỗi rỗng bị user_for_token từ chối.",
+      "evidence": [
+        {
+          "file": "app/medicare/auth/router.py",
+          "start_line": 134,
+          "end_line": 136,
+          "snippet": "def reset_password_form(\n    request: Request, token: str = \"\", db: Session = Depends(get_db)\n) -> Response:"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/medicare/auth/router.py",
+      "line": 134
+    },
+    {
+      "finding_id": "gitleaks:generic-api-key:app/tests/test_password_reset.py:15",
+      "finding_ids": [
+        "gitleaks:generic-api-key:app/tests/test_password_reset.py:15"
+      ],
+      "source": "gitleaks",
+      "title": "generic-api-key (gitleaks)",
+      "verdict": "FP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-798",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Dòng bị Gitleaks báo nằm trong file test và đã bị ẩn. Nó gần như chắc chắn là hằng NEW_PASSWORD của test (mật khẩu mẫu), không phải secret thật. Code chỉ chạy trong test.",
+      "evidence": [
+        {
+          "file": "app/tests/test_password_reset.py",
+          "start_line": 12,
+          "end_line": 13,
+          "snippet": "from tests.conftest import csrf_token, login\nfrom tests.factories import make_department, make_user"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/tests/test_password_reset.py",
+      "line": 15
+    }
+  ]
+}

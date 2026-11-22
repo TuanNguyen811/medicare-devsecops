@@ -1,0 +1,13 @@
+{
+  "commit_id": "18982a44942276eae8d97b35abf96eb426b577e6",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/appointment/service.py",
+      "line": 133,
+      "side": "RIGHT",
+      "body": "**secagent · TP · MEDIUM** — Đặt lịch trùng giờ do race condition sau khi bỏ unique index\nCWE-362\n\nPR bỏ unique index uq_doctor_slot_active (DB là nguồn sự thật) và chuyển sang kiểm tra trùng ở tầng ứng dụng: service.book gọi _active_around rồi mới insert. Đây là check-then-act không có khóa. Hai request đồng thời cho cùng bác sĩ/giờ đều thấy rỗng và cùng insert, gây double-booking. Index mới ix_appointments_doctor_id_scheduled_at không unique nên DB không còn chặn được.\n\n**Đề xuất sửa:** Trong service.book, khóa dòng bác sĩ bằng SELECT ... FOR UPDATE (with_for_update trên db.get(User, doctor_id)) trước khi gọi _active_around, để các lần đặt lịch cùng bác sĩ chạy tuần tự. Hoặc thêm exclusion constraint PostgreSQL (tstzrange với btree_gist) trong migration 0004 để DB chặn chồng lịch, rồi bắt IntegrityError và chuyển thành Conflict(DOUBLE_BOOKED)."
+    }
+  ],
+  "body": "<!-- secagent-review:18982a44942276eae8d97b35abf96eb426b577e6 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

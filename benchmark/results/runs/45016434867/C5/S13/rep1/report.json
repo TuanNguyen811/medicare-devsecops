@@ -1,0 +1,252 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:39:57+00:00",
+    "duration_s": 32.42,
+    "llm_calls": 15,
+    "tool_calls": 14,
+    "tokens_in": 79685,
+    "tokens_out": 4503,
+    "cost_usd": 0.113237,
+    "step_limit": 37,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Fail-open trong get_current_user: shift không hợp lệ vô hiệu hóa kiểm tra hết hạn/thu hồi session",
+      "verdict": "TP",
+      "confidence": 0.93,
+      "severity": "HIGH",
+      "cwe": "CWE-636",
+      "owasp": "A10",
+      "violated_rule": "R-08",
+      "reasoning": "Tham số form `shift` không được kiểm tra allowlist và được lưu vào session. `_max_age` dùng `SHIFT_MAX_AGE[...]` nên giá trị lạ gây KeyError. `get_current_user` bắt mọi Exception rồi fail-open: lấy user từ session mà bỏ qua kiểm tra `iat`, `is_active` và `session_version`. Kẻ tấn công đăng nhập với shift=x sẽ có session không bao giờ hết hạn, không bị thu hồi khi đổi mật khẩu/khóa tài khoản. Bệnh nhân cũng bị ảnh hưởng vì start_session lưu shift ban đầu chỉ khi không phải PATIENT, nhưng với staff thì đủ nghiêm trọng.",
+      "evidence": [
+        {
+          "file": "app/medicare/common/auth.py",
+          "start_line": 112,
+          "end_line": 125,
+          "snippet": "    except Exception as exc:  # noqa: BLE001"
+        },
+        {
+          "file": "app/medicare/common/auth.py",
+          "start_line": 88,
+          "end_line": 90,
+          "snippet": "    shift_age = SHIFT_MAX_AGE[request.session.get(\"shift\", DEFAULT_SHIFT)]"
+        }
+      ],
+      "exploit_scenario": "Nhân viên (hoặc kẻ có cookie đánh cắp) đăng nhập POST /login với shift=bogus. Mọi request sau đó gây KeyError, bị nuốt, session luôn hợp lệ vĩnh viễn, kể cả sau revoke_sessions hoặc khi tài khoản bị khóa is_active=False.",
+      "fix": {
+        "description": "Trong auth/router.py login, kiểm tra `shift` theo allowlist (khóa của SHIFT_MAX_AGE), giá trị lạ thì dùng DEFAULT_SHIFT hoặc trả lỗi. Trong _max_age dùng SHIFT_MAX_AGE.get(..., None). Bỏ khối `except Exception` fail-open trong get_current_user: khi lỗi phải fail-closed (clear session, raise LoginRequired) hoặc trả 500, không bao giờ bỏ qua kiểm tra iat/sv/is_active."
+      },
+      "file": "app/medicare/common/auth.py",
+      "line": 112
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không tìm thấy X-Frame-Options hay CSP frame-ancestors ở bất kỳ đâu trong mã; ứng dụng không đặt header chống clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt X-Frame-Options: DENY (hoặc CSP frame-ancestors 'none') cho mọi phản hồi."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking trong mã (search không có kết quả).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware chung đặt X-Frame-Options: DENY / frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có X-Content-Type-Options trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt X-Content-Type-Options: nosniff cho mọi phản hồi."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP chặt (default-src 'self') qua middleware bảo mật chung."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware bảo mật chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware bảo mật chung."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware bảo mật chung."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có X-Content-Type-Options trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware đặt X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có X-Content-Type-Options trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware đặt X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    }
+  ]
+}

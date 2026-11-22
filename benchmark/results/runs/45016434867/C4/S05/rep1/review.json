@@ -1,0 +1,19 @@
+{
+  "commit_id": "c4b6f8b71ce1f78097dead91f2752533c965ee12",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/printing.py",
+      "line": 38,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — Server-Side Template Injection: bác sĩ tự soạn mẫu Jinja, render bằng Environment không sandbox\nCWE-1336\n\nprinting.py dùng jinja2.Environment(autoescape=True) thông thường (không phải SandboxedEnvironment) rồi gọi _env.from_string(body).render(...) với body do bác sĩ nhập. validate() chỉ kiểm tra độ dài và cú pháp, không hạn chế truy cập thuộc tính. Dù context chỉ chứa dict/chuỗi, payload như {{ ''.__class__.__mro__[1].__subclasses__() }} cho phép truy cập object Python và thực thi mã tùy ý (RCE) trên server. Ngoài ra, slip.html in kết quả bằng |safe nên bác sĩ cũng có thể lưu HTML/JS (stored XSS), mẫu này còn được dùng khi in phiếu.\n\n**Đề xuất sửa:** Trong printing.py thay Environment bằng jinja2.sandbox.SandboxedEnvironment (hoặc ImmutableSandboxedEnvironment) cho cả validate() và render_slip(). Cân nhắc dùng mẫu không phải Jinja (thay thế placeholder cố định theo danh sách VARIABLES). Chỉ cho phép các biến trong VARIABLES, chặn truy cập thuộc tính dấu gạch dưới, và bắt SecurityError khi lưu/in. Sanitize HTML đầu ra (ví dụ bleach/nh3 với whitelist thẻ) trước khi render, thay vì |safe trên chuỗi thô."
+    },
+    {
+      "path": "app/medicare/templates/record/slip.html",
+      "line": 17,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — security.semgrep.medicare.jinja-safe-filter (semgrep)\nCWE-79\n\nslip.html chèn {{ slip | safe }}, trong đó slip được render từ mẫu do bác sĩ kiểm soát (HTML tự do, lưu trong DB). Mẫu có thể chứa <script>, và người xem phiếu (kể cả bệnh nhân) chạy JS trong origin của ứng dụng. Autoescape của _env chỉ bảo vệ giá trị biến, không bảo vệ phần HTML của mẫu.\n\n**Đề xuất sửa:** Làm sạch HTML của slip bằng thư viện whitelist (nh3/bleach) trong printing.render_slip trước khi trả về, và/hoặc phục vụ phiếu in với CSP chặt (script-src 'none'). Tránh |safe trên dữ liệu thô."
+    }
+  ],
+  "body": "<!-- secagent-review:c4b6f8b71ce1f78097dead91f2752533c965ee12 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

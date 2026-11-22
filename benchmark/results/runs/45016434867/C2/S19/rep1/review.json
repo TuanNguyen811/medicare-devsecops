@@ -1,0 +1,13 @@
+{
+  "commit_id": "7c3b3e10e3be4209f1d986af0e3a28331fb6632d",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/patient/router.py",
+      "line": 100,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — IDOR: y tá xem danh sách bệnh nhân của khoa bất kỳ qua tham số department_id\nCWE-639 · vi phạm R-01\n\nRoute /ward/patients nhận department_id từ client và dùng trực tiếp, không kiểm tra trùng với user.department_id và không gọi policy.can_view_patient cho từng bệnh nhân. Ma trận quyền: y tá chỉ xem bệnh nhân cùng khoa. Y tá có thể liệt kê bệnh nhân (mã, họ tên, ngày sinh, giới tính, CCCD/BHYT che, bác sĩ, ngày khám gần nhất) của mọi khoa. Test chỉ kiểm tra khoa mặc định nên không phát hiện.\n\n**Đề xuất sửa:** Trong router.ward_patients bỏ việc tin department_id từ client: luôn dùng user.department_id (nếu None thì trả danh sách rỗng), hoặc nếu giữ tham số thì từ chối (404) khi khác user.department_id. Có thể lọc từng bệnh nhân bằng policy.can_view_patient(user, p) trước khi hiển thị. Bỏ danh sách chọn khoa trong ward.html và thêm test cho department_id của khoa khác."
+    }
+  ],
+  "body": "<!-- secagent-review:7c3b3e10e3be4209f1d986af0e3a28331fb6632d -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

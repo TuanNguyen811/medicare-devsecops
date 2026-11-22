@@ -1,0 +1,19 @@
+{
+  "commit_id": "6d5288de01b6f5374d039b0a370279d9bc208e19",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 28,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Path traversal qua tham số letterhead trong read_letterhead\nCWE-22 · vi phạm R-14\n\nTham số query letterhead do người dùng kiểm soát được nối trực tiếp vào LETTERHEAD_DIR / name mà không đối chiếu allowlist (letterheads()). Giá trị như ../../../../etc/passwd hoặc đường dẫn tuyệt đối (pathlib bỏ qua thư mục gốc) sẽ được đọc và chèn vào nội dung file tải xuống. Vi phạm R-14.\n\n**Đề xuất sửa:** Trong export.read_letterhead, chỉ chấp nhận name nằm trong allowlist letterheads(); nếu không thì dùng DEFAULT_LETTERHEAD (hoặc trả 400). Không ghép trực tiếp giá trị từ client vào đường dẫn; có thể ánh xạ khóa -> Path đã biết."
+    },
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 38,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — IDOR: export bệnh án không kiểm tra policy.can_view_record\nCWE-639 · vi phạm R-01\n\nget_record_for_export chỉ db.get rồi ghi audit, không gọi policy.can_view_record. Bất kỳ DOCTOR/NURSE/PATIENT nào đăng nhập đều xuất được bệnh án của bệnh nhân khác (khác khoa, không phụ trách, không phải của mình), vi phạm R-01, R-02, R-12. Ngoài ra bản ghi tồn tại nhưng không có quyền cũng không trả 404 (R-15).\n\n**Đề xuất sửa:** Trong export.get_record_for_export (hoặc dùng lại service.get_record_for/_load), tải bệnh nhân rồi gọi policy.can_view_record(user, patient); nếu không có quyền thì ghi metrics.authz_denied và raise NotFound giống như bản ghi không tồn tại (R-15). Chỉ ghi audit EXPORT_RECORD sau khi qua kiểm tra quyền. Bổ sung test: bệnh nhân khác, bác sĩ/y tá khác khoa nhận 404."
+    }
+  ],
+  "body": "<!-- secagent-review:6d5288de01b6f5374d039b0a370279d9bc208e19 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

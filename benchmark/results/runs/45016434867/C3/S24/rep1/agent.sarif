@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-307",
+              "name": "secagent/CWE-307",
+              "shortDescription": {
+                "text": "Cookie remember-me bất kỳ vô hiệu hóa khóa tài khoản và đếm lần sai (brute-force mật khẩu)"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-307"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "secagent/CWE-613",
+              "name": "secagent/CWE-613",
+              "shortDescription": {
+                "text": "Logout không thu hồi remember token phía server"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-613"
+                ],
+                "security-severity": "5.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-307",
+          "level": "error",
+          "message": {
+            "text": "Cookie remember-me bất kỳ vô hiệu hóa khóa tài khoản và đếm lần sai (brute-force mật khẩu): login() truyền remembered_device=remember.is_remembered_device(...) vào authenticate(). Hàm này chỉ kiểm tra cookie có token hợp lệ của BẤT KỲ người dùng nào, không gắn với username đang đăng nhập. Khi remembered_device=True, authenticate bỏ qua kiểm tra locked_until và không tăng failed_login_count. Kẻ tấn công chỉ cần đăng nhập bằng tài khoản của chính mình với remember_me=on để lấy cookie hợp lệ, sau đó dùng cookie đó để thử mật khẩu không giới hạn lên mọi tài khoản (kể cả tài khoản đang bị khóa), phá vỡ R-07 (khóa 15 phút sau 5 lần sai)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/common/auth.py"
+                },
+                "region": {
+                  "startLine": 54
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-613",
+          "level": "warning",
+          "message": {
+            "text": "Logout không thu hồi remember token phía server: logout() chỉ tăng session_version và xóa cookie trên trình duyệt hiện tại; bản ghi RememberToken vẫn còn trong DB đến 30 ngày. Cookie bị sao chép/đánh cắp vẫn được get_current_user chấp nhận qua remembered_user() và tạo lại session sau khi người dùng đã đăng xuất. Token cũng không được xoay vòng khi sử dụng."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/auth/router.py"
+                },
+                "region": {
+                  "startLine": 60
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "verdict": "TP",
+            "confidence": 0.8
+          }
+        }
+      ]
+    }
+  ]
+}

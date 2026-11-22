@@ -1,0 +1,13 @@
+{
+  "commit_id": "447aa04eed4b584d5ac426a9e9c8740a5af3c847",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/lab.py",
+      "line": 39,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — B310 (bandit)\nCWE-918 · vi phạm R-14\n\ndownload() trong lab.py chỉ kiểm tra scheme http/https rồi gọi urllib.request.urlopen với URL do bác sĩ nhập, không có allowlist host. Đây là SSRF: có thể trỏ tới 169.254.169.254, localhost hoặc dịch vụ nội bộ. urlopen còn tự theo redirect nên có thể vượt qua kiểm tra. Request vẫn được gửi đi dù nội dung bị loại (blind SSRF). Vi phạm R-14.\n\n**Đề xuất sửa:** Trong lab.download(): đối chiếu hostname và port với allowlist host của LIS lấy từ cấu hình (biến môi trường), chỉ cho phép https. Resolve DNS và từ chối IP private/loopback/link-local. Tắt theo redirect (opener với HTTPRedirectHandler tùy chỉnh) hoặc kiểm tra lại allowlist ở mỗi redirect. Giữ giới hạn kích thước và timeout."
+    }
+  ],
+  "body": "<!-- secagent-review:447aa04eed4b584d5ac426a9e9c8740a5af3c847 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

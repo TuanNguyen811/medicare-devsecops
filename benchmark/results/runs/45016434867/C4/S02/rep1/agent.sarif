@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-22",
+              "name": "secagent/CWE-22",
+              "shortDescription": {
+                "text": "Path traversal qua tham số letterhead"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-22"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "secagent/CWE-639",
+              "name": "secagent/CWE-639",
+              "shortDescription": {
+                "text": "IDOR: export_record không kiểm tra policy.can_view_record"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-639"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "secagent/CWE-79",
+              "name": "secagent/CWE-79",
+              "shortDescription": {
+                "text": "Xuất HTML có thể bị chèn header/CSP; filename dùng dữ liệu nội bộ - phiếu HTML thiếu kiểm soát"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-79"
+                ],
+                "security-severity": "3.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-22",
+          "level": "error",
+          "message": {
+            "text": "Path traversal qua tham số letterhead: Tham số query letterhead do người dùng kiểm soát được nối trực tiếp vào LETTERHEAD_DIR / name mà không kiểm tra whitelist. Dùng \"../../..\" hoặc đường dẫn tuyệt đối (pathlib bỏ qua thư mục gốc) để đọc file văn bản bất kỳ (ví dụ .env, /etc/passwd); nội dung được in ra trong phản hồi. Chỉ FileNotFoundError được bắt."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/record/export.py"
+                },
+                "region": {
+                  "startLine": 27
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-639",
+          "level": "error",
+          "message": {
+            "text": "IDOR: export_record không kiểm tra policy.can_view_record: get_record_for_export dùng db.get(MedicalRecord, record_id) rồi trả về bệnh án mà không gọi policy.can_view_record (khác với service.get_record_for). Mọi DOCTOR/NURSE/PATIENT đăng nhập đều xuất được bệnh án của bất kỳ bệnh nhân nào (khác khoa, bệnh nhân khác). Đồng thời ghi audit EXPORT_RECORD trước khi kiểm tra quyền."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/record/export.py"
+                },
+                "region": {
+                  "startLine": 40
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-79",
+          "level": "note",
+          "message": {
+            "text": "Xuất HTML có thể bị chèn header/CSP; filename dùng dữ liệu nội bộ - phiếu HTML thiếu kiểm soát: Template print.html render qua templates.get_template; cần xác nhận autoescape bật cho .html. Nếu tắt thì symptoms/notes gây XSS. Mức tin cậy thấp."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/record/router.py"
+                },
+                "region": {
+                  "startLine": 139
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "3.0",
+            "verdict": "TP",
+            "confidence": 0.3
+          }
+        }
+      ]
+    }
+  ]
+}

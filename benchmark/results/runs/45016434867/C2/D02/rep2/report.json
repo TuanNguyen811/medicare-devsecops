@@ -1,0 +1,295 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:09:53+00:00",
+    "duration_s": 34.92,
+    "llm_calls": 18,
+    "tool_calls": 17,
+    "tokens_in": 91184,
+    "tokens_out": 4972,
+    "cost_usd": 0.085628,
+    "step_limit": 46,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm trong repo không thấy X-Frame-Options hay frame-ancestors ở đâu, nên ứng dụng thiếu header chống clickjacking (trang có form thao tác dữ liệu y tế).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware security headers trong app factory để mọi response có X-Frame-Options: DENY và CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking nào trong repo; trang /login dễ bị framing.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng chung middleware security headers: X-Frame-Options: DENY và CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff cho mọi response trong middleware security headers."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none') trong middleware security headers."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy qua middleware chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy qua middleware chung."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy qua middleware chung."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/insurance-check:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/insurance-check:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo, kể cả route mới insurance-check.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy qua middleware chung."
+      },
+      "file": "dast:POST /patients/{patient_id}/insurance-check",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options trên toàn ứng dụng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff qua middleware chung."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options cả với /health; sửa chung bằng middleware.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff qua middleware chung."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "bandit:B404:app/medicare/patient/insurance_check.py:10",
+      "finding_ids": [
+        "bandit:B404:app/medicare/patient/insurance_check.py:10"
+      ],
+      "source": "bandit",
+      "title": "B404 (bandit)",
+      "verdict": "FP",
+      "confidence": 0.9,
+      "severity": "LOW",
+      "cwe": "CWE-78",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "B404 chỉ là cảnh báo khi import subprocess; cách dùng an toàn (argv list, không shell, đường dẫn từ cấu hình).",
+      "evidence": [
+        {
+          "file": "app/medicare/patient/insurance_check.py",
+          "start_line": 10,
+          "end_line": 10,
+          "snippet": "import subprocess"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/medicare/patient/insurance_check.py",
+      "line": 10
+    },
+    {
+      "finding_id": "bandit:B603:app/medicare/patient/insurance_check.py:57",
+      "finding_ids": [
+        "bandit:B603:app/medicare/patient/insurance_check.py:57"
+      ],
+      "source": "bandit",
+      "title": "B603 (bandit)",
+      "verdict": "FP",
+      "confidence": 0.85,
+      "severity": "LOW",
+      "cwe": "CWE-78",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "subprocess.run nhận list argv, không shell=True. Mã thẻ được kiểm bằng is_valid_insurance_number (regex ASCII), họ tên chuẩn hóa và giới hạn độ dài, mỗi giá trị đi dạng --name=value nên không bị hiểu là option. Executable lấy từ Settings (env), không từ người dùng.",
+      "evidence": [
+        {
+          "file": "app/medicare/patient/insurance_check.py",
+          "start_line": 45,
+          "end_line": 51,
+          "snippet": "        executable,\n        \"--json\",\n        f\"--ma-the={card}\",\n        f\"--ho-ten={name}\","
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/medicare/patient/insurance_check.py",
+      "line": 57
+    }
+  ]
+}

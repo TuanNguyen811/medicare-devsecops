@@ -1,0 +1,13 @@
+{
+  "commit_id": "f95ff81d476101386b823f8346f412fe968410c4",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/appointment/sms.py",
+      "line": 13,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — generic-api-key (gitleaks)\nCWE-798 · vi phạm R-09\n\nHai dòng 13-14 trong sms.py gán cứng ESMS_API_KEY và ESMS_SECRET_KEY (được dùng trong send_sms). Vi phạm R-09: secret chỉ đọc từ biến môi trường.\n\n**Đề xuất sửa:** Thu hồi/xoay khóa eSMS đã lộ. Trong sms.py đọc ESMS_API_KEY và ESMS_SECRET_KEY từ biến môi trường (qua settings của app), báo lỗi khi thiếu. Xóa khỏi lịch sử git."
+    }
+  ],
+  "body": "<!-- secagent-review:f95ff81d476101386b823f8346f412fe968410c4 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

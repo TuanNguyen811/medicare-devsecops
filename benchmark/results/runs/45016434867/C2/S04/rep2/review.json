@@ -1,0 +1,25 @@
+{
+  "commit_id": "f029194ff1e2eb7aa8f848d97db5eee337cbd180",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — B506 (bandit)\nCWE-502\n\nCùng vị trí với F2: yaml.Loader không an toàn trên dữ liệu upload, dẫn tới RCE.\n\n**Đề xuất sửa:** Dùng yaml.safe_load trong legacy_import._parse_yaml."
+    },
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — python.lang.security.deserialization.avoid-pyyaml-load.avoid-pyyaml-load (semgrep)\nCWE-502\n\nyaml.load với yaml.Loader (không an toàn) được áp dụng trực tiếp lên file người dùng tải lên qua POST /admin/medicines/import. Tag như !!python/object/apply:os.system cho phép thực thi mã tùy ý (RCE) trên server.\n\n**Đề xuất sửa:** Trong legacy_import._parse_yaml thay bằng yaml.safe_load (hoặc Loader=yaml.SafeLoader)."
+    },
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 49,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — XXE trong nhập danh mục thuốc XML (resolve_entities=True)\nCWE-611 · vi phạm R-14\n\n_parse_xml tạo etree.XMLParser(resolve_entities=True) và parse file do admin tải lên. Entity ngoại (SYSTEM \"file:///...\") được resolve; nội dung đọc được đưa vào trường ten_thuoc/don_vi, sau đó lưu DB, hiển thị trong danh mục hoặc lộ qua thông báo lỗi. Cũng cho phép SSRF và entity expansion (billion laughs) gây DoS.\n\n**Đề xuất sửa:** Trong legacy_import._parse_xml dùng etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False, dtd_validation=False, huge_tree=False), hoặc dùng defusedxml.lxml; từ chối file có DOCTYPE/ENTITY. Chuyển các tên có dấu sang ký tự UTF-8 trực tiếp thay vì entity."
+    }
+  ],
+  "body": "<!-- secagent-review:f029194ff1e2eb7aa8f848d97db5eee337cbd180 -->\nAI Security Agent nêu 3 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

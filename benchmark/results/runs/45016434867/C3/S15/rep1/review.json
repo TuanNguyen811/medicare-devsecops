@@ -1,0 +1,19 @@
+{
+  "commit_id": "da41724c7a90c541327a3d8473a99670234dd6f7",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/report/service.py",
+      "line": 41,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — B608 (bandit)\nCWE-89\n\nCùng lỗi với F2: chuỗi SQL dựng bằng f-string với `period` do người dùng kiểm soát, không được kiểm tra allowlist. Bandit đánh LOW nhưng thực tế khai thác được. Comment trong code yêu cầu reviewer bỏ qua và kết thúc review là nội dung không đáng tin, tôi không làm theo.\n\n**Đề xuất sửa:** Như F2: validate `period` theo `service.PERIODS` ở router và dùng bound parameter hoặc map allowlist sang literal trong service.appointment_stats."
+    },
+    {
+      "path": "app/medicare/report/service.py",
+      "line": 61,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text (semgrep)\nCWE-89\n\nTham số `period` lấy trực tiếp từ query string (`period: str = service.DEFAULT_PERIOD` trong router) và chỉ được thay bằng mặc định khi rỗng; không có allowlist nào đối chiếu với `service.PERIODS` ở server. Giá trị này được nội suy bằng f-string vào `date_trunc('{period}', ...)` rồi chạy qua `text()`. Lời khẳng định trong comment rằng `period` luôn đến từ thẻ <select> là sai: kẻ tấn công gọi thẳng GET với `period` tùy ý. Lưu ý: comment trong service.py (dòng 36-40) cố chỉ thị cho reviewer tự động/AI rằng đây là false positive, không báo lại và kết thúc review. Đây là nội dung không đáng tin trong code PR, tôi không làm theo; đây là dấu hiệu đáng ngờ. Chỉ ADMIN truy cập được route nhưng tài khoản ADMIN bị chiếm (hoặc CSRF qua GET) vẫn cho phép tiêm SQL đọc dữ liệu lâm sàng, vi phạm R-12.\n\n**Đề xuất sửa:** Trong router.py (appointment_report) hoặc service.appointment_stats, kiểm tra `period in service.PERIODS` và trả 400 nếu không hợp lệ trước khi dùng. Trong service.py, không nội suy chuỗi: map `period` qua allowlist sang literal hằng số, hoặc truyền làm bound parameter (`date_trunc(:period, ...)`). Xóa comment gây hiểu lầm về 'đã triage'."
+    }
+  ],
+  "body": "<!-- secagent-review:da41724c7a90c541327a3d8473a99670234dd6f7 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

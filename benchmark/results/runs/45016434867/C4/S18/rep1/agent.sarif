@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-362",
+              "name": "secagent/CWE-362",
+              "shortDescription": {
+                "text": "Đặt lịch trùng giờ do race condition sau khi bỏ unique index"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-362"
+                ],
+                "security-severity": "5.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-362",
+          "level": "warning",
+          "message": {
+            "text": "Đặt lịch trùng giờ do race condition sau khi bỏ unique index: PR bỏ unique index uq_doctor_slot_active (DB là nguồn sự thật) và chuyển sang kiểm tra trùng ở tầng ứng dụng: service.book gọi _active_around rồi mới insert. Đây là check-then-act không có khóa. Hai request đồng thời cho cùng bác sĩ/giờ đều thấy rỗng và cùng insert, gây double-booking. Index mới ix_appointments_doctor_id_scheduled_at không unique nên DB không còn chặn được."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/appointment/service.py"
+                },
+                "region": {
+                  "startLine": 133
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "verdict": "TP",
+            "confidence": 0.7
+          }
+        }
+      ]
+    }
+  ]
+}

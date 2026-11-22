@@ -1,0 +1,273 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:32:27+00:00",
+    "duration_s": 54.23,
+    "llm_calls": 25,
+    "tool_calls": 15,
+    "tokens_in": 90494,
+    "tokens_out": 8508,
+    "cost_usd": 0.162295,
+    "step_limit": 37,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "get_current_user fail-open: lỗi khi kiểm tra phiên vẫn chấp nhận session",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-636",
+      "owasp": "A10",
+      "violated_rule": null,
+      "reasoning": "Trong get_current_user, khi _session_user ném exception, code bắt `except Exception` rồi lấy lại user chỉ từ user_id trong session, bỏ qua kiểm tra session_version, is_active và thời hạn tuyệt đối. Đây là fail-open: phiên đã bị thu hồi (revoke_sessions), tài khoản bị khóa hoặc phiên hết hạn vẫn được chấp nhận nếu gây được lỗi (ví dụ session['shift'] có giá trị lạ gây KeyError trong _max_age).",
+      "evidence": [
+        {
+          "file": "app/medicare/common/auth.py",
+          "start_line": 114,
+          "end_line": 125,
+          "snippet": "    except Exception as exc:  # noqa: BLE001\n        # A fault in the check itself must not sign staff out in the middle of a shift:"
+        }
+      ],
+      "exploit_scenario": "Người dùng đã bị vô hiệu hóa hoặc bị revoke phiên, hoặc cookie hết hạn, gây lỗi trong _session_user (shift không hợp lệ) và vẫn truy cập được hệ thống hồ sơ bệnh án.",
+      "fix": {
+        "description": "Xóa nhánh except fail-open trong get_current_user (app/medicare/common/auth.py). Khi kiểm tra phiên lỗi phải fail-closed: clear session và raise LoginRequired (hoặc trả 500), chỉ log. Không bao giờ dùng user_id thô từ session mà bỏ qua sv, is_active, iat."
+      },
+      "file": "app/medicare/common/auth.py",
+      "line": 114
+    },
+    {
+      "finding_id": "agent:2",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Thời hạn phiên do client tự chọn qua tham số shift, không có kiểm soát phía server",
+      "verdict": "TP",
+      "confidence": 0.85,
+      "severity": "MEDIUM",
+      "cwe": "CWE-613",
+      "owasp": "A07",
+      "violated_rule": null,
+      "reasoning": "Form field shift được người đăng nhập tự gửi; start_session lưu thẳng vào session và chỉ loại trừ PATIENT. Mọi nhân viên (hay kẻ có mật khẩu bị lộ) có thể chọn 24h; không kiểm tra ca thực tế. Giá trị không hợp lệ (shift=abc) được lưu mà không validate, khiến SHIFT_MAX_AGE[...] ném KeyError, kết hợp với nhánh fail-open ở get_current_user làm mất hoàn toàn kiểm tra hết hạn/thu hồi phiên: phiên tồn tại vĩnh viễn.",
+      "evidence": [
+        {
+          "file": "app/medicare/common/auth.py",
+          "start_line": 73,
+          "end_line": 80,
+          "snippet": "request.session[\"shift\"] = shift if user.role != Role.PATIENT else DEFAULT_SHIFT"
+        }
+      ],
+      "exploit_scenario": "Kẻ tấn công POST /login với shift=bogus: phiên được cấp, mọi request sau ném KeyError trong _max_age, đi vào nhánh except và không bao giờ hết hạn hay bị revoke.",
+      "fix": {
+        "description": "Trong start_session (app/medicare/common/auth.py) validate shift theo whitelist SHIFT_MAX_AGE, giá trị lạ thì dùng DEFAULT_SHIFT hoặc từ chối. Chỉ cho phép phiên dài với vai trò lâm sàng cần thiết và tốt hơn xác định phía server (lịch trực); trong _max_age dùng .get với fallback an toàn. Cân nhắc giới hạn idle timeout cho phiên dài."
+      },
+      "file": "app/medicare/common/auth.py",
+      "line": 73
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có middleware nào trong app/medicare/main.py đặt X-Frame-Options hoặc CSP frame-ancestors; tìm kiếm trong repo không thấy header nào. Ứng dụng có thể bị nhúng iframe (clickjacking).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware security headers trong app/medicare/main.py, đặt X-Frame-Options: DENY (hoặc CSP frame-ancestors 'none') cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Trang /login không có header chống clickjacking; không có middleware đặt header trong main.py.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware security headers chung trong app/medicare/main.py với X-Frame-Options: DENY / frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none') trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers chung ở app/medicare/main.py."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers chung ở app/medicare/main.py."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers chung ở app/medicare/main.py."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options trên toàn app, không có middleware đặt header.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "/health cũng thiếu X-Content-Type-Options do không có middleware chung đặt header.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có X-Content-Type-Options trong toàn bộ code; middleware trong main.py không đặt header này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

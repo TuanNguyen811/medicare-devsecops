@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-307",
+              "name": "secagent/CWE-307",
+              "shortDescription": {
+                "text": "Cookie remember-me bỏ qua khóa tài khoản và bộ đếm đăng nhập sai (R-07)"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-307"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-307",
+          "level": "error",
+          "message": {
+            "text": "Cookie remember-me bỏ qua khóa tài khoản và bộ đếm đăng nhập sai (R-07): authenticate() nhận remembered_device do client điều khiển (chỉ cần cookie medicare_remember hợp lệ về hình thức). Khi True: tài khoản đang bị khóa vẫn được thử mật khẩu và không tăng failed_login_count, nên không bao giờ khóa. Token là bất kỳ token nào còn hạn (của bất kỳ user nào), không gắn với username đăng nhập. Kẻ tấn công có một token hợp lệ (ví dụ chính tài khoản của hắn bật remember-me) có thể brute-force mật khẩu của tài khoản khác không giới hạn."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/common/auth.py"
+                },
+                "region": {
+                  "startLine": 54
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

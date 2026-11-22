@@ -1,0 +1,13 @@
+{
+  "commit_id": "447aa04eed4b584d5ac426a9e9c8740a5af3c847",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/lab.py",
+      "line": 39,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — B310 (bandit)\nCWE-918 · vi phạm R-14\n\nChỉ kiểm tra scheme http/https, không có allowlist host (vi phạm R-14). urllib.urlopen theo redirect nên có thể bị chuyển hướng tới host nội bộ. Bác sĩ có thể khiến server gọi tới địa chỉ nội bộ (metadata cloud, localhost, DB admin). Thông báo lỗi khác nhau cho phép dò cổng/host; nếu đích trả PDF/PNG/JPEG thì nội dung được lưu và tải về được."
+    }
+  ],
+  "body": "<!-- secagent-review:447aa04eed4b584d5ac426a9e9c8740a5af3c847 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

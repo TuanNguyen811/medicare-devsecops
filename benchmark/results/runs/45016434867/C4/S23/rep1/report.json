@@ -1,0 +1,246 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:34:54+00:00",
+    "duration_s": 37.14,
+    "llm_calls": 16,
+    "tool_calls": 15,
+    "tokens_in": 60252,
+    "tokens_out": 5508,
+    "cost_usd": 0.10828,
+    "step_limit": 37,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "claim_patient cho phép bác sĩ bất kỳ chiếm quyền phụ trách bệnh nhân (IDOR / bỏ qua policy)",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-639",
+      "owasp": "A01",
+      "violated_rule": "R-02",
+      "reasoning": "service.claim_patient chỉ lấy bệnh nhân theo id rồi gán attending_doctor_id = doctor.id mà không gọi policy.can_view_patient hay kiểm tra cùng khoa. Route chỉ kiểm tra vai trò DOCTOR. Bác sĩ khoa khác chỉ cần POST /patients/{id}/claim với id đoán được để thành bác sĩ phụ trách. Khi đó _is_attending trả True, nên can_view_record, can_write_record và can_prescribe đều qua (R-01, R-02, R-03). Nút ở giao diện được ẩn nhưng server không chặn. Ngoài ra nếu department_id là None thì bị ghi đè bằng khoa của bác sĩ, và việc đổi người phụ trách không được ghi audit log.",
+      "evidence": [
+        {
+          "file": "app/medicare/patient/service.py",
+          "start_line": 127,
+          "end_line": 138,
+          "snippet": "    patient = db.get(Patient, patient_id)\n    if patient is None:\n        raise NotFound\n    if patient.attending_doctor_id == doctor.id:\n        raise PatientDataError(\"Bạn đang là bác sĩ phụ trách bệnh nhân này\")\n    patient.attending_doctor_id = doctor.id"
+        }
+      ],
+      "exploit_scenario": "Bác sĩ khoa A gửi POST /patients/123/claim kèm CSRF token hợp lệ của chính mình. Bệnh nhân 123 thuộc khoa B. Bác sĩ này trở thành attending, rồi đọc bệnh án, tạo bệnh án mới và kê đơn cho bệnh nhân ngoài phạm vi của mình.",
+      "fix": {
+        "description": "Trong router claim_patient, hoặc service.claim_patient, phải kiểm tra quyền ở phía server bằng một hàm policy mới, ví dụ policy.can_claim_patient(user, patient) trong app/medicare/policy.py. Hàm này chỉ cho phép bác sĩ cùng khoa với bệnh nhân (_same_department) và nên dùng cùng hàm cho cờ can_claim trong _detail_ctx. Không được gán attending khi bệnh nhân khác khoa; trả 403 hoặc 404. Không tự ghi đè department_id bằng khoa của bác sĩ. Ghi audit log cho mỗi lần đổi bác sĩ phụ trách. Bổ sung test cho trường hợp bác sĩ khác khoa bị từ chối."
+      },
+      "file": "app/medicare/patient/service.py",
+      "line": 127
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm trong repo không thấy chỗ nào đặt X-Frame-Options hay frame-ancestors. Middleware trong main.py chỉ có Session, CatchAll và Metrics. Thiếu header chống clickjacking trên toàn app, không riêng PR này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm một middleware trong app/medicare/main.py đặt X-Frame-Options: DENY và CSP frame-ancestors 'none' cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Trùng nguyên nhân với F1: không có header chống clickjacking nào trong app, kể cả trang /login.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware security headers chung trong app/medicare/main.py (X-Frame-Options DENY, frame-ancestors 'none')."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào trong repo. Đây là giảm lớp phòng thủ XSS cho toàn app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none') trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân: thiếu CSP trên toàn app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware chung ở app/medicare/main.py."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/claim:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/claim:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân: thiếu CSP, kể cả với route claim mới.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware chung ở app/medicare/main.py."
+      },
+      "file": "dast:POST /patients/{patient_id}/claim",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân: thiếu CSP trên toàn app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware chung ở app/medicare/main.py."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân: thiếu X-Content-Type-Options trên toàn app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân: thiếu X-Content-Type-Options, kể cả với /health.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có chỗ nào đặt X-Content-Type-Options trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

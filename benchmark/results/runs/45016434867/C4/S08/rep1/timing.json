@@ -1,0 +1,14 @@
+{
+  "config": "C4",
+  "scenario": "S08",
+  "rep": 1,
+  "scan": "45016434867",
+  "base": "b947d5c04078cd0eb525b9dc5d0271f65e3dcfa6",
+  "head": "f95ff81d476101386b823f8346f412fe968410c4",
+  "agent_commit": "8f85d858ccdef9e6eb0b35f4f77c6d71b58d5e47",
+  "agent_dirty": false,
+  "exit": 0,
+  "wall_s": 36.8,
+  "attempt": 0,
+  "finished_at": "2026-11-22T12:32:12+00:00"
+}

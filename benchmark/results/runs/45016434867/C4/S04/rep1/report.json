@@ -1,0 +1,286 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:31:01+00:00",
+    "duration_s": 31.66,
+    "llm_calls": 16,
+    "tool_calls": 15,
+    "tokens_in": 77664,
+    "tokens_out": 4644,
+    "cost_usd": 0.124809,
+    "step_limit": 43,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "bandit:B506:app/medicare/prescription/legacy_import.py:40",
+      "finding_ids": [
+        "bandit:B506:app/medicare/prescription/legacy_import.py:40"
+      ],
+      "source": "bandit",
+      "title": "B506 (bandit)",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "cwe": "CWE-502",
+      "owasp": "A08",
+      "violated_rule": null,
+      "reasoning": "Cùng vị trí với F2: yaml.Loader không an toàn trên dữ liệu upload, thực chất là RCE.",
+      "evidence": [
+        {
+          "file": "app/medicare/prescription/legacy_import.py",
+          "start_line": 40,
+          "end_line": 40,
+          "snippet": "doc = yaml.load(data, Loader=yaml.Loader)"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng yaml.safe_load trong _parse_yaml."
+      },
+      "file": "app/medicare/prescription/legacy_import.py",
+      "line": 40
+    },
+    {
+      "finding_id": "semgrep:python.lang.security.deserialization.avoid-pyyaml-load.avoid-pyyaml-load:app/medicare/prescription/legacy_import.py:40",
+      "finding_ids": [
+        "semgrep:python.lang.security.deserialization.avoid-pyyaml-load.avoid-pyyaml-load:app/medicare/prescription/legacy_import.py:40"
+      ],
+      "source": "semgrep",
+      "title": "python.lang.security.deserialization.avoid-pyyaml-load.avoid-pyyaml-load (semgrep)",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "cwe": "CWE-502",
+      "owasp": "A08",
+      "violated_rule": null,
+      "reasoning": "yaml.load với yaml.Loader cho phép tạo đối tượng Python tùy ý (!!python/object/apply) từ file upload → RCE.",
+      "evidence": [
+        {
+          "file": "app/medicare/prescription/legacy_import.py",
+          "start_line": 40,
+          "end_line": 40,
+          "snippet": "doc = yaml.load(data, Loader=yaml.Loader)"
+        }
+      ],
+      "exploit_scenario": "Upload file .yaml chứa !!python/object/apply:os.system [\"...\"] thực thi lệnh trên server.",
+      "fix": {
+        "description": "Trong _parse_yaml dùng yaml.safe_load (hoặc Loader=yaml.SafeLoader)."
+      },
+      "file": "app/medicare/prescription/legacy_import.py",
+      "line": 40
+    },
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "XXE: lxml XMLParser với resolve_entities=True trên file admin upload",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-611",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "_parse_xml bật resolve_entities=True và không tắt no_network/load_dtd, nên DOCTYPE do người upload kiểm soát có thể khai báo external entity (file:///etc/passwd, URL nội bộ) hoặc entity bùng nổ (billion laughs). Nội dung entity được đưa vào ten_thuoc/don_vi và lưu DB, hiển thị lại trong lỗi/danh mục, nên có thể đọc dữ liệu.",
+      "evidence": [
+        {
+          "file": "app/medicare/prescription/legacy_import.py",
+          "start_line": 49,
+          "end_line": 50,
+          "snippet": "parser = etree.XMLParser(resolve_entities=True, remove_blank_text=True)\n    root = etree.fromstring(data, parser)"
+        }
+      ],
+      "exploit_scenario": "Admin (hoặc kẻ có CSRF/tài khoản admin bị chiếm) upload XML có DOCTYPE với &lt;!ENTITY x SYSTEM \"file:///etc/passwd\"&gt; đặt trong &lt;ten_thuoc&gt;&amp;x;&lt;/ten_thuoc&gt;; nội dung file được lưu vào danh mục thuốc và hiển thị.",
+      "fix": {
+        "description": "Trong _parse_xml dùng etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False, dtd_validation=False, huge_tree=False), hoặc dùng defusedxml.lxml. Từ chối tài liệu có DOCTYPE; nếu cần ký tự có dấu thì dùng UTF-8 trực tiếp thay vì entity."
+      },
+      "file": "app/medicare/prescription/legacy_import.py",
+      "line": 49
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không tìm thấy middleware đặt X-Frame-Options/CSP/X-Content-Type-Options trong repo, nên cảnh báo có vẻ đúng, nhưng là vấn đề cấu hình toàn cục (có thể do reverse proxy), không thuộc code của PR này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Như F3: không thấy header chống clickjacking trong code; có thể đặt ở proxy, ngoài phạm vi PR.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không thấy header bảo mật trong code; cấu hình toàn cục ngoài phạm vi PR.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không thấy CSP trong code; có thể ở proxy, ngoài phạm vi PR.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Như F8.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Như F8.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Như F8.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Như F7.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Như F7.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:GET /health",
+      "line": 0
+    }
+  ]
+}

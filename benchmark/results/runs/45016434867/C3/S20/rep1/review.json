@@ -1,0 +1,19 @@
+{
+  "commit_id": "e289c571afee0d84eb0e1995c4b5ff037830aa17",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/billing/service.py",
+      "line": 115,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — parse_lines không kiểm tra số lượng dương/giới hạn: số âm hoặc 0 làm giảm tổng tiền\nCWE-20 · vi phạm R-17\n\nSố lượng chỉ được ép int(quantity), không kiểm tra > 0 hay giới hạn trên. Ràng buộc min=1/max=99 chỉ ở HTML phía client. Gửi quantity=-5 tạo dòng có amount âm, giảm total_amount và patient_amount (thậm chí âm); R-17 yêu cầu số nguyên dương. Số quá lớn có thể vượt Numeric(12,0) gây lỗi 500.\n\n**Đề xuất sửa:** Trong service.parse_lines, sau khi int(quantity), từ chối nếu quantity < 1 hoặc > 99 (hằng số MAX_QUANTITY) bằng BillingError. Thêm CheckConstraint quantity > 0 cho InvoiceLine trong models.py và migration 0004. Thêm test cho số âm, 0 và số rất lớn."
+    },
+    {
+      "path": "app/medicare/billing/service.py",
+      "line": 148,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — change_status cho phép đảo ngược PAID → UNPAID, vi phạm luồng hóa đơn\nCWE-840 · vi phạm R-17\n\nchange_status chỉ kiểm tra status là thành viên của InvoiceStatus và khác trạng thái hiện tại, nên POST status=UNPAID lên hóa đơn đã PAID được chấp nhận. R-17 yêu cầu chỉ UNPAID → PAID và không quay ngược. Hậu quả: lễ tân có thể mở lại hóa đơn đã thu, thêm/sửa dòng dịch vụ rồi thu lại, che giấu việc gian lận tiền; không có audit.\n\n**Đề xuất sửa:** Trong service.change_status, dùng bảng chuyển trạng thái cho phép chỉ {UNPAID: PAID}; mọi chuyển khác (đặc biệt PAID → UNPAID) phải raise Conflict. Nên bỏ tham số status từ client và dùng endpoint chỉ làm UNPAID → PAID như mark_paid cũ. Thêm test cho việc đảo ngược trạng thái."
+    }
+  ],
+  "body": "<!-- secagent-review:e289c571afee0d84eb0e1995c4b5ff037830aa17 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

@@ -1,0 +1,13 @@
+{
+  "commit_id": "e289c571afee0d84eb0e1995c4b5ff037830aa17",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/billing/service.py",
+      "line": 144,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — change_status cho phép đảo hóa đơn PAID về UNPAID rồi sửa dòng dịch vụ/tổng tiền\nCWE-840\n\nEndpoint cũ /pay chỉ cho UNPAID->PAID một chiều (mark_paid ném Conflict nếu đã trả). change_status mới chấp nhận bất kỳ trạng thái hợp lệ nào khác trạng thái hiện tại, kể cả PAID->UNPAID. Lễ tân có thể hoàn tác hóa đơn đã thu tiền, thêm dòng dịch vụ (add_lines chỉ chặn khi status != UNPAID) làm đổi total_amount, rồi thu lại — thao tác gian lận/biển thủ tiền thu, vô hiệu bất biến của hóa đơn đã thanh toán. Không có audit log.\n\n**Đề xuất sửa:** Trong service.change_status chỉ cho phép chuyển UNPAID -> PAID (như mark_paid cũ), từ chối mọi chuyển ngược với Conflict; nếu cần hoàn tiền thì làm quy trình riêng cho ADMIN có ghi audit log. Tách endpoint thu tiền khỏi tham số status tuỳ ý từ client."
+    }
+  ],
+  "body": "<!-- secagent-review:e289c571afee0d84eb0e1995c4b5ff037830aa17 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

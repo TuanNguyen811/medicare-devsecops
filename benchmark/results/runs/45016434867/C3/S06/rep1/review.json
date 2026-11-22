@@ -1,0 +1,13 @@
+{
+  "commit_id": "b6844e9bf8b64473bce12659e0f2c70064b13e5b",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/templates/record/detail.html",
+      "line": 29,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — security.semgrep.medicare.jinja-safe-filter (semgrep)\nCWE-79\n\nRoute add_note nhận `body` từ form và `service.add_note` chỉ strip và kiểm tra độ dài, rồi lưu nguyên HTML. Template render bằng `{{ note.body | safe }}` nên tắt autoescape. Việc làm sạch chỉ nằm ở JS phía client (contenteditable), kẻ tấn công có thể bỏ qua bằng cách POST trực tiếp. Kết quả là stored XSS: script chạy trong phiên của bệnh nhân, y tá, bác sĩ khác xem bệnh án, có thể đánh cắp dữ liệu y tế hoặc thực hiện hành động thay họ. Test cũng chỉ kiểm tra HTML được giữ nguyên, không kiểm tra sanitize.\n\n**Đề xuất sửa:** Trong app/medicare/record/service.py, hàm add_note: làm sạch body phía server bằng thư viện sanitize HTML với allowlist thẻ (p, b, strong, i, em, u, ul, ol, li, br) và không cho phép thuộc tính hay URL scheme nguy hiểm (ví dụ nh3 hoặc bleach), rồi mới kiểm tra rỗng/độ dài và lưu. Nên sanitize lại khi render (filter an toàn thay cho `| safe` trong detail.html dòng 29). Thêm test XSS (script, onerror, javascript:) cho route POST /records/{id}/notes. Cân nhắc thêm header Content-Security-Policy để giảm thiệt hại."
+    }
+  ],
+  "body": "<!-- secagent-review:b6844e9bf8b64473bce12659e0f2c70064b13e5b -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

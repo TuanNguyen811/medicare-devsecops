@@ -1,0 +1,14 @@
+{
+  "config": "C2",
+  "scenario": "S12",
+  "rep": 3,
+  "scan": "45016434867",
+  "base": "b947d5c04078cd0eb525b9dc5d0271f65e3dcfa6",
+  "head": "d3be9b5eff5275c5762dc7d0514be6a3f4aed8b1",
+  "agent_commit": "8f85d858ccdef9e6eb0b35f4f77c6d71b58d5e47",
+  "agent_dirty": false,
+  "exit": 0,
+  "wall_s": 41.42,
+  "attempt": 0,
+  "finished_at": "2026-11-22T12:20:41+00:00"
+}

@@ -1,0 +1,25 @@
+{
+  "commit_id": "f029194ff1e2eb7aa8f848d97db5eee337cbd180",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — B506 (bandit)\nCWE-502\n\nCùng vị trí với F2: yaml.Loader không an toàn trên dữ liệu upload, thực chất là RCE.\n\n**Đề xuất sửa:** Dùng yaml.safe_load trong _parse_yaml."
+    },
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — python.lang.security.deserialization.avoid-pyyaml-load.avoid-pyyaml-load (semgrep)\nCWE-502\n\nyaml.load với yaml.Loader cho phép tạo đối tượng Python tùy ý (!!python/object/apply) từ file upload → RCE.\n\n**Đề xuất sửa:** Trong _parse_yaml dùng yaml.safe_load (hoặc Loader=yaml.SafeLoader)."
+    },
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 49,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — XXE: lxml XMLParser với resolve_entities=True trên file admin upload\nCWE-611\n\n_parse_xml bật resolve_entities=True và không tắt no_network/load_dtd, nên DOCTYPE do người upload kiểm soát có thể khai báo external entity (file:///etc/passwd, URL nội bộ) hoặc entity bùng nổ (billion laughs). Nội dung entity được đưa vào ten_thuoc/don_vi và lưu DB, hiển thị lại trong lỗi/danh mục, nên có thể đọc dữ liệu.\n\n**Đề xuất sửa:** Trong _parse_xml dùng etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False, dtd_validation=False, huge_tree=False), hoặc dùng defusedxml.lxml. Từ chối tài liệu có DOCTYPE; nếu cần ký tự có dấu thì dùng UTF-8 trực tiếp thay vì entity."
+    }
+  ],
+  "body": "<!-- secagent-review:f029194ff1e2eb7aa8f848d97db5eee337cbd180 -->\nAI Security Agent nêu 3 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

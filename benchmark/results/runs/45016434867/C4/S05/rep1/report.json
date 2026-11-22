@@ -1,0 +1,281 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:31:11+00:00",
+    "duration_s": 39.72,
+    "llm_calls": 15,
+    "tool_calls": 14,
+    "tokens_in": 68540,
+    "tokens_out": 5608,
+    "cost_usd": 0.125958,
+    "step_limit": 40,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Server-Side Template Injection: bác sĩ tự soạn mẫu Jinja, render bằng Environment không sandbox",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "CRITICAL",
+      "cwe": "CWE-1336",
+      "owasp": "A05",
+      "violated_rule": null,
+      "reasoning": "printing.py dùng jinja2.Environment(autoescape=True) thông thường (không phải SandboxedEnvironment) rồi gọi _env.from_string(body).render(...) với body do bác sĩ nhập. validate() chỉ kiểm tra độ dài và cú pháp, không hạn chế truy cập thuộc tính. Dù context chỉ chứa dict/chuỗi, payload như {{ ''.__class__.__mro__[1].__subclasses__() }} cho phép truy cập object Python và thực thi mã tùy ý (RCE) trên server. Ngoài ra, slip.html in kết quả bằng |safe nên bác sĩ cũng có thể lưu HTML/JS (stored XSS), mẫu này còn được dùng khi in phiếu.",
+      "evidence": [
+        {
+          "file": "app/medicare/record/printing.py",
+          "start_line": 38,
+          "end_line": 38,
+          "snippet": "_env = Environment(autoescape=True)"
+        },
+        {
+          "file": "app/medicare/record/printing.py",
+          "start_line": 96,
+          "end_line": 96,
+          "snippet": "    return _env.from_string(body).render(_context(record, patient))"
+        }
+      ],
+      "exploit_scenario": "Tài khoản bác sĩ (hoặc kẻ chiếm được tài khoản đó) lưu mẫu chứa {{ ''.__class__.__mro__[1].__subclasses__() }} để tìm lớp như subprocess.Popen rồi thực thi lệnh khi mở /records/{id}/print, từ đó đọc biến môi trường, secret và toàn bộ DB bệnh nhân.",
+      "fix": {
+        "description": "Trong printing.py thay Environment bằng jinja2.sandbox.SandboxedEnvironment (hoặc ImmutableSandboxedEnvironment) cho cả validate() và render_slip(). Cân nhắc dùng mẫu không phải Jinja (thay thế placeholder cố định theo danh sách VARIABLES). Chỉ cho phép các biến trong VARIABLES, chặn truy cập thuộc tính dấu gạch dưới, và bắt SecurityError khi lưu/in. Sanitize HTML đầu ra (ví dụ bleach/nh3 với whitelist thẻ) trước khi render, thay vì |safe trên chuỗi thô."
+      },
+      "file": "app/medicare/record/printing.py",
+      "line": 38
+    },
+    {
+      "finding_id": "semgrep:security.semgrep.medicare.jinja-safe-filter:app/medicare/templates/record/slip.html:17",
+      "finding_ids": [
+        "semgrep:security.semgrep.medicare.jinja-safe-filter:app/medicare/templates/record/slip.html:17"
+      ],
+      "source": "semgrep",
+      "title": "security.semgrep.medicare.jinja-safe-filter (semgrep)",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-79",
+      "owasp": "A05",
+      "violated_rule": null,
+      "reasoning": "slip.html chèn {{ slip | safe }}, trong đó slip được render từ mẫu do bác sĩ kiểm soát (HTML tự do, lưu trong DB). Mẫu có thể chứa <script>, và người xem phiếu (kể cả bệnh nhân) chạy JS trong origin của ứng dụng. Autoescape của _env chỉ bảo vệ giá trị biến, không bảo vệ phần HTML của mẫu.",
+      "evidence": [
+        {
+          "file": "app/medicare/templates/record/slip.html",
+          "start_line": 17,
+          "end_line": 17,
+          "snippet": "  {{ slip | safe }}"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Làm sạch HTML của slip bằng thư viện whitelist (nh3/bleach) trong printing.render_slip trước khi trả về, và/hoặc phục vụ phiếu in với CSP chặt (script-src 'none'). Tránh |safe trên dữ liệu thô."
+      },
+      "file": "app/medicare/templates/record/slip.html",
+      "line": 17
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm toàn repo không thấy X-Frame-Options, frame-ancestors hay CSP nào được đặt, nên phản hồi thiếu header chống clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware chung (trong app factory) đặt X-Frame-Options: DENY hoặc CSP frame-ancestors 'none' cho mọi phản hồi."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking nào được đặt trong repo; trang /login bị ảnh hưởng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware bảo mật chung đặt X-Frame-Options: DENY / frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware header bảo mật chung."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào trong repo; đặc biệt đáng lo vì phiếu in dùng |safe.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt (default-src 'self', không inline script) qua middleware chung."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware chung."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware chung."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware chung."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options; /health cũng bị ảnh hưởng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware chung."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    }
+  ]
+}

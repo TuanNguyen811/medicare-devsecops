@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-639",
+              "name": "secagent/CWE-639",
+              "shortDescription": {
+                "text": "claim_patient cho phép bất kỳ bác sĩ nào chiếm quyền phụ trách bệnh nhân của khoa khác (IDOR / broken access control)"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-639"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-639",
+          "level": "error",
+          "message": {
+            "text": "claim_patient cho phép bất kỳ bác sĩ nào chiếm quyền phụ trách bệnh nhân của khoa khác (IDOR / broken access control): Hàm service.claim_patient dùng db.get(Patient, patient_id) trực tiếp, không gọi policy.can_view_patient hay kiểm tra cùng khoa. Route chỉ yêu cầu vai trò DOCTOR. Vì vậy mọi bác sĩ có thể đổi attending_doctor_id của bệnh nhân bất kỳ, kể cả khoa khác hoặc bệnh nhân đã có bác sĩ phụ trách. Sau đó họ trở thành \"bác sĩ phụ trách\", nên được xem, tạo, sửa bệnh án và kê đơn (R-02, R-03), và thấy hồ sơ bệnh nhân. Ma trận phân quyền không cho bác sĩ tự gán phụ trách. Ngoài ra, endpoint trả 303 khi bệnh nhân tồn tại và 404 khi không, nên lộ sự tồn tại của đối tượng mà người đó không có quyền xem (R-15). Nếu patient.department_id là None thì bị gán theo khoa của bác sĩ. Hành động đổi quyền phụ trách cũng không ghi audit log."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/patient/service.py"
+                },
+                "region": {
+                  "startLine": 127
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

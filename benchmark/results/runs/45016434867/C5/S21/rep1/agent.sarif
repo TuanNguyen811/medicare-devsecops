@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-640",
+              "name": "secagent/CWE-640",
+              "shortDescription": {
+                "text": "Token đặt lại mật khẩu không hết hạn và dùng được nhiều lần"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-640"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "secagent/CWE-204",
+              "name": "secagent/CWE-204",
+              "shortDescription": {
+                "text": "Liệt kê tài khoản qua /forgot-password (phản hồi khác nhau)"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-204"
+                ],
+                "security-severity": "5.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-640",
+          "level": "error",
+          "message": {
+            "text": "Token đặt lại mật khẩu không hết hạn và dùng được nhiều lần: RESET_TOKEN_TTL được khai báo nhưng chỉ dùng để in số phút trong email; user_for_token không kiểm tra created_at. reset_password() không xóa/đánh dấu token đã dùng, nên token còn hiệu lực vĩnh viễn và dùng lại được nhiều lần. Vi phạm R-18 (một lần, hết hạn 15 phút)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/auth/reset.py"
+                },
+                "region": {
+                  "startLine": 50
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-204",
+          "level": "warning",
+          "message": {
+            "text": "Liệt kê tài khoản qua /forgot-password (phản hồi khác nhau): Khi email không tồn tại, endpoint trả trang lỗi \"Không tìm thấy tài khoản nào đăng ký với email này\"; khi tồn tại thì redirect 303 kèm flash. Không có xác thực hay rate limit nên kẻ tấn công dò được email nhân viên/bệnh nhân (PII). Vi phạm R-18 và R-07."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/auth/router.py"
+                },
+                "region": {
+                  "startLine": 122
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        }
+      ]
+    }
+  ]
+}

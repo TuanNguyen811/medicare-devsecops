@@ -1,0 +1,285 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:13:13+00:00",
+    "duration_s": 59.69,
+    "llm_calls": 29,
+    "tool_calls": 16,
+    "tokens_in": 120880,
+    "tokens_out": 9300,
+    "cost_usd": 0.156227,
+    "step_limit": 46,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "trivy:CVE-2020-14343:app/uv.lock:1",
+      "finding_ids": [
+        "trivy:CVE-2020-14343:app/uv.lock:1"
+      ],
+      "source": "trivy",
+      "title": "CVE-2020-14343 (trivy)",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "CRITICAL",
+      "cwe": "CWE-502",
+      "owasp": "A03",
+      "violated_rule": null,
+      "reasoning": "PyYAML bị ghim cứng 5.3.1 (hạ cấp từ 6.0.3). price_list.parse gọi yaml.full_load trên file do người dùng upload; với 5.3.1, full_load có thể bị lợi dụng (CVE-2020-14343) để thực thi mã tùy ý. Hàm dễ tổn thương được gọi trực tiếp nên reachable.",
+      "evidence": [],
+      "exploit_scenario": "Tài khoản admin bị chiếm (hoặc CSRF) upload file YAML chứa tag python/object/new để thực thi lệnh trên server qua /admin/medicines/import.",
+      "fix": {
+        "description": "Trong app/pyproject.toml đổi pyyaml==5.3.1 thành pyyaml>=6.0.3 (tối thiểu 5.4), bỏ build-constraint setuptools<81 rồi lock lại uv.lock. Trong app/medicare/prescription/price_list.py, hàm parse, thay yaml.full_load bằng yaml.safe_load."
+      },
+      "file": "app/uv.lock",
+      "line": 1
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm toàn repo không thấy X-Frame-Options hay CSP frame-ancestors; ứng dụng có thể bị nhúng iframe (clickjacking).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware security headers dùng chung cho mọi response: X-Frame-Options: DENY hoặc CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking nào trong repo, kể cả trang /login.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Frame-Options: DENY / CSP frame-ancestors 'none' trong middleware chung."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm header Content-Security-Policy (default-src 'self', frame-ancestors 'none') trong middleware chung."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware chung."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware chung."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "semgrep:package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown:app/pyproject.toml:43",
+      "finding_ids": [
+        "semgrep:package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown:app/pyproject.toml:43"
+      ],
+      "source": "semgrep",
+      "title": "package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown (semgrep)",
+      "verdict": "TP",
+      "confidence": 0.5,
+      "severity": "LOW",
+      "cwe": "CWE-829",
+      "owasp": "A03",
+      "violated_rule": null,
+      "reasoning": "Khối [tool.uv] mới không đặt exclude-newer (cooldown); gói mới phát hành có thể được kéo vào khi re-lock. Rủi ro thấp vì có uv.lock với hash.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm exclude-newer = \"7 days\" vào [tool.uv] trong app/pyproject.toml."
+      },
+      "file": "app/pyproject.toml",
+      "line": 43
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có X-Content-Type-Options trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware chung."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có X-Content-Type-Options trong repo; ảnh hưởng thấp trên /health.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware chung."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có X-Content-Type-Options trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers chung."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

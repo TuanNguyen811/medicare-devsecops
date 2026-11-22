@@ -1,0 +1,299 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:38:55+00:00",
+    "duration_s": 58.69,
+    "llm_calls": 30,
+    "tool_calls": 18,
+    "tokens_in": 123245,
+    "tokens_out": 8760,
+    "cost_usd": 0.19387,
+    "step_limit": 46,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "gitleaks:generic-api-key:app/medicare/appointment/sms.py:13",
+      "finding_ids": [
+        "bandit:B105:app/medicare/appointment/sms.py:14",
+        "gitleaks:generic-api-key:app/medicare/appointment/sms.py:13",
+        "gitleaks:generic-api-key:app/medicare/appointment/sms.py:14"
+      ],
+      "source": "gitleaks",
+      "title": "generic-api-key (gitleaks)",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-798",
+      "owasp": "A04",
+      "violated_rule": "R-09",
+      "reasoning": "sms.py dòng 13-14 gán cứng ESMS_API_KEY và ESMS_SECRET_KEY (Gitleaks và Bandit cùng báo). Vi phạm R-09: secret chỉ được đọc từ biến môi trường.",
+      "evidence": [
+        {
+          "file": "app/medicare/appointment/sms.py",
+          "start_line": 12,
+          "end_line": 12,
+          "snippet": "ESMS_URL = \"https://rest.esms.vn/MainService.svc/json/SendMultipleMessage_V4_post_json/\""
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Xóa giá trị khỏi mã nguồn và thu hồi/xoay (rotate) cặp khóa eSMS đã lộ, kể cả trong lịch sử git. Đọc ESMS_API_KEY và ESMS_SECRET_KEY từ biến môi trường qua config của ứng dụng (như SECRET_KEY), báo lỗi rõ ràng khi thiếu."
+      },
+      "file": "app/medicare/appointment/sms.py",
+      "line": 13
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không tìm thấy code nào đặt X-Frame-Options hoặc frame-ancestors; main.py chỉ có Session, CatchAll và Metrics middleware.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware trong app/medicare/main.py đặt X-Frame-Options: DENY (hoặc CSP frame-ancestors 'none') cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân với F3: không có header chống clickjacking, /login có thể bị nhúng iframe.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt X-Frame-Options: DENY / CSP frame-ancestors 'none' bằng middleware chung trong main.py."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Mã nguồn không đặt X-Content-Type-Options: nosniff ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff vào middleware security headers chung trong main.py."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong mã.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none') trong middleware security headers ở main.py."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong mã, cùng nguyên nhân với F8.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP bằng middleware chung ở main.py."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/remind:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/remind:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong mã, cùng nguyên nhân với F8.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP bằng middleware chung ở main.py."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/remind",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong mã, cùng nguyên nhân với F8.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP bằng middleware chung ở main.py."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong mã, cùng nguyên nhân với F8.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP bằng middleware chung ở main.py."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options, cùng nguyên nhân với F7.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware security headers chung, đặt nosniff."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options, cùng nguyên nhân với F7.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware security headers chung, đặt nosniff."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "bandit:B310:app/medicare/appointment/sms.py:50",
+      "finding_ids": [
+        "bandit:B310:app/medicare/appointment/sms.py:50"
+      ],
+      "source": "bandit",
+      "title": "B310 (bandit)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.9,
+      "severity": "LOW",
+      "cwe": "CWE-22",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "[Bằng chứng cho FP phải trích đoạn mã (≥ 10 ký tự) tại vị trí phát hiện hoặc trong file liên quan] URL của urlopen là hằng số https (ESMS_URL), không do người dùng điều khiển nên không thể dùng scheme file:/ tùy ý.",
+      "evidence": [
+        {
+          "file": "app/medicare/appointment/sms.py",
+          "start_line": 12,
+          "end_line": 12,
+          "snippet": "ESMS_URL = \"https://rest.esms.vn/MainService.svc/json/SendMultipleMessage_V4_post_json/\""
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/medicare/appointment/sms.py",
+      "line": 50
+    }
+  ]
+}

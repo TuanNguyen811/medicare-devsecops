@@ -1,0 +1,14 @@
+{
+  "config": "C3",
+  "scenario": "S15",
+  "rep": 1,
+  "scan": "45016434867",
+  "base": "b947d5c04078cd0eb525b9dc5d0271f65e3dcfa6",
+  "head": "da41724c7a90c541327a3d8473a99670234dd6f7",
+  "agent_commit": "8f85d858ccdef9e6eb0b35f4f77c6d71b58d5e47",
+  "agent_dirty": false,
+  "exit": 0,
+  "wall_s": 45.86,
+  "attempt": 0,
+  "finished_at": "2026-11-22T12:27:17+00:00"
+}
