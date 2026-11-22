@@ -21,6 +21,26 @@
   </div>
 </div>
 <div class="card mc-card mt-3">
+  <div class="card-header">Kết quả xét nghiệm</div>
+  <ul class="list-group list-group-flush">
+    {% for r in lab_results %}
+    <li class="list-group-item"><a href="/lab-results/{{ r.id }}"><i class="bi bi-file-earmark-medical"></i> {{ r.title }}</a> <span class="text-secondary small">{{ r.created_at | datetime_vn }}</span></li>
+    {% else %}
+    <li class="list-group-item text-secondary">Chưa có kết quả xét nghiệm</li>
+    {% endfor %}
+  </ul>
+  {% if can_write %}
+  <div class="card-body border-top">
+    <form class="row g-2 align-items-end" method="post" action="/records/{{ record.id }}/lab-results">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-md-4"><label class="form-label small" for="lab-title">Tên xét nghiệm</label><input class="form-control form-control-sm" id="lab-title" name="title" maxlength="200" placeholder="Công thức máu" required></div>
+      <div class="col-md-6"><label class="form-label small" for="lab-url">Đường dẫn kết quả (từ hệ thống xét nghiệm)</label><input class="form-control form-control-sm" id="lab-url" name="url" type="url" maxlength="500" required></div>
+      <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100" type="submit"><i class="bi bi-paperclip"></i> Đính kèm</button></div>
+    </form>
+  </div>
+  {% endif %}
+</div>
+<div class="card mc-card mt-3">
   <div class="card-header">Đơn thuốc</div>
   <ul class="list-group list-group-flush">
     {% for p in prescriptions %}

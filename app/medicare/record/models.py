@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, LargeBinary, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from medicare.db import Base
@@ -31,3 +31,20 @@ class MedicalRecord(Base):
 
     doctor: Mapped["User"] = relationship(lazy="joined")
     patient: Mapped["Patient"] = relationship(lazy="joined")
+
+
+class LabResult(Base):
+    """A lab report (PDF or image) published by the laboratory system, attached to a visit."""
+
+    __tablename__ = "lab_results"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    record_id: Mapped[int] = mapped_column(ForeignKey("medical_records.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    source_url: Mapped[str] = mapped_column(String(500))
+    content_type: Mapped[str] = mapped_column(String(50))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

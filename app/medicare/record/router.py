@@ -15,7 +15,7 @@ from medicare.common.templating import flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
 from medicare.prescription import service as prescription_service
-from medicare.record import service
+from medicare.record import lab, service
 from medicare.record.schemas import FIELD_LABELS, RecordForm, form_errors
 
 router = APIRouter()
@@ -112,7 +112,44 @@ def record_detail(
         "can_write": policy.can_write_record(user, patient),
         "can_prescribe": policy.can_prescribe(user, patient),
         "prescriptions": prescription_service.list_for_record(db, record.id),
+        "lab_results": lab.list_for_record(db, record.id),
         "breadcrumbs": _crumbs(patient, (f"Phiếu khám #{record.id}", None)),
+    })
+
+
+@router.post("/records/{record_id}/lab-results", dependencies=[Depends(verify_csrf)])
+def attach_lab_result(
+    request: Request,
+    record_id: ObjectId,
+    title: str = Form(""),
+    url: str = Form(""),
+    user: User = Depends(doctor_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    record = service.get_writable_record(db, user, record_id)
+    try:
+        lab.attach(db, user, record, title, url, _ip(request))
+    except lab.LabResultError as exc:
+        flash(request, str(exc), "danger")
+        return RedirectResponse(f"/records/{record.id}", status_code=303)
+    db.commit()
+    flash(request, "Đã đính kèm kết quả xét nghiệm")
+    return RedirectResponse(f"/records/{record.id}", status_code=303)
+
+
+@router.get("/lab-results/{result_id}")
+def download_lab_result(
+    request: Request,
+    result_id: ObjectId,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    result = lab.get_for(db, user, result_id, _ip(request))
+    db.commit()
+    filename = f"ket-qua-xet-nghiem-{result.id}.{lab.ALLOWED_TYPES[result.content_type]}"
+    return Response(result.content, media_type=result.content_type, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Content-Type-Options": "nosniff",
     })
 
 
