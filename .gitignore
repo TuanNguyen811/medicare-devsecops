@@ -30,3 +30,9 @@ benchmark/results/raw/
 
 # DAST working directory (security/dast/run-dast.sh)
 dast-out/
+
+# Local deploy (deploy/pull-deploy.sh): tools, ZAP reports, history, temporary test copies
+deploy/.tools/
+deploy/reports/
+deploy/.history
+deploy/*-test.sh
