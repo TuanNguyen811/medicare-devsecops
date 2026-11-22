@@ -24,6 +24,8 @@ class ToolCall:
     id: str
     name: str
     arguments: str  # raw JSON text, exactly as the model produced it
+    # Provider data attached to the call, echoed back unchanged (Gemini 3 thought signatures).
+    extra_content: dict | None = None
 
 
 @dataclass
@@ -40,7 +42,8 @@ class LLMResponse:
         if self.tool_calls:
             message["tool_calls"] = [
                 {"id": c.id, "type": "function",
-                 "function": {"name": c.name, "arguments": c.arguments}}
+                 "function": {"name": c.name, "arguments": c.arguments},
+                 **({"extra_content": c.extra_content} if c.extra_content else {})}
                 for c in self.tool_calls
             ]
         if self.provider_blocks is not None:
