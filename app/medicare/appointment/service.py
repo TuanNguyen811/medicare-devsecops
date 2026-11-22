@@ -62,6 +62,16 @@ def bookable_doctors(db: Session) -> list[User]:
     return list(db.scalars(stmt).unique())
 
 
+def _check_slot(scheduled_at: datetime, now: datetime) -> None:
+    """R-13: a future slot on the 30-minute grid, within the booking horizon."""
+    if scheduled_at <= now:
+        raise AppointmentError("Không thể đặt lịch hẹn trong quá khứ")
+    if scheduled_at > now + BOOKING_HORIZON:
+        raise AppointmentError("Chỉ đặt lịch trong vòng 365 ngày tới")
+    if scheduled_at.minute not in SLOT_MINUTES or scheduled_at.second or scheduled_at.microsecond:
+        raise AppointmentError("Giờ hẹn phải theo mốc 30 phút (:00 hoặc :30)")
+
+
 def book(
     db: Session,
     user: User,
@@ -81,12 +91,7 @@ def book(
     if patient_id is None:
         raise AppointmentError("Bệnh nhân: chưa chọn bệnh nhân")
     patient = get_patient_for(db, user, patient_id)
-    if scheduled_at <= now:
-        raise AppointmentError("Không thể đặt lịch hẹn trong quá khứ")
-    if scheduled_at > now + BOOKING_HORIZON:
-        raise AppointmentError("Chỉ đặt lịch trong vòng 365 ngày tới")
-    if scheduled_at.minute not in SLOT_MINUTES or scheduled_at.second or scheduled_at.microsecond:
-        raise AppointmentError("Giờ hẹn phải theo mốc 30 phút (:00 hoặc :30)")
+    _check_slot(scheduled_at, now)
     doctor = db.get(User, doctor_id)
     if doctor is None or doctor.role != Role.DOCTOR or not doctor.is_active:
         raise AppointmentError("Bác sĩ: giá trị không hợp lệ")
@@ -105,6 +110,30 @@ def book(
     except IntegrityError as exc:  # uq_doctor_slot_active: the DB is the source of truth
         raise Conflict(DOUBLE_BOOKED) from exc
     return appt
+
+
+def get_for_reschedule(db: Session, user: User, appointment_id: int) -> Appointment:
+    """Missing and not-allowed both raise NotFound (R-15)."""
+    appt = db.get(Appointment, appointment_id)
+    if appt is None:
+        raise NotFound
+    if not policy.can_reschedule_appointment(user, appt):
+        metrics.authz_denied("appointment")
+        raise NotFound
+    return appt
+
+
+def reschedule(db: Session, appt: Appointment, scheduled_at: datetime, now: datetime) -> None:
+    """Move an appointment to another slot of the same doctor (R-13)."""
+    _check_slot(scheduled_at, now)
+    if scheduled_at == appt.scheduled_at:
+        raise AppointmentError("Thời gian hẹn mới trùng với thời gian hiện tại")
+    try:
+        with db.begin_nested():
+            appt.scheduled_at = scheduled_at
+            db.flush()
+    except IntegrityError as exc:  # uq_doctor_slot_active
+        raise Conflict(DOUBLE_BOOKED) from exc
 
 
 def confirm(appt: Appointment) -> None:

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from medicare import policy
 from medicare.appointment import service
-from medicare.appointment.schemas import FIELD_LABELS, AppointmentForm
+from medicare.appointment.schemas import FIELD_LABELS, AppointmentForm, SlotForm
 from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
@@ -54,7 +54,10 @@ def list_appointments(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    rows = [(a, policy.can_cancel_appointment(user, a)) for a in service.list_for(db, user)]
+    rows = [
+        (a, policy.can_cancel_appointment(user, a), policy.can_reschedule_appointment(user, a))
+        for a in service.list_for(db, user)
+    ]
     return render(
         request,
         "appointment/list.html",
@@ -95,15 +98,68 @@ def create_appointment(
         service.book(db, user, data.patient_id, data.doctor_id, data.scheduled_at,
                      data.reason, datetime.now(UTC))
     except ValidationError as exc:
-        errors = [f"{FIELD_LABELS.get(str(e['loc'][0]), e['loc'][0])}: giá trị không hợp lệ"
-                  for e in exc.errors(include_input=False)]
-        return _form_page(request, db, user, values=values, errors=errors, status_code=400)
+        return _form_page(request, db, user, values=values, errors=_validation_errors(exc),
+                          status_code=400)
     except service.AppointmentError as exc:
         return _form_page(request, db, user, values=values, errors=[str(exc)], status_code=400)
     except Conflict as exc:
         return _form_page(request, db, user, values=values, errors=[exc.detail], status_code=409)
     db.commit()
     flash(request, "Đã đặt lịch hẹn")
+    return RedirectResponse("/appointments", status_code=303)
+
+
+def _validation_errors(exc: ValidationError) -> list[str]:
+    return [f"{FIELD_LABELS.get(str(e['loc'][0]), e['loc'][0])}: giá trị không hợp lệ"
+            for e in exc.errors(include_input=False)]
+
+
+def _reschedule_page(request, appt, *, values, errors=None, status_code=200):
+    ctx = {
+        "appt": appt,
+        "values": values,
+        "errors": errors or [],
+        "status_labels": STATUS_LABELS,
+        "breadcrumbs": [*_CRUMBS, ("Đổi lịch hẹn", None)],
+    }
+    return render(request, "appointment/reschedule.html", ctx, status_code=status_code)
+
+
+@router.get("/appointments/{appointment_id}/reschedule")
+def reschedule_form(
+    request: Request,
+    appointment_id: ObjectId,
+    user: User = Depends(booker_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    appt = service.get_for_reschedule(db, user, appointment_id)
+    return _reschedule_page(request, appt, values={})
+
+
+@router.post("/appointments/{appointment_id}/reschedule", dependencies=[Depends(verify_csrf)])
+def reschedule_appointment(
+    request: Request,
+    appointment_id: ObjectId,
+    scheduled_at: str = Form(""),
+    user: User = Depends(booker_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    appt = service.get_for_reschedule(db, user, appointment_id)
+    values = {"scheduled_at": scheduled_at}
+    try:
+        data = SlotForm.model_validate(values)
+        service.reschedule(db, appt, data.scheduled_at, datetime.now(UTC))
+    except ValidationError as exc:
+        return _reschedule_page(request, appt, values=values, errors=_validation_errors(exc),
+                                status_code=400)
+    except service.AppointmentError as exc:
+        return _reschedule_page(request, appt, values=values, errors=[str(exc)],
+                                status_code=400)
+    except Conflict as exc:
+        return _reschedule_page(request, appt, values=values, errors=[exc.detail],
+                                status_code=409)
+    db.commit()
+    flash(request, "Đã đổi lịch hẹn")
     return RedirectResponse("/appointments", status_code=303)
 
 
