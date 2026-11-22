@@ -69,8 +69,8 @@ def _body(files: dict[str, str], sha: str) -> str:
     blob = base64.b64encode(gzip.compress(json.dumps(files).encode("utf-8"))).decode("ascii")
     lines = "\n".join(blob[i:i + 76] for i in range(0, len(blob), 76))
     return (f"{marker(sha)}\n"
-            "<details><summary>secagent: kết quả chạy trên máy người review (claude-mcp), "
-            f"chuyển cho pipeline của commit <code>{sha[:7]}</code></summary>\n\n"
+            f"<details><summary>secagent: kết quả review của commit <code>{sha[:7]}</code>"
+            "</summary>\n\n"
             f"```\n{lines}\n```\n</details>\n")
 
 
