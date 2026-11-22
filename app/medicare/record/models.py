@@ -31,3 +31,19 @@ class MedicalRecord(Base):
 
     doctor: Mapped["User"] = relationship(lazy="joined")
     patient: Mapped["Patient"] = relationship(lazy="joined")
+
+
+class RecordNote(Base):
+    """Formatted (HTML) note a doctor adds to a medical record."""
+
+    __tablename__ = "record_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    record_id: Mapped[int] = mapped_column(ForeignKey("medical_records.id"), index=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    author: Mapped["User"] = relationship(lazy="joined")

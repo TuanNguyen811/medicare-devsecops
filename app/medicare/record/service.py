@@ -8,10 +8,11 @@ from medicare.common import metrics
 from medicare.common.errors import NotFound
 from medicare.patient.models import Patient
 from medicare.patient.service import get_patient_for
-from medicare.record.models import MedicalRecord
+from medicare.record.models import MedicalRecord, RecordNote
 from medicare.record.schemas import RecordForm
 
 ENTITY = "record"
+MAX_NOTE_LENGTH = 10_000
 
 
 def _load(db: Session, record_id: int) -> tuple[MedicalRecord, Patient] | None:
@@ -89,3 +90,32 @@ def update_record(
     db.flush()
     audit.log_access(db, user, audit.UPDATE_RECORD, ENTITY, record.id, ip)
     return record
+
+
+class NoteError(ValueError):
+    """Rejected note; the message is user-facing."""
+
+
+def list_notes(db: Session, record_id: int) -> list[RecordNote]:
+    stmt = (
+        select(RecordNote)
+        .where(RecordNote.record_id == record_id)
+        .order_by(RecordNote.created_at, RecordNote.id)
+    )
+    return list(db.scalars(stmt).unique())
+
+
+def add_note(
+    db: Session, user: User, record: MedicalRecord, body: str, ip: str | None
+) -> RecordNote:
+    """Formatted note from the rich-text editor; only the attending doctor writes (R-02)."""
+    body = body.strip()
+    if not body:
+        raise NoteError("Ghi chú không được để trống")
+    if len(body) > MAX_NOTE_LENGTH:
+        raise NoteError(f"Ghi chú tối đa {MAX_NOTE_LENGTH} ký tự")
+    note = RecordNote(record_id=record.id, author_id=user.id, body=body)
+    db.add(note)
+    db.flush()
+    audit.log_access(db, user, audit.ADD_RECORD_NOTE, ENTITY, record.id, ip)
+    return note
