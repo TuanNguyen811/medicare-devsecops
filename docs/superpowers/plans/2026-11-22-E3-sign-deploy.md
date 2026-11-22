@@ -36,6 +36,19 @@
 - Phiên bản ghim trong `security/tool-versions.env`: `COSIGN_VERSION`, `COSIGN_SHA256` (linux-amd64), `COSIGN_WINDOWS_SHA256`, `KYVERNO_VERSION`, `KYVERNO_INSTALL_SHA256`.
 - Không thêm cờ bỏ qua kiểm tra chữ ký vào script deploy.
 
+
+## Thay đổi so với kế hoạch khi làm (ghi lại sau review)
+
+- **Seed:** không dùng Job `seed-job.yaml`. Mỗi lần deploy chạy `kubectl exec <pod mới> -- python -m medicare.seed`; lệnh không làm gì nếu dữ liệu đã có. Lý do:
+  - Checkov CKV_K8S_35 cấm Job đọc secret qua biến môi trường;
+  - không phải thay digest lần thứ hai;
+  - một lần chạy đầu bị lỗi giữa chừng không để lại database rỗng.
+- **PostgreSQL chạy uid 10070** thay vì 70, để qua Checkov CKV_K8S_40 (uid cao). Image chính thức hỗ trợ uid tùy ý. `PGDATA` đặt ở thư mục con.
+- **Digest được thay lúc render** (`kubectl kustomize | sed`), không dùng `set image` sau khi apply. Kyverno chặn digest toàn số 0 ngay ở bước apply.
+- **Policy Kyverno theo kiểu danh sách cho phép** cho cả namespace: xét `containers`, `initContainers`, `ephemeralContainers` và subresource `pods/ephemeralcontainers`; đặt `failurePolicy: Fail`.
+- **Image Kyverno kéo từ `ghcr.io/kyverno`** thay cho `reg.kyverno.io`, vì kéo từ `reg.kyverno.io` trong node Docker Desktop bị lỗi `short read`.
+- **Ký trên mọi lần chạy `main-ci`.** `:latest` chỉ được đẩy sau khi ký và attest thành công.
+
 ## Tasks
 
 ### Task 1: Ký trong `main-ci`

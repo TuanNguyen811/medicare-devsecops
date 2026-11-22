@@ -163,16 +163,17 @@ jobs:
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker tag "medicare-hms:${GITHUB_SHA}" "${image}:${GITHUB_SHA}"
           docker push "${image}:${GITHUB_SHA}"
-          if [ "$IS_MAIN" = "true" ]; then
-            docker tag "medicare-hms:${GITHUB_SHA}" "${image}:latest"
-            docker push "${image}:latest"
-          fi
           # Sign the digest, never a tag. Every run signs; the certificate records the workflow
           # and ref, and deploy (cosign verify, Kyverno) accepts main-ci.yml@refs/heads/main only.
           ref="$(docker inspect --format '{{index .RepoDigests 0}}' "${image}:${GITHUB_SHA}")"
           case "$ref" in "${image}@sha256:"*) ;; *) echo "::error::no digest for ${image}"; exit 1 ;; esac
           "$RUNNER_TEMP/tools/cosign" sign --yes "$ref"
           "$RUNNER_TEMP/tools/cosign" attest --yes --type cyclonedx --predicate sbom.cdx.json "$ref"
+          # :latest moves only once the image is signed and attested (deploy follows :latest).
+          if [ "$IS_MAIN" = "true" ]; then
+            docker tag "medicare-hms:${GITHUB_SHA}" "${image}:latest"
+            docker push "${image}:latest"
+          fi
           docker logout ghcr.io
           {
             echo "### Signed image"

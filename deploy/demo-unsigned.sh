@@ -14,9 +14,21 @@ overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":10001,
   "securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}'
 
 echo "Trying to run $image in namespace medicare ..." >&2
-if kubectl -n medicare run demo-unsigned --image="$image" --restart=Never --dry-run=server \
-     --overrides="$overrides"; then
+set +e
+out="$(kubectl -n medicare run demo-unsigned --image="$image" --restart=Never \
+  --dry-run=server --overrides="$overrides" 2>&1)"
+code=$?
+set -e
+echo "$out" >&2
+if [ "$code" -eq 0 ]; then
   echo "UNEXPECTED: the cluster accepted an image that main-ci did not sign on main." >&2
   exit 1
 fi
-echo "As expected: Kyverno refused the image." >&2
+# Any other refusal (no namespace, Pod Security, Kyverno missing) is not this demo.
+case "$out" in
+  *medicare-signed-images*)
+    echo "As expected: Kyverno (policy medicare-signed-images) refused the image." >&2 ;;
+  *)
+    echo "Refused, but not by the Kyverno image policy: check the cluster setup." >&2
+    exit 1 ;;
+esac
