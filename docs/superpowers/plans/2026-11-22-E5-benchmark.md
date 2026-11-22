@@ -53,16 +53,29 @@
   - 19 giây, khoảng 0,07 USD quy đổi.
 - [ ] Review toàn nhánh (Opus), PR, label, merge.
 
-## Bước 2b: Bộ công cụ benchmark (PR sửa `.github/`, cần label)
-- [ ] `.github/workflows/benchmark-scan.yml`: ma trận kịch bản; bước quét dùng chung với `pr-security.yml` (cùng lệnh và phiên bản); ZAP khi kịch bản sửa `app/`; upload SARIF.
-- [ ] `benchmark/`:
-  - `BASE_COMMIT`;
-  - `scenarios/<mã>/{patch.diff, scenario.yaml, ground_truth.yaml}`, có schema và kiểm tra schema;
-  - `run.py` (`fetch`, `agent`, chạy tiếp từ chỗ dừng, chờ khi chạm hạn mức, `--jobs`);
-  - `evaluate.py` (luật 5.3 cùng luật chấm DAST theo route, cách đếm NEEDS_REVIEW chặt và lỏng, nhóm theo `measured_detection`).
-
-  Có test cho phần chấm điểm.
-- [ ] Chạy thử thật một lượt C2 trên bản sạch. Review toàn nhánh (Opus), rồi mở PR.
+## Bước 2b: Bộ công cụ benchmark
+- [x] **2b-1 (PR #14):** `benchmark/scenario.py` dựng kịch bản tất định, và `.github/workflows/benchmark-scan.yml`.
+  - Có test SHA vàng; CI trên Linux khớp SHA tính trên máy Windows.
+  - Cây kịch bản trung tính: bỏ tài liệu thực nghiệm, có test bảo đảm không còn chữ nào lộ đáp án.
+  - Chạy thật với S00 (run `44997648299`): job quét và 5 job DAST đều đạt.
+- [x] **2b-2:** `benchmark/run.py`.
+  - `fetch`: tải artifact, gộp ZAP các vai trò, kiểm tra SHA, ghi `clusters.json`, `gate.json`, `gate_findings.json`.
+  - `agent`: worktree tạm, `claude-mcp`, `--jobs`, chạy tiếp từ chỗ dừng, chờ khi chạm hạn mức, dừng khi lỗi đăng nhập, `--validate`.
+- [x] **2b-2:** `benchmark/evaluate.py` chấm theo spec bổ sung §8.4 và sinh `results.md`. Có test cho phần khớp đáp án, cách chấm chặt và lỏng, loại phát hiện DAST có sẵn, và phần tổng hợp.
+- [x] Chạy thật C2 trên S00:
+  - 36 giây, 14 lượt gọi LLM, khoảng 0,10 USD quy đổi;
+  - agent kết luận 9 cụm ZAP có sẵn là TP. Kết luận này đúng: thiếu header bảo mật là vấn đề thật. Vì vậy có quy ước loại phát hiện DAST có sẵn khỏi TP/FP.
+- [x] Review toàn nhánh (Opus): 0 Critical, 7 Important, 6 Minor; đã sửa hết.
+  - **Cách chấm chặt đã đúng spec 5.3:** NEEDS_REVIEW tính là FP, không tính TP.
+  - **Phát hiện DAST có sẵn** nhận theo rule ZAP, bắt buộc có S00.
+  - **Lần chạy lỗi hoặc thiếu** tính là FN; ở cấp PR dùng quyết định truyền thống.
+  - **Bằng chứng:** khớp đáp án với bất kỳ đoạn nào.
+  - **Kết quả theo lần quét và phiên bản agent.**
+  - **Hạn mức của gói:** lần chạy dừng giữa chừng vì hạn mức được chạy lại.
+  - **Timeout:** giết cả cây tiến trình.
+  - **Kiểm chứng bản vá:** chạy trong khóa git.
+  - **Log:** không chứa đường dẫn máy.
+- [ ] PR.
 
 ## Bước 3: Tập dev và chốt prompt
 - [ ] S01, S07, S10, S14, D1: patch và đáp án; áp sạch lên `v0.3-baseline`; test của app vẫn đạt (trừ khi lỗi cài vào cố ý làm hỏng test).

@@ -24,6 +24,9 @@ Thumbs.db
 
 # Benchmark outputs (raw runs; summaries are committed explicitly)
 benchmark/results/raw/
+# Scanner SARIF of the benchmark scans: large; the workflow run keeps them, and fetch
+# writes what evaluate needs (clusters.json, gate.json, gate_findings.json) next to them.
+benchmark/results/scans/*/*/*.sarif
 
 # AI agent output (secagent --out)
 /out/
