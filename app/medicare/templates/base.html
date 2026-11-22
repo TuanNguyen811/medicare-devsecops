@@ -23,6 +23,7 @@
         {{ role_labels[current_user.role] }}. {{ current_user.full_name }}{% if current_user.department %} ({{ current_user.department.name }}){% endif %}
       </button>
       <ul class="dropdown-menu dropdown-menu-end">
+        <li><a class="dropdown-item" href="/account/profile"><i class="bi bi-person"></i> Thông tin cá nhân</a></li>
         <li><a class="dropdown-item" href="/account/password"><i class="bi bi-key"></i> Đổi mật khẩu</a></li>
         <li>
           <form method="post" action="/logout">
