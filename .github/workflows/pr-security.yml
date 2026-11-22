@@ -49,6 +49,8 @@ jobs:
       - name: DAST tooling tests
         working-directory: app
         run: uv run pytest -q ../security/dast/tests
+      - name: Benchmark tooling tests
+        run: uv run --no-project --python 3.12 --with pytest --with pyyaml==6.0.2 pytest benchmark/tests -q
       - name: AI agent tests and lint
         working-directory: agent
         run: |

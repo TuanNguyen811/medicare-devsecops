@@ -1,0 +1,3 @@
+# Bản gốc: PR không đổi mã nguồn, nên không có lỗ hổng nào được cài.
+# Kết quả quét của S00 cũng là DAST gốc, dùng lại cho kịch bản không sửa app/.
+findings: []
