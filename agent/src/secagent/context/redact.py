@@ -11,7 +11,7 @@ _PATTERNS = (
     re.compile(r"\b(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b"),
     re.compile(r"\beyJ[\w-]+\.[\w-]+\.[\w-]+"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"),
-    re.compile(r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"),  # OpenAI / Anthropic / DeepSeek keys
+    re.compile(r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"),  # OpenAI / Anthropic keys
     re.compile(r"\b(?:sk|rk)_live_[0-9A-Za-z]{16,}"),  # Stripe
     re.compile(r"\bxox[abprs]-[0-9A-Za-z-]{10,}"),  # Slack
 )

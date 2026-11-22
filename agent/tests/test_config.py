@@ -12,12 +12,12 @@ def settings(env=None, **kw) -> Settings:
 def test_settings_from_env():
     s = settings()
     assert (s.provider, s.client, s.base_url, s.model) == (
-        "deepseek", "openai", "https://api.deepseek.com", "deepseek-chat")
-    assert s.temperature == 0 and s.reasoning_effort is None and s.thinking is False
-    assert settings({"LLM_MODEL": ""}).model == "deepseek-chat"
-    assert settings(thinking=True).model == "deepseek-reasoner"
-    assert settings({"LLM_MODEL": "deepseek-v9"}, thinking=True).model == "deepseek-v9"
-    assert settings({"LLM_MODEL": "deepseek-v9"}, model_override="cli-model").model == "cli-model"
+        "anthropic", "anthropic", None, "claude-opus-5-5")
+    assert s.temperature is None and s.reasoning_effort is None and s.thinking is False
+    assert settings({"LLM_MODEL": ""}).model == "claude-opus-5-5"
+    assert settings(thinking=True).model == "claude-opus-5-5"
+    assert settings({"LLM_MODEL": "claude-x"}, thinking=True).model == "claude-x"
+    assert settings({"LLM_MODEL": "claude-x"}, model_override="cli-model").model == "cli-model"
     assert settings({"LLM_BASE_URL": "https://proxy.example/v1"}).base_url == \
         "https://proxy.example/v1"
     with pytest.raises(ConfigError):
@@ -55,14 +55,19 @@ def test_provider_presets(provider):
             settings({"LLM_PROVIDER": provider, "LLM_TEMPERATURE": "0"})
 
 
-def test_openai_compatible_requires_base_url_and_model():
-    env = {"LLM_PROVIDER": "openai-compatible"}
+def test_claude_mcp_needs_no_key_and_never_runs_in_ci():
+    env = {"LLM_PROVIDER": "claude-mcp"}
+    for mode in ("cli", "benchmark"):
+        s = Settings.from_env(env, mode=mode)
+        assert (s.client, s.model, s.api_key, s.temperature) == (
+            "claude-mcp", "claude-sonnet-5-5", "", None)
+    # A key in the environment is never forwarded: Claude Code uses its own login.
+    assert Settings.from_env({**env, **KEY}, mode="benchmark").api_key == ""
+    assert Settings.from_env(env, mode="benchmark", model_override="m").model == "m"
     with pytest.raises(ConfigError):
-        settings(env)
+        Settings.from_env({**env, **KEY}, mode="ci")
     with pytest.raises(ConfigError):
-        settings({**env, "LLM_BASE_URL": "http://localhost:11434/v1"})
-    s = settings({**env, "LLM_BASE_URL": "http://localhost:11434/v1", "LLM_MODEL": "qwen3"})
-    assert (s.client, s.model, s.temperature) == ("openai", "qwen3", 0)
+        Settings.from_env(env, mode="benchmark", thinking=True)
 
 
 def test_unknown_provider_and_bad_temperature_rejected():
@@ -70,10 +75,11 @@ def test_unknown_provider_and_bad_temperature_rejected():
         settings({"LLM_PROVIDER": "skynet"})
     with pytest.raises(ConfigError):
         settings({"LLM_TEMPERATURE": "hot"})
-    assert settings({"LLM_TEMPERATURE": "none"}).temperature is None
-    assert settings({"LLM_TEMPERATURE": "0.2"}).temperature == 0.2
-    assert settings({"LLM_PROVIDER": "DeepSeek"}).provider == "deepseek"
-    assert set(PROVIDERS) == {"deepseek", "openai", "gemini", "anthropic", "openai-compatible"}
+    gemini = {"LLM_PROVIDER": "gemini"}
+    assert settings({**gemini, "LLM_TEMPERATURE": "none"}).temperature is None
+    assert settings({**gemini, "LLM_TEMPERATURE": "0.2"}).temperature == 0.2
+    assert settings({"LLM_PROVIDER": "Gemini"}).provider == "gemini"
+    assert set(PROVIDERS) == {"anthropic", "openai", "gemini", "claude-mcp"}
 
 
 @pytest.mark.parametrize("n,limit", [(0, 10), (5, 25), (15, 55), (17, 60), (100, 60)])
@@ -82,8 +88,8 @@ def test_step_limit(n, limit):
 
 
 def test_cost_usd():
-    assert cost_usd(1_000_000, 1_000_000, settings()) == pytest.approx(0.70)
-    assert cost_usd(1_000_000, 1_000_000, settings({"LLM_PROVIDER": "anthropic"})) == 24.0
+    assert cost_usd(1_000_000, 1_000_000, settings()) == 24.0  # anthropic by default
+    assert cost_usd(1_000_000, 1_000_000, settings({"LLM_PROVIDER": "openai"})) == 0.0
     assert cost_usd(1_000_000, 1_000_000, settings({"LLM_PROVIDER": "gemini"})) == 0.0
     priced = settings({"LLM_PROVIDER": "anthropic", "LLM_PRICE_IN_PER_M": "3",
                        "LLM_PRICE_OUT_PER_M": "15"})

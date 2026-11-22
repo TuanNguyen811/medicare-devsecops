@@ -14,6 +14,7 @@ MAX_BYTES = 1_000_000
 MAX_LINES = 400
 _SKIP_DIRS = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache",
               ".pytest_cache", ".ruff_cache"}
+_RUN_DIRS = {"sarif", "out"}
 _SECRET_NAME = re.compile(r"^(\.env(\..+)?|id_rsa.*|.*\.(pem|key))$")
 _CLOSE_TAG = re.compile(r"<\s*/\s*untrusted-code", re.IGNORECASE)
 
@@ -30,6 +31,8 @@ def _is_denied(rel: str) -> bool:
     parts = rel.lower().split("/")  # case-insensitive: .ENV is .env on Windows and macOS
     name = parts[-1]
     if ".git" in parts:
+        return True
+    if parts[0] in _RUN_DIRS:  # raw (unredacted) SARIF, and the agent's own earlier outputs
         return True
     return name != ".env.example" and bool(_SECRET_NAME.match(name))
 

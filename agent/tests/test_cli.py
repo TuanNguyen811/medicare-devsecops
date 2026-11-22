@@ -94,7 +94,7 @@ def test_cli_end_to_end_writes_contract_outputs(tmp_path):
         f"semgrep:medicare.sqlalchemy-text-fstring:{SERVICE}:{line}"])
     assert entry.verdict == "TP" and entry.fix.patch == fix_patch(line)
     assert (report.meta.llm_calls, report.meta.model, report.meta.tokens_in) == (
-        2, "deepseek-chat", 200)
+        2, "claude-opus-5-5", 200)
     review = json.loads((out / "review.json").read_text(encoding="utf-8"))
     assert review["comments"][0]["line"] == line and FIXED in review["comments"][0]["body"]
 

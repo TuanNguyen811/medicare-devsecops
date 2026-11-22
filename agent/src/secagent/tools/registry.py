@@ -238,6 +238,6 @@ def build_read_tools(fs: RepoFS, diff: PrDiff, clusters: list[Cluster], requirem
                           DependencyArgs, lambda a: get_dependency_usage(fs, a.package)))
     if requirements is not None:
         specs.append(ToolSpec("read_security_requirements",
-                              "MediCare business security rules R-01..R-15 (all, or one).",
+                              "MediCare business security rules R-01..R-19 (all, or one).",
                               RequirementsArgs, lambda a: _requirement(requirements, a.rule_id)))
     return specs

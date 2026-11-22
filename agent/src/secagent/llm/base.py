@@ -45,8 +45,6 @@ class LLMResponse:
             ]
         if self.provider_blocks is not None:
             message["anthropic_content"] = self.provider_blocks
-        elif self.reasoning is not None:
-            message["reasoning_content"] = self.reasoning  # DeepSeek wants it back in the turn
         return message
 
 
@@ -75,6 +73,10 @@ def with_retries[T](fn: Callable[[], T], *, attempts: int, sleep: Callable[[floa
 
 def make_client(settings: Settings, *, http_client: httpx2.Client | None = None,
                 sleep: Callable[[float], object] = time.sleep) -> LLMClient:
+    if settings.client == "claude-mcp":
+        from secagent.llm.claude_mcp import ClaudeMcpRunner
+
+        return ClaudeMcpRunner(settings)
     if settings.client == "anthropic":
         from secagent.llm.anthropic_client import AnthropicClient
 

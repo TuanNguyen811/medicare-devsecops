@@ -74,8 +74,8 @@ def render_markdown(report: Report, head_sha: str | None = None) -> str:
     else:
         parts.append("Không có phát hiện nào cần thẩm định.")
     m = report.meta
-    head = (f"Engine: claude-code (model `{m.model}`)" if m.strategy == "claude-code"
-            else f"Model `{m.model}` · chiến lược `{m.strategy}`")
+    head = (f"LLM `{m.provider}` · " if m.provider else "") + (
+        f"model `{m.model}` · chiến lược `{m.strategy}`")
     footer = ["", "---", (
         f"<sub>{head} · {m.duration_s:.1f} s · "
         f"{m.llm_calls} lần gọi LLM · {m.tool_calls} lần gọi công cụ · {m.tokens_in} token vào /"

@@ -1,4 +1,4 @@
-"""Chat Completions client for DeepSeek, OpenAI, Gemini and any OpenAI-compatible endpoint."""
+"""Chat Completions client for OpenAI and Gemini (OpenAI-compatible endpoint)."""
 
 from __future__ import annotations
 
@@ -61,11 +61,9 @@ class OpenAIChatClient:
                           c.function.arguments or "{}")
                  for index, c in enumerate(message.tool_calls or [])
                  if getattr(c, "function", None)]
-        reasoning = getattr(message, "reasoning_content", None) or (
-            (message.model_extra or {}).get("reasoning_content"))
         usage = response.usage
         return LLMResponse(
-            content=message.content, tool_calls=calls, reasoning=reasoning,
+            content=message.content, tool_calls=calls,
             tokens_in=usage.prompt_tokens if usage else 0,
             tokens_out=usage.completion_tokens if usage else 0,
         )

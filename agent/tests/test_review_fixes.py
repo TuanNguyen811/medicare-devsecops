@@ -133,7 +133,7 @@ def test_registry_tolerates_missing_names_and_redacts_outputs():
 # --- I7: malformed provider output -------------------------------------------------------
 
 
-def _settings(provider="deepseek") -> Settings:
+def _settings(provider="gemini") -> Settings:
     return Settings.from_env({"LLM_API_KEY": "k", "LLM_PROVIDER": provider}, mode="ci")
 
 
@@ -141,7 +141,7 @@ def _transport(response: httpx.Response) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(lambda request: response))
 
 
-@pytest.mark.parametrize("client_class,provider", [(OpenAIChatClient, "deepseek"),
+@pytest.mark.parametrize("client_class,provider", [(OpenAIChatClient, "gemini"),
                                                    (AnthropicClient, "anthropic")])
 def test_malformed_response_becomes_llm_error(client_class, provider):
     html = httpx.Response(200, text="<html>oops</html>", headers={"content-type": "text/html"})

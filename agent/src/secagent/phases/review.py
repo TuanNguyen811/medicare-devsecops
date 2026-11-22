@@ -5,6 +5,11 @@ vulnerabilities. A session ends when the model calls `finish`, or at the step li
 extra turn asks it to submit what is missing. The tool list never changes inside a session
 (Claude's preserved thinking treats a changed tool set as an edited history), so on that last
 turn read tools are refused at execution time instead of being withdrawn.
+
+With LLM mode `claude-mcp` the conversation runs inside one `claude -p` process per session
+(llm/claude_mcp.py); its tool calls come back here and go through the same `_execute` as in
+API mode. A follow-up (step limit reached, coverage check) is a new process with the session's
+prompt plus the follow-up instruction.
 """
 
 from __future__ import annotations
@@ -36,6 +41,10 @@ HUNT = ("Also hunt for vulnerabilities the scanners missed in the code changed b
         "report each one with `report_finding`.")
 NO_HUNT = ("Hunting for new vulnerabilities happens in another session; only judge the "
            "clusters listed.")
+RESUMED = ("Phiên này tiếp tục một phiên review trước đó của cùng Pull Request, chỉ cho các cụm "
+           "liệt kê ở trên. Đã nộp (được giữ nguyên): {done}. Không nộp lại các mục này và "
+           "không báo thêm phát hiện mới. {instruction}")
+MISSING = "Chưa có kết luận cho: {missing}. Dùng submit_verdict cho từng cụm này, rồi gọi finish."
 CONTEXT_LINES = 800
 
 EventSink = Callable[[str, dict], None]
@@ -77,6 +86,8 @@ class ReviewOutcome:
     sessions: list[Session] = field(default_factory=list)
     unstarted: list[str] = field(default_factory=list)
     started: float = 0.0
+    cost_usd: float | None = None  # reported by the LLM mode itself (claude-mcp)
+    model: str | None = None  # the model that actually answered, when the mode reports it
 
 
 def budget_left(outcome: ReviewOutcome, settings: Settings,
@@ -132,8 +143,10 @@ class Session:
                  clock: Callable[[], float], single_shot: bool) -> None:
         self.ctx, self.outcome, self.llm, self.trace = ctx, outcome, llm, trace
         self.on_event, self.clock = on_event, clock
+        self.batch = batch
         self.batch_ids = {c.id for c in batch}
         self.hunt = hunt
+        self.last_subtype: str | None = None  # claude-mcp: how the last process ended
         self.finished = False
         self.forced = False
         self._finish_warned = False
@@ -156,6 +169,7 @@ class Session:
             {"role": "system", "content": load_prompt("system.md")},
             {"role": "user", "content": build_user_prompt(ctx, batch, hunt, single_shot)},
         ]
+        self.external = hasattr(llm, "run_session")  # claude-mcp: the model runs elsewhere
 
     # --- submission tools ---------------------------------------------------------------
 
@@ -174,6 +188,10 @@ class Session:
                                                              if replaced else "")
 
     def _report(self, args: NewFindingArgs) -> str:
+        key = _finding_key(args)
+        for index, known in enumerate(self.outcome.new_findings, start=1):
+            if _finding_key(known) == key:
+                return f"OK: trùng với phát hiện mới #{index}, không ghi thêm"
         self.outcome.new_findings.append(args)
         self.trace.event("new_finding", title=args.title, severity=args.severity)
         return f"OK: đã ghi phát hiện mới #{len(self.outcome.new_findings)}"
@@ -216,21 +234,85 @@ class Session:
             self.messages.append({"role": "user", "content": NUDGE})
             return True
         for tool_call in response.tool_calls:
-            if self.forced and tool_call.name in self.read_tools:
-                result = STEP_EXHAUSTED
-            else:
-                result = self.registry.call(tool_call.name, tool_call.arguments)
-            outcome.tool_calls += 1
+            result = self._execute(tool_call.name, tool_call.arguments)
             self.messages.append({"role": "tool", "tool_call_id": tool_call.id,
                                   "content": result})
-            event = {"name": tool_call.name, "arguments": tool_call.arguments[:300],
-                     "ok": not result.startswith("ERROR"), "result": result[:300]}
-            self.trace.event("tool", **event)
-            self.on_event("tool", event)
+        return True
+
+    def _execute(self, name: str, arguments: str) -> str:
+        """Run one tool call of the model, whatever the LLM mode."""
+        if self.forced and name in self.read_tools:
+            result = STEP_EXHAUSTED
+        else:
+            result = self.registry.call(name, arguments)
+        self.outcome.tool_calls += 1
+        event = {"name": name, "arguments": arguments[:300],
+                 "ok": not result.startswith("ERROR"), "result": result[:300]}
+        self.trace.event("tool", **event)
+        self.on_event("tool", event)
+        return result
+
+    def _submitted(self) -> str:
+        verdicts = [f"{cid}={self.outcome.verdicts[cid].verdict}"
+                    for cid in sorted(self.batch_ids & set(self.outcome.verdicts),
+                                      key=_cluster_key)]
+        found = [f"{f.cwe} {f.evidence[0].file}:{f.evidence[0].start_line}"
+                 for f in self.outcome.new_findings]
+        parts = ([", ".join(verdicts)] if verdicts else []) + (
+            [f"phát hiện mới: {'; '.join(found)}"] if found else [])
+        return "; ".join(parts) or "chưa có"
+
+    def _external(self, limit: int, instruction: str | None = None) -> bool:
+        """One `claude -p` process for this session (claude-mcp). False when it failed.
+
+        A follow-up (instruction given) is a new process: its prompt covers only the clusters
+        still missing, never hunts, and lists what was already submitted.
+        """
+        outcome, settings = self.outcome, self.ctx.settings
+        prompt = self.messages[1]["content"]
+        if instruction:
+            pending = set(self.missing())
+            clusters = [c for c in self.batch if c.id in pending]
+            prompt = (build_user_prompt(self.ctx, clusters, hunt=False, single_shot=False)
+                      + "\n\n" + RESUMED.format(done=self._submitted(), instruction=instruction))
+        remaining = settings.time_budget_s - (self.clock() - outcome.started)
+        run = self.llm.run_session(system=self.messages[0]["content"], prompt=prompt,
+                                   tools=self.registry.schemas(), call=self._execute,
+                                   max_turns=limit, timeout_s=remaining)
+        outcome.llm_calls += run.turns
+        outcome.tokens_in += run.tokens_in
+        outcome.tokens_out += run.tokens_out
+        outcome.cost_usd = (outcome.cost_usd or 0.0) + run.cost_usd
+        outcome.model = run.model or outcome.model
+        self.last_subtype = run.subtype
+        info = {"step": outcome.llm_calls, "limit": limit, "content": "", "tool_calls": [],
+                "tokens_in": run.tokens_in, "tokens_out": run.tokens_out,
+                "turns": run.turns, "subtype": run.subtype}
+        self.trace.event("llm", **info)
+        self.on_event("llm", info)
+        if not run.ok:
+            outcome.error = run.error
+            self.trace.event("llm_error", error=run.error, stderr=run.stderr_tail)
+            return False
+        return True
+
+    def _drive_external(self, limit: int) -> bool:
+        if not self._external(limit):
+            return False
+        if self.last_subtype == "error_max_turns":
+            return self.finished  # the step limit, as in API mode
+        if not self.finished:  # the model stopped without calling finish: the session is over
+            self.finished = True
+            self.trace.event("finish", summary="", missing=self.missing(), implicit=True)
         return True
 
     def drive(self, limit: int) -> bool:
         """Run up to `limit` LLM calls; True when the model finished the session."""
+        if self.external:
+            if not budget_left(self.outcome, self.ctx.settings, self.clock):
+                self.outcome.limit_hit = True
+                return False
+            return self._drive_external(limit)
         for _ in range(limit):
             if not budget_left(self.outcome, self.ctx.settings, self.clock):
                 self.outcome.limit_hit = True
@@ -245,6 +327,9 @@ class Session:
         """Step limit reached: one last turn, same tools, read tools refused."""
         self.forced = True
         missing = ", ".join(self.missing()) or "không còn cụm nào"
+        if self.external:  # one more process, read tools refused, room for submit + finish
+            self._external(2, FORCE.format(missing=missing))
+            return
         self.messages.append({"role": "user", "content": FORCE.format(missing=missing)})
         self._turn("required", 1)
 
@@ -252,10 +337,19 @@ class Session:
         """Coverage check (phase 2): ask once for the clusters still without a verdict."""
         self._finish_warned = True
         self.finished = False
-        self.messages.append({"role": "user", "content": (
-            f"Chưa có kết luận cho: {', '.join(missing)}. Dùng submit_verdict cho từng cụm "
-            "này, rồi gọi finish.")})
+        instruction = MISSING.format(missing=", ".join(missing))
+        if self.external:
+            if budget_left(self.outcome, self.ctx.settings, self.clock):
+                self._external(limit, instruction)
+                self.finished = True
+            return
+        self.messages.append({"role": "user", "content": instruction})
         self.drive(limit)
+
+
+def _finding_key(f: NewFindingArgs) -> tuple[str, str, int]:
+    first = f.evidence[0]
+    return f.cwe, first.file, first.start_line
 
 
 def run_review(ctx: ReviewContext, llm: LLMClient, trace: Trace,
@@ -277,7 +371,9 @@ def run_review(ctx: ReviewContext, llm: LLMClient, trace: Trace,
         session = Session(ctx, batch, hunt=index == 0, outcome=outcome, llm=llm, trace=trace,
                           on_event=on_event, clock=clock, single_shot=single_shot)
         outcome.sessions.append(session)
-        limit = 1 if single_shot else step_limit(len(batch))
+        # Single shot is one model call. Claude Code counts the closing answer after the
+        # submission tools' results as a turn of its own, hence 2 there.
+        limit = (2 if session.external else 1) if single_shot else step_limit(len(batch))
         outcome.step_limit += limit
         trace.event("session", batch=[c.id for c in batch], hunt=index == 0, limit=limit)
         finished = session.drive(limit)
