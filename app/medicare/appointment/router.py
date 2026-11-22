@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
@@ -13,8 +13,8 @@ from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
 from medicare.common.errors import Conflict
-from medicare.common.ids import ObjectId
-from medicare.common.templating import flash, render
+from medicare.common.ids import ObjectId, parse_id
+from medicare.common.templating import VN_TZ, flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
 
@@ -30,14 +30,17 @@ STATUS_LABELS = {
     "CANCELLED": ("Đã hủy", "secondary"),
 }
 _CRUMBS = [("Trang chủ", "/"), ("Lịch hẹn", "/appointments")]
+QUICK_REASON = "Khám nhanh"
+
+
+def _patients_for(db, user):
+    if user.role != Role.RECEPTIONIST:
+        return []
+    return list(db.scalars(select(Patient).order_by(Patient.code)).unique())
 
 
 def _form_page(request, db, user, *, values, errors=None, status_code=200):
-    patients = (
-        list(db.scalars(select(Patient).order_by(Patient.code)).unique())
-        if user.role == Role.RECEPTIONIST
-        else []
-    )
+    patients = _patients_for(db, user)
     ctx = {
         "values": values,
         "errors": errors or [],
@@ -102,6 +105,75 @@ def create_appointment(
         return _form_page(request, db, user, values=values, errors=[str(exc)], status_code=400)
     except Conflict as exc:
         return _form_page(request, db, user, values=values, errors=[exc.detail], status_code=409)
+    db.commit()
+    flash(request, "Đã đặt lịch hẹn")
+    return RedirectResponse("/appointments", status_code=303)
+
+
+def _parse_day(value: str) -> date | None:
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+def _quick_page(request, db, user, *, values, errors=None, status_code=200):
+    doctors = service.bookable_doctors(db)
+    doctor_id = parse_id(values.get("doctor_id", ""))
+    doctor = next((d for d in doctors if d.id == doctor_id), None)
+    day = _parse_day(values.get("day", "")) or datetime.now(VN_TZ).date()
+    slots = service.free_slots(db, doctor.id, day, datetime.now(UTC)) if doctor else []
+    ctx = {
+        "values": values | {"day": day.isoformat()},
+        "errors": errors or [],
+        "doctor": doctor,
+        "doctors": doctors,
+        "patients": _patients_for(db, user),
+        "slots": slots,
+        "breadcrumbs": [*_CRUMBS, ("Đặt lịch nhanh", None)],
+    }
+    return render(request, "appointment/quick.html", ctx, status_code=status_code)
+
+
+@router.get("/appointments/quick")
+def quick_booking_page(
+    request: Request,
+    doctor_id: str = "",
+    day: str = "",
+    patient_id: str = "",
+    reason: str = QUICK_REASON,
+    user: User = Depends(booker_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    values = {"doctor_id": doctor_id, "day": day, "patient_id": patient_id, "reason": reason}
+    return _quick_page(request, db, user, values=values)
+
+
+@router.post("/appointments/quick", dependencies=[Depends(verify_csrf)])
+def quick_book(
+    request: Request,
+    patient_id: str = Form(""),
+    doctor_id: str = Form(""),
+    scheduled_at: str = Form(""),
+    reason: str = Form(QUICK_REASON),
+    user: User = Depends(booker_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    values = {"patient_id": patient_id, "doctor_id": doctor_id,
+              "scheduled_at": scheduled_at, "reason": reason}
+    try:
+        data = AppointmentForm.model_validate(values)
+        service.book(db, user, data.patient_id, data.doctor_id, data.scheduled_at,
+                     data.reason, datetime.now(UTC), minutes=service.QUICK_VISIT_MINUTES)
+    except ValidationError:
+        return _quick_page(request, db, user, values=values,
+                           errors=["Dữ liệu đặt lịch không hợp lệ"], status_code=400)
+    except service.AppointmentError as exc:
+        return _quick_page(request, db, user, values=values, errors=[str(exc)],
+                           status_code=400)
+    except Conflict as exc:
+        return _quick_page(request, db, user, values=values, errors=[exc.detail],
+                           status_code=409)
     db.commit()
     flash(request, "Đã đặt lịch hẹn")
     return RedirectResponse("/appointments", status_code=303)

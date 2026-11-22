@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
@@ -177,3 +178,83 @@ def test_nurse_list_scoped_to_department(client, db):
     login(client, make_user(db, Role.NURSE, department=noi))
     html = client.get("/appointments").text
     assert p_noi.code in html and p_ngoai.code not in html
+
+
+def quick_book(client, **data):
+    data.setdefault("reason", "Khám nhanh")
+    data["csrf_token"] = csrf_token(client, "/appointments/quick")
+    return client.post("/appointments/quick", data=data, follow_redirects=False)
+
+
+def free_slot_labels(client, doctor, days=1):
+    day = (date.today() + timedelta(days=days)).isoformat()
+    html = client.get("/appointments/quick", params={"doctor_id": doctor.id, "day": day}).text
+    return re.findall(r"data-slot>(\d\d:\d\d)<", html)
+
+
+def test_patient_quick_books_fifteen_minute_slot(client, db):
+    doc = setup_doctor(db)
+    me = make_patient(db)
+    login(client, make_user(db, Role.PATIENT, patient=me))
+    r = quick_book(client, doctor_id=str(doc.id), scheduled_at=slot(hour=9, minute=15))
+    assert r.status_code == 303
+    appt = db.scalar(select(Appointment).where(Appointment.patient_id == me.id))
+    assert appt.scheduled_at == slot_dt(hour=9, minute=15) and appt.duration_minutes == 15
+    assert appt.status == AppointmentStatus.REQUESTED
+
+
+def test_receptionist_quick_books_for_patient(client, db):
+    doc = setup_doctor(db)
+    p = make_patient(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    r = quick_book(client, patient_id=str(p.id), doctor_id=str(doc.id), scheduled_at=slot())
+    assert r.status_code == 303
+    assert db.scalar(select(Appointment).where(Appointment.patient_id == p.id)) is not None
+
+
+def test_free_slots_skip_busy_time(client, db):
+    doc = setup_doctor(db)
+    make_appt(db, make_patient(db), doc, hour=9)  # 09:00-09:30
+    login(client, make_user(db, Role.PATIENT, patient=make_patient(db)))
+    labels = free_slot_labels(client, doc)
+    assert labels[0] == "08:00" and labels[-1] == "16:45"
+    assert "08:45" in labels and "09:30" in labels
+    assert "09:00" not in labels and "09:15" not in labels
+
+
+def test_quick_booking_overlapping_visit_rejected_409(client, db):
+    doc = setup_doctor(db)
+    make_appt(db, make_patient(db), doc, hour=9)
+    login(client, make_user(db, Role.PATIENT, patient=make_patient(db)))
+    r = quick_book(client, doctor_id=str(doc.id), scheduled_at=slot(hour=9, minute=15))
+    assert r.status_code == 409
+
+
+def test_regular_booking_over_quick_visit_rejected_409(client, db):
+    doc = setup_doctor(db)
+    p1, p2 = make_patient(db), make_patient(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    first = quick_book(client, patient_id=str(p1.id), doctor_id=str(doc.id),
+                       scheduled_at=slot(hour=9, minute=15))
+    second = book(client, patient_id=str(p2.id), doctor_id=str(doc.id), scheduled_at=slot())
+    assert first.status_code == 303 and second.status_code == 409
+
+
+def test_quick_booking_off_grid_or_past_rejected_400(client, db):
+    doc = setup_doctor(db)
+    login(client, make_user(db, Role.PATIENT, patient=make_patient(db)))
+    assert quick_book(client, doctor_id=str(doc.id),
+                      scheduled_at=slot(minute=10)).status_code == 400
+    assert quick_book(client, doctor_id=str(doc.id),
+                      scheduled_at=slot(days=-1)).status_code == 400
+
+
+def test_quick_booking_not_for_doctors(client, db):
+    doc = setup_doctor(db)
+    login(client, doc)
+    assert client.get("/appointments/quick").status_code == 403
+
+
+def test_quick_booking_linked_from_list(client, db):
+    login(client, make_user(db, Role.PATIENT, patient=make_patient(db)))
+    assert 'href="/appointments/quick"' in client.get("/appointments").text

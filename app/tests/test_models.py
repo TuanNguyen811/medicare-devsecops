@@ -15,19 +15,15 @@ def test_migration_creates_all_tables(db):
             "prescriptions", "prescription_items", "invoices", "audit_logs"} <= names
 
 
-def test_active_slot_unique_but_cancelled_allows_rebook(db):
+def test_appointment_duration_defaults_to_thirty_minutes(db):
     doc = make_user(db, Role.DOCTOR)
     p = make_patient(db)
     t = datetime.now(UTC).replace(microsecond=0) + timedelta(days=1)
-    db.add(Appointment(patient_id=p.id, doctor_id=doc.id, scheduled_at=t, reason="x",
-                       status=AppointmentStatus.CANCELLED, created_by_id=doc.id))
-    db.add(Appointment(patient_id=p.id, doctor_id=doc.id, scheduled_at=t, reason="x",
-                       status=AppointmentStatus.REQUESTED, created_by_id=doc.id))
-    db.flush()  # cancelled does not block
-    db.add(Appointment(patient_id=p.id, doctor_id=doc.id, scheduled_at=t, reason="y",
-                       status=AppointmentStatus.CONFIRMED, created_by_id=doc.id))
-    with pytest.raises(IntegrityError):
-        db.flush()
+    db.execute(text(
+        "insert into appointments (patient_id, doctor_id, scheduled_at, reason, status, "
+        "created_by_id) values (:p, :d, :t, 'x', 'REQUESTED', :d)"
+    ), {"p": p.id, "d": doc.id, "t": t})
+    assert db.execute(text("select duration_minutes from appointments")).scalar_one() == 30
 
 
 def test_status_stored_as_plain_string(db):

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Đặt lịch nhanh{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Đặt lịch khám nhanh (15 phút)</h1>
+{% if errors %}
+<div class="alert alert-danger py-2" role="alert">
+  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="card mc-card">
+  <div class="card-body">
+    <form class="row g-2 mb-3" method="get" action="/appointments/quick">
+      {% if patients %}
+      <div class="col-sm-6 col-lg-3">
+        <label class="form-label small mb-0" for="patient_id">Bệnh nhân</label>
+        <select class="form-select form-select-sm" id="patient_id" name="patient_id" required>
+          <option value="">Chọn bệnh nhân</option>
+          {% for p in patients %}
+          <option value="{{ p.id }}"{% if values.patient_id|string == p.id|string %} selected{% endif %}>{{ p.code }} - {{ p.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="col-sm-6 col-lg-3">
+        <label class="form-label small mb-0" for="doctor_id">Bác sĩ</label>
+        <select class="form-select form-select-sm" id="doctor_id" name="doctor_id" required>
+          <option value="">Chọn bác sĩ</option>
+          {% for d in doctors %}
+          <option value="{{ d.id }}"{% if values.doctor_id|string == d.id|string %} selected{% endif %}>{{ d.full_name }}{% if d.department %} ({{ d.department.name }}){% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-4 col-lg-2">
+        <label class="form-label small mb-0" for="day">Ngày khám</label>
+        <input class="form-control form-control-sm" id="day" name="day" type="date" value="{{ values.day }}">
+      </div>
+      <div class="col-sm-8 col-lg-3">
+        <label class="form-label small mb-0" for="reason">Lý do khám</label>
+        <input class="form-control form-control-sm" id="reason" name="reason" value="{{ values.reason or '' }}" maxlength="500">
+      </div>
+      <div class="col-auto align-self-end"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-search"></i> Xem giờ trống</button></div>
+    </form>
+    {% if doctor %}
+    <p class="small text-secondary mb-2">Giờ trống của {{ doctor.full_name }} ngày {{ values.day }}. Bấm vào một giờ để đặt lịch.</p>
+    <div class="d-flex flex-wrap gap-2">
+      {% for s in slots %}
+      <form method="post" action="/appointments/quick">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="patient_id" value="{{ values.patient_id or '' }}">
+        <input type="hidden" name="doctor_id" value="{{ doctor.id }}">
+        <input type="hidden" name="scheduled_at" value="{{ s.strftime('%Y-%m-%dT%H:%M') }}">
+        <input type="hidden" name="reason" value="{{ values.reason or '' }}">
+        <button class="btn btn-outline-success btn-sm" type="submit" data-slot>{{ s.strftime('%H:%M') }}</button>
+      </form>
+      {% else %}
+      <span class="text-secondary small">Không còn giờ trống trong ngày này</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

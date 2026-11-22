@@ -1,7 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import Select, false, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from medicare import policy
@@ -9,10 +8,16 @@ from medicare.appointment.models import Appointment, AppointmentStatus
 from medicare.auth.models import Role, User
 from medicare.common import metrics
 from medicare.common.errors import Conflict, NotFound
+from medicare.common.templating import VN_TZ
 from medicare.patient.models import Patient
 from medicare.patient.service import get_patient_for
 
 SLOT_MINUTES = (0, 30)
+QUICK_SLOT_MINUTES = (0, 15, 30, 45)
+VISIT_MINUTES = 30
+QUICK_VISIT_MINUTES = 15
+LONGEST_VISIT = timedelta(minutes=VISIT_MINUTES)
+WORKING_HOURS = (time(8, 0), time(17, 0))
 BOOKING_HORIZON = timedelta(days=365)
 DOUBLE_BOOKED = "Bác sĩ đã có lịch hẹn vào thời gian này"
 
@@ -62,6 +67,36 @@ def bookable_doctors(db: Session) -> list[User]:
     return list(db.scalars(stmt).unique())
 
 
+def _active_around(
+    db: Session, doctor_id: int, start: datetime, end: datetime
+) -> list[tuple[datetime, datetime]]:
+    """(start, end) of the doctor's non-cancelled appointments overlapping [start, end)."""
+    stmt = select(Appointment).where(
+        Appointment.doctor_id == doctor_id,
+        Appointment.status != AppointmentStatus.CANCELLED,
+        Appointment.scheduled_at > start - LONGEST_VISIT,
+        Appointment.scheduled_at < end,
+    )
+    busy = [(a.scheduled_at, a.scheduled_at + timedelta(minutes=a.duration_minutes))
+            for a in db.scalars(stmt)]
+    return [(s, e) for s, e in busy if e > start]
+
+
+def free_slots(db: Session, doctor_id: int, day: date, now: datetime) -> list[datetime]:
+    """Free quick-visit slots of a doctor on `day` (Vietnam time), within working hours."""
+    start = datetime.combine(day, WORKING_HOURS[0], tzinfo=VN_TZ)
+    end = datetime.combine(day, WORKING_HOURS[1], tzinfo=VN_TZ)
+    step = timedelta(minutes=QUICK_VISIT_MINUTES)
+    busy = _active_around(db, doctor_id, start, end)
+    slots = []
+    t = start
+    while t + step <= end:
+        if now < t <= now + BOOKING_HORIZON and not any(s < t + step and e > t for s, e in busy):
+            slots.append(t)
+        t += step
+    return slots
+
+
 def book(
     db: Session,
     user: User,
@@ -70,8 +105,12 @@ def book(
     scheduled_at: datetime,
     reason: str,
     now: datetime,
+    minutes: int = VISIT_MINUTES,
 ) -> Appointment:
-    """Book a slot. Patients book for themselves, reception for anyone (R-01, R-13)."""
+    """Book a slot. Patients book for themselves, reception for anyone (R-01, R-13).
+
+    `minutes` is VISIT_MINUTES for a regular visit, QUICK_VISIT_MINUTES for a quick one.
+    """
     if user.role == Role.PATIENT:
         if patient_id is not None and patient_id != user.patient_id:
             if db.get(Patient, patient_id) is not None:  # count refusals of real patients only
@@ -85,25 +124,26 @@ def book(
         raise AppointmentError("Không thể đặt lịch hẹn trong quá khứ")
     if scheduled_at > now + BOOKING_HORIZON:
         raise AppointmentError("Chỉ đặt lịch trong vòng 365 ngày tới")
-    if scheduled_at.minute not in SLOT_MINUTES or scheduled_at.second or scheduled_at.microsecond:
-        raise AppointmentError("Giờ hẹn phải theo mốc 30 phút (:00 hoặc :30)")
+    grid = QUICK_SLOT_MINUTES if minutes == QUICK_VISIT_MINUTES else SLOT_MINUTES
+    if scheduled_at.minute not in grid or scheduled_at.second or scheduled_at.microsecond:
+        raise AppointmentError(f"Giờ hẹn phải theo mốc {60 // len(grid)} phút")
     doctor = db.get(User, doctor_id)
     if doctor is None or doctor.role != Role.DOCTOR or not doctor.is_active:
         raise AppointmentError("Bác sĩ: giá trị không hợp lệ")
+    end = scheduled_at + timedelta(minutes=minutes)
+    if _active_around(db, doctor.id, scheduled_at, end):
+        raise Conflict(DOUBLE_BOOKED)
     appt = Appointment(
         patient_id=patient.id,
         doctor_id=doctor.id,
         scheduled_at=scheduled_at,
+        duration_minutes=minutes,
         reason=reason,
         status=AppointmentStatus.REQUESTED,
         created_by_id=user.id,
     )
-    try:
-        with db.begin_nested():
-            db.add(appt)
-            db.flush()
-    except IntegrityError as exc:  # uq_doctor_slot_active: the DB is the source of truth
-        raise Conflict(DOUBLE_BOOKED) from exc
+    db.add(appt)
+    db.flush()
     return appt
 
 
