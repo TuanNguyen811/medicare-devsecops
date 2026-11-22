@@ -20,6 +20,17 @@
     </form>
   </div>
 </div>
+<div class="card mc-card mb-3">
+  <div class="card-header">Nhập danh mục từ tệp YAML</div>
+  <div class="card-body">
+    <form class="row g-2 align-items-end" method="post" action="/admin/medicines/import" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-md-6"><label class="form-label" for="file">Tệp .yaml (tối đa 256 KB)</label><input class="form-control form-control-sm" id="file" name="file" type="file" accept=".yaml,.yml" required></div>
+      <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100" type="submit"><i class="bi bi-upload"></i> Nhập</button></div>
+    </form>
+    <div class="form-text">Mỗi thuốc gồm <code>code</code>, <code>name</code>, <code>unit</code>, <code>unit_price</code> dưới khóa <code>medicines</code>. Thuốc trùng mã được cập nhật tên, đơn vị và đơn giá.</div>
+  </div>
+</div>
 <div class="card mc-card">
   <div class="table-responsive">
     <table class="table table-sm table-hover align-middle mb-0">
