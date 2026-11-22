@@ -20,6 +20,36 @@
     </dl>
   </div>
 </div>
+<div class="card mc-card mt-3" id="notes">
+  <div class="card-header">Ghi chú của bác sĩ</div>
+  <ul class="list-group list-group-flush">
+    {% for note in notes %}
+    <li class="list-group-item">
+      <div class="small text-secondary mb-1">{{ note.author.full_name }} · {{ note.created_at | datetime_vn }}</div>
+      <div class="mc-note">{{ note.body | safe }}</div>
+    </li>
+    {% else %}
+    <li class="list-group-item text-secondary">Chưa có ghi chú</li>
+    {% endfor %}
+  </ul>
+  {% if can_write %}
+  <div class="card-body border-top">
+    <form method="post" action="/records/{{ record.id }}/notes" data-rich-note>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="body">
+      <div class="btn-group btn-group-sm mb-1" role="group" aria-label="Định dạng">
+        <button class="btn btn-outline-secondary" type="button" data-cmd="bold" title="Đậm"><i class="bi bi-type-bold"></i></button>
+        <button class="btn btn-outline-secondary" type="button" data-cmd="italic" title="Nghiêng"><i class="bi bi-type-italic"></i></button>
+        <button class="btn btn-outline-secondary" type="button" data-cmd="underline" title="Gạch chân"><i class="bi bi-type-underline"></i></button>
+        <button class="btn btn-outline-secondary" type="button" data-cmd="insertUnorderedList" title="Danh sách"><i class="bi bi-list-ul"></i></button>
+      </div>
+      <div class="form-control mc-note-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Nội dung ghi chú"></div>
+      <button class="btn btn-primary btn-sm mt-2" type="submit"><i class="bi bi-journal-plus"></i> Thêm ghi chú</button>
+    </form>
+  </div>
+  <script src="/static/js/rich-note.js" defer></script>
+  {% endif %}
+</div>
 <div class="card mc-card mt-3">
   <div class="card-header">Đơn thuốc</div>
   <ul class="list-group list-group-flush">
