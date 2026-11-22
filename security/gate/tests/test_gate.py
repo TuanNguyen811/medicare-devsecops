@@ -257,6 +257,27 @@ def test_ai_mode_agent_raises_a_low_scanner_finding(sev, confidence, blocks):
     assert d.block is blocks and d.blocking == ([low.id] if blocks else [])
 
 
+@pytest.mark.parametrize("other", [
+    verdict([], "NEEDS_REVIEW", sev="HIGH"), verdict([], "TP", sev="MEDIUM"),
+    verdict([], "FP", sev="LOW"),
+])
+@pytest.mark.parametrize("raised_first", [True, False])
+def test_ai_mode_agent_raise_does_not_depend_on_verdict_order(other, raised_first):
+    low = f(sev="LOW")
+    raised = verdict([low.id], "TP", sev="HIGH")
+    other = {**other, "finding_ids": [low.id]}
+    entries = [raised, other] if raised_first else [other, raised]
+    assert decide([low], mode="ai-assisted", report={"findings": entries}, labels=set(),
+                  agent_exit=0, errors=[]).block
+
+
+def test_ai_mode_bad_confidence_counts_as_zero():
+    low = f(sev="LOW")
+    report = {"findings": [verdict([low.id], "TP", confidence="cao")]}
+    assert not decide([low], mode="ai-assisted", report=report, labels=set(), agent_exit=0,
+                      errors=[]).block
+
+
 def test_ai_mode_agent_rating_only_counts_for_findings_of_this_pr():
     """A raised verdict on a finding the gate did not keep (e.g. unchanged code) does not block."""
     report = {"findings": [verdict([f(sev="LOW").id], "TP", sev="HIGH")]}
