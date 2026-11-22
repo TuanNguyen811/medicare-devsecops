@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from medicare.auth.models import User
 from medicare.common import metrics
 from medicare.common.auth import (
+    DEFAULT_SHIFT,
     authenticate,
     get_current_user,
     revoke_sessions,
@@ -34,6 +35,7 @@ def login(
     request: Request,
     username: str = Form(""),
     password: str = Form(""),
+    shift: str = Form(DEFAULT_SHIFT),
     db: Session = Depends(get_db),
 ) -> Response:
     user = None
@@ -45,7 +47,7 @@ def login(
     db.commit()  # persists the failed-attempt counter and lock
     if user is None:
         return render(request, "login.html", {"error": LOGIN_ERROR})
-    start_session(request, user)
+    start_session(request, user, shift)
     return RedirectResponse("/", status_code=303)
 
 
