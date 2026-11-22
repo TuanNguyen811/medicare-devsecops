@@ -1,6 +1,6 @@
 import secrets
 
-from sqlalchemy import false, or_, select
+from sqlalchemy import extract, false, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -57,6 +57,31 @@ def search_patients(db: Session, user: User, q: str | None) -> list[Patient]:
                 Patient.full_name.icontains(term, autoescape=True),
             )
         )
+    return list(db.scalars(stmt).unique())
+
+
+def advanced_search(
+    db: Session,
+    user: User,
+    *,
+    phone: str | None = None,
+    area: str | None = None,
+    birth_year: int | None = None,
+    department_id: int | None = None,
+) -> list[Patient]:
+    """Search by contact details and demographics, within the user's scope (R-01, R-12)."""
+    stmt = select(Patient).order_by(Patient.code).limit(SEARCH_LIMIT)
+    scope = _scope_filter(user)
+    if scope is not None:
+        stmt = stmt.where(scope)
+    if phone and phone.strip():
+        stmt = stmt.where(Patient.phone.startswith(phone.strip(), autoescape=True))
+    if area and area.strip():
+        stmt = stmt.where(text(f"patients.address ILIKE '%{area.strip()}%'"))
+    if birth_year is not None:
+        stmt = stmt.where(extract("year", Patient.date_of_birth) == birth_year)
+    if department_id is not None:
+        stmt = stmt.where(Patient.department_id == department_id)
     return list(db.scalars(stmt).unique())
 
 

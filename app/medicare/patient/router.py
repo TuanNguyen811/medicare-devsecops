@@ -85,6 +85,45 @@ def list_patients(
     )
 
 
+def _opt_int(value: str) -> int | None:
+    value = value.strip()
+    return int(value) if value.isascii() and value.isdigit() and len(value) <= 9 else None
+
+
+@router.get("/patients/search")
+def advanced_search_page(
+    request: Request,
+    phone: str = "",
+    area: str = "",
+    birth_year: str = "",
+    department_id: str = "",
+    user: User = Depends(staff_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    form = {"phone": phone, "area": area, "birth_year": birth_year,
+            "department_id": department_id}
+    searched = any(v.strip() for v in form.values())
+    rows = []
+    if searched:
+        patients = service.advanced_search(
+            db, user, phone=phone, area=area, birth_year=_opt_int(birth_year),
+            department_id=_opt_int(department_id),
+        )
+        rows = [(p, _identifiers(user, p)) for p in patients]
+    return render(
+        request,
+        "patient/search.html",
+        {
+            "rows": rows,
+            "form": form,
+            "searched": searched,
+            "departments": service.form_choices(db)["departments"],
+            "breadcrumbs": [("Trang chủ", "/"), ("Bệnh nhân", "/patients"),
+                            ("Tìm kiếm nâng cao", None)],
+        },
+    )
+
+
 @router.get("/patients/new")
 def new_patient_form(
     request: Request,

@@ -195,3 +195,39 @@ def test_me_shows_own_profile(client, db):
     login(client, make_user(db, Role.PATIENT, patient=me))
     r = client.get("/me")
     assert r.status_code == 200 and me.code in r.text and me.national_id in r.text
+
+
+def test_advanced_search_by_area_and_birth_year(client, db):
+    hn = make_patient(db)
+    hcm = make_patient(db)
+    hcm.address = "Quận 1, TP Hồ Chí Minh"
+    db.flush()
+    login(client, make_user(db, Role.RECEPTIONIST))
+    html = client.get("/patients/search", params={"area": "hồ chí", "birth_year": "1990"}).text
+    assert hcm.code in html and hn.code not in html
+    html = client.get("/patients/search", params={"birth_year": "1991"}).text
+    assert hcm.code not in html and hn.code not in html
+
+
+def test_advanced_search_by_phone_prefix(client, db):
+    p = make_patient(db)
+    other = make_patient(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    html = client.get("/patients/search", params={"phone": p.phone}).text
+    assert p.code in html and other.code not in html
+
+
+def test_advanced_search_is_scoped_for_nurse(client, db):
+    noi, ngoai = make_department(db, "NOI"), make_department(db, "NGOAI")
+    mine = make_patient(db, department=noi)
+    theirs = make_patient(db, department=ngoai)
+    login(client, make_user(db, Role.NURSE, department=noi))
+    html = client.get("/patients/search", params={"area": "Hà Nội"}).text
+    assert mine.code in html and theirs.code not in html
+
+
+def test_advanced_search_without_criteria_lists_nothing(client, db):
+    make_patient(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    r = client.get("/patients/search")
+    assert r.status_code == 200 and "Nhập ít nhất một tiêu chí" in r.text
