@@ -140,16 +140,19 @@ COMMENTS_QUERY = """
 query($owner: String!, $name: String!, $pr: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $pr) {
-      comments(last: 100) { nodes { databaseId body lastEditedAt author { login } } }
+      comments(last: 100) { nodes { databaseId body lastEditedAt author { __typename login } } }
     }
   }
 }"""
 
 
 def parse_comments(data: dict) -> list[dict]:
-    """GraphQL answer -> [{id, login, body, edited}]; a deleted (ghost) author has no login."""
+    """GraphQL answer -> [{id, login, body, edited}]. Only people count: a bot or app author
+    (and a deleted "ghost" one) gets no login, so it can never match AGENT_REPORT_AUTHOR."""
     nodes = data["data"]["repository"]["pullRequest"]["comments"]["nodes"]
-    return [{"id": n.get("databaseId") or 0, "login": (n.get("author") or {}).get("login"),
+    return [{"id": n.get("databaseId") or 0,
+             "login": ((n.get("author") or {}).get("login")
+                       if (n.get("author") or {}).get("__typename") == "User" else None),
              "body": n.get("body") or "", "edited": n.get("lastEditedAt") is not None}
             for n in nodes]
 

@@ -113,16 +113,19 @@ def test_wait_ignores_an_edited_comment_of_the_trusted_author(tmp_path: Path):
 
 
 def test_parse_comments_reads_the_graphql_answer():
+    user = {"__typename": "User", "login": "owner"}
     data = {"data": {"repository": {"pullRequest": {"comments": {"nodes": [
-        {"databaseId": 1, "body": "a", "lastEditedAt": None, "author": {"login": "owner"}},
-        {"databaseId": 2, "body": "b", "lastEditedAt": "2026-11-22T10:00:00Z",
-         "author": {"login": "owner"}},
+        {"databaseId": 1, "body": "a", "lastEditedAt": None, "author": user},
+        {"databaseId": 2, "body": "b", "lastEditedAt": "2026-11-22T10:00:00Z", "author": user},
         {"databaseId": 3, "body": "c", "lastEditedAt": None, "author": None},
+        {"databaseId": 4, "body": "d", "lastEditedAt": None,  # a bot named like the reviewer
+         "author": {"__typename": "Bot", "login": "owner"}},
     ]}}}}}
     assert parse_comments(data) == [
         {"id": 1, "login": "owner", "body": "a", "edited": False},
         {"id": 2, "login": "owner", "body": "b", "edited": True},
-        {"id": 3, "login": None, "body": "c", "edited": False}]
+        {"id": 3, "login": None, "body": "c", "edited": False},
+        {"id": 4, "login": None, "body": "d", "edited": False}]
 
 
 def test_wait_times_out_without_a_trusted_handoff(tmp_path: Path):

@@ -79,6 +79,9 @@ def wait_for_agent_job(repo: str, run: int, timeout_s: float) -> bool:
         if job and job["status"] == "in_progress":
             return True
         if job and job["status"] == "completed":
+            if job["conclusion"] == "skipped":
+                sys.exit(f"local-review: {AGENT_JOB} was skipped (fork PR or a failed scanner); "
+                         "fix that first, a report would not be used")
             print(f"local-review: {AGENT_JOB} already finished ({job['conclusion']}); "
                   "the report will be posted for a re-run of the workflow", flush=True)
             return False
