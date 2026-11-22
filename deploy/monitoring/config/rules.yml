@@ -20,7 +20,14 @@ groups:
           description: >-
             {{ $value | printf "%.0f" }} tài khoản bị khóa trong 5 phút do nhập sai mật khẩu nhiều lần.
       - alert: RecordAccessSpike
-        expr: sum by (user_id, role) (increase(medicare_record_access_total[5m])) > 30
+        # Per-user series cannot be pre-created: one that appears mid-window already holds
+        # its burst, which increase() does not see, so its raw value is checked too.
+        expr: >-
+          sum by (user_id, role) (increase(medicare_record_access_total[5m])) > 30
+          or
+          sum by (user_id, role) (
+            medicare_record_access_total unless medicare_record_access_total offset 5m
+          ) > 30
         labels:
           severity: warning
         annotations:
@@ -38,9 +45,10 @@ groups:
             {{ $value | printf "%.0f" }} lần bị từ chối quyền trên đối tượng có thật trong 5 phút
             (ngưỡng 20).
       - alert: HighErrorRate
+        # Kubelet probes on /health would dilute the ratio; no traffic means no ratio.
         expr: >-
-          sum(rate(medicare_http_requests_total{status=~"5.."}[5m]))
-          / sum(rate(medicare_http_requests_total[5m])) > 0.05
+          sum(rate(medicare_http_requests_total{status=~"5..", route!="/health"}[5m]))
+          / (sum(rate(medicare_http_requests_total{route!="/health"}[5m])) > 0) > 0.05
         labels:
           severity: critical
         annotations:

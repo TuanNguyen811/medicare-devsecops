@@ -84,6 +84,11 @@ python deploy/simulate-traffic.py --mode bulk-read               # bacsi1 mở 4
 ```
 Cảnh báo hiện sau khoảng 30–60 giây (Prometheus lấy metrics và đánh giá luật mỗi 15 giây).
 
+**Test cho luật cảnh báo** (`monitoring/rules-test.yml`, không deploy). Có một trường hợp cần chú ý: chuỗi metrics của từng người dùng không tạo sẵn được. Nếu một người đọc hàng loạt bệnh án trong một chu kỳ 15 giây đầu tiên, chuỗi đó xuất hiện khi đã ở giá trị 40, và `increase()` không thấy phần tăng ban đầu. Vì vậy `RecordAccessSpike` xét cả giá trị thô của chuỗi mới.
+```bash
+cd deploy/monitoring && MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd):/m:ro" -w /m   --entrypoint promtool prom/prometheus:v3.16.0 test rules rules-test.yml
+```
+
 ## Hai lớp kiểm tra chữ ký
 
 Danh tính hợp lệ duy nhất:
@@ -113,7 +118,7 @@ Script không có cờ nào để bỏ qua kiểm tra chữ ký.
 | `install-tools.sh` | Tải cosign ghim sha256 vào `.tools/` |
 | `pull-deploy.sh` | Deploy kiểu kéo về như sơ đồ trên |
 | `demo-unsigned.sh` | Dry-run phía server với một image không do `main` ký, để thấy Kyverno từ chối |
-| `monitoring/` | Prometheus, Alertmanager, Grafana (image ghim digest, uid cao, root filesystem chỉ đọc, NetworkPolicy default-deny); `config/` chứa cấu hình scrape, luật cảnh báo, dashboard |
+| `monitoring/` | Prometheus, Alertmanager, Grafana (image ghim digest, uid cao, root filesystem chỉ đọc, NetworkPolicy default-deny); `config/` chứa cấu hình scrape, luật cảnh báo, dashboard; `rules-test.yml` là test của luật cảnh báo cho promtool |
 | `local/metrics.yaml` | Service headless `medicare-metrics` và NetworkPolicy cho Prometheus vào cổng 9000 |
 | `simulate-traffic.py` | Tạo truy cập bình thường hoặc tấn công để demo cảnh báo |
 

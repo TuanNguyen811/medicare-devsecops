@@ -63,5 +63,12 @@
 - [x] Áp lại policy thật (danh tính `main`) sau khi thử.
 
 ### Task 5: Review toàn nhánh, PR, sau merge
-- [ ] Review (Opus), sửa, PR, theo dõi CI.
+- [x] Review (Opus): 0 Critical, 1 Important, 5 Minor; đã sửa hết.
+  - **I1:** `RecordAccessSpike` bỏ sót đợt đọc hàng loạt từ một chuỗi mới (chuỗi theo từng người dùng không tạo sẵn được). Đã sửa: xét thêm giá trị thô của chuỗi dưới 5 phút tuổi. Có `rules-test.yml` để kiểm bằng promtool; với luật cũ, test này thất bại.
+  - **M1, M2:** hủy lịch bị từ chối vì trạng thái, và đặt lịch cho id bệnh nhân không tồn tại, không còn tính là từ chối quyền.
+  - **M3:** method lạ ghi thành `OTHER`.
+  - **M4:** `HighErrorRate` và dashboard bỏ `/health` khỏi phép tính, và không chia cho 0.
+  - **M5:** `simulate-traffic.py` không đi qua proxy hệ thống.
+  - Test server metrics dùng cổng trống bất kỳ.
+- [ ] PR, theo dõi CI.
 - [ ] Sau merge: `pull-deploy.sh` thật, rồi chạy lại `brute-force` để xác nhận số đếm đủ.

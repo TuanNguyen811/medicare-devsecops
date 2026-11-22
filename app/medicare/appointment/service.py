@@ -74,7 +74,8 @@ def book(
     """Book a slot. Patients book for themselves, reception for anyone (R-01, R-13)."""
     if user.role == Role.PATIENT:
         if patient_id is not None and patient_id != user.patient_id:
-            metrics.authz_denied("appointment")
+            if db.get(Patient, patient_id) is not None:  # count refusals of real patients only
+                metrics.authz_denied("appointment")
             raise NotFound
         patient_id = user.patient_id
     if patient_id is None:
@@ -115,7 +116,12 @@ def confirm(appt: Appointment) -> None:
 def cancel(user: User, appt: Appointment) -> bool:
     """Cancel if allowed (R-13); returns False when the user may not cancel it."""
     if not policy.can_cancel_appointment(user, appt):
-        metrics.authz_denied("appointment")
+        # Count refusals about who may cancel, not about the appointment's status.
+        staff_or_owner = user.role in (Role.ADMIN, Role.RECEPTIONIST) or (
+            user.role == Role.PATIENT and user.patient_id == appt.patient_id
+        )
+        if not staff_or_owner:
+            metrics.authz_denied("appointment")
         return False
     appt.status = AppointmentStatus.CANCELLED
     return True

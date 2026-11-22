@@ -92,11 +92,13 @@ def test_metrics_server_off_by_default_and_not_on_app_port(app):
 
 def test_metrics_server_serves_on_its_own_port(database_url):
     app = create_app(Settings(env="test", database_url=database_url, secret_key="x" * 32,
-                              metrics_port=19000))
+                              metrics_port=1))
+    app.state.settings.metrics_port = 0  # any free port; Settings itself requires 1..65535
     with TestClient(app):
         server = app.state.metrics_server
-        assert server.server_address[0] == "127.0.0.1"
-        with urllib.request.urlopen("http://127.0.0.1:19000/metrics", timeout=5) as r:
+        host, port = server.server_address[:2]
+        assert host == "127.0.0.1"
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=5) as r:
             assert b"medicare_login_total" in r.read()
     app.state.engine.dispose()
 
@@ -111,3 +113,36 @@ def test_alerting_series_exported_before_any_event():
     for resource in ("patient", "record", "prescription", "appointment", "invoice", "role"):
         assert f'medicare_authz_denied_total{{resource="{resource}"}} ' in out
     assert "medicare_account_lockouts_total " in out
+
+
+def test_unknown_http_method_does_not_create_new_series(client):
+    before = value("medicare_http_requests_total", method="OTHER", route="unmatched", status="405")
+    before += value("medicare_http_requests_total", method="OTHER", route="/login", status="405")
+    client.request("BREW", "/login")
+    after = value("medicare_http_requests_total", method="OTHER", route="unmatched", status="405")
+    after += value("medicare_http_requests_total", method="OTHER", route="/login", status="405")
+    assert after - before == 1
+    names = {s.labels.get("method") for m in REGISTRY.collect() for s in m.samples}
+    assert "BREW" not in names
+
+
+def test_cancel_refused_for_status_is_not_an_authz_denial(client, db):
+    from datetime import UTC, datetime, timedelta
+
+    from medicare.appointment.models import Appointment, AppointmentStatus
+
+    me = make_patient(db)
+    doc = make_user(db, Role.DOCTOR)
+    account = make_user(db, Role.PATIENT, patient=me)
+    appt = Appointment(patient_id=me.id, doctor_id=doc.id, reason="x", created_by_id=account.id,
+                       scheduled_at=datetime.now(UTC) + timedelta(days=3),
+                       status=AppointmentStatus.CONFIRMED)
+    db.add(appt)
+    db.flush()
+    login(client, account)
+    before = value("medicare_authz_denied_total", resource="appointment")
+    token = csrf_token(client, "/appointments")
+    r = client.post(f"/appointments/{appt.id}/cancel", data={"csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 403  # own appointment, but already confirmed (R-13)
+    assert value("medicare_authz_denied_total", resource="appointment") - before == 0

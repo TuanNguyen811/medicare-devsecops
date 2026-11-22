@@ -57,8 +57,10 @@ class Client:
         self.base = base.rstrip("/")
         self.stats = stats
         self.csrf = ""
+        # No proxy: a configured HTTP(S)_PROXY must never see the demo password.
         self._opener = urllib.request.build_opener(
-            _NoRedirect, urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
+            urllib.request.ProxyHandler({}), _NoRedirect,
+            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
         )
 
     def request(self, path: str, data: dict | None = None) -> tuple[int, str]:

@@ -329,7 +329,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(medicare_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(medicare_http_requests_total[5m])) or vector(0)",
+          "expr": "sum(rate(medicare_http_requests_total{status=~\"5..\", route!=\"/health\"}[5m])) / (sum(rate(medicare_http_requests_total{route!=\"/health\"}[5m])) > 0) or vector(0)",
           "instant": true,
           "refId": "A",
           "datasource": {

@@ -36,6 +36,7 @@ AUTHZ_DENIED = Counter(
 LOGIN_SUCCESS = "success"
 LOGIN_FAILURE = "failure"
 LOGIN_LOCKED = "locked"
+HTTP_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 AUTHZ_RESOURCES = ("patient", "record", "prescription", "appointment", "invoice", "role")
 
 # Export every known series at 0 from the start: increase() over a series that appears
@@ -99,7 +100,8 @@ class MetricsMiddleware:
             await self.app(scope, receive, tracking_send)
         finally:
             route = _route_label(scope)
-            HTTP_REQUESTS.labels(method=scope["method"], route=route, status=str(status)).inc()
+            method = scope["method"] if scope["method"] in HTTP_METHODS else "OTHER"
+            HTTP_REQUESTS.labels(method=method, route=route, status=str(status)).inc()
             HTTP_DURATION.labels(route=route).observe(time.perf_counter() - start)
 
 
