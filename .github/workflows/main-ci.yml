@@ -130,6 +130,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: GitHub's OIDC token proves which workflow and ref built the image.
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -151,7 +153,7 @@ jobs:
           name: sbom
           path: sbom.cdx.json
           if-no-files-found: error
-      - name: Push to GHCR
+      - name: Push to GHCR, sign and attest the SBOM (cosign keyless)
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
@@ -165,7 +167,18 @@ jobs:
             docker tag "medicare-hms:${GITHUB_SHA}" "${image}:latest"
             docker push "${image}:latest"
           fi
+          # Sign the digest, never a tag. Every run signs; the certificate records the workflow
+          # and ref, and deploy (cosign verify, Kyverno) accepts main-ci.yml@refs/heads/main only.
+          ref="$(docker inspect --format '{{index .RepoDigests 0}}' "${image}:${GITHUB_SHA}")"
+          case "$ref" in "${image}@sha256:"*) ;; *) echo "::error::no digest for ${image}"; exit 1 ;; esac
+          "$RUNNER_TEMP/tools/cosign" sign --yes "$ref"
+          "$RUNNER_TEMP/tools/cosign" attest --yes --type cyclonedx --predicate sbom.cdx.json "$ref"
           docker logout ghcr.io
+          {
+            echo "### Signed image"
+            echo ""
+            echo "\`${ref}\` (cosign keyless, SBOM CycloneDX attestation)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   staging:
     name: staging
