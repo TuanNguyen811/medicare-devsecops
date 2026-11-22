@@ -154,7 +154,7 @@ def _cluster_entry(cluster: Cluster, outcome: ReviewOutcome, fs: RepoFS) -> Repo
     primary = _primary(cluster)
     base = {"finding_id": primary.id, "finding_ids": cluster.ids, "source": primary.tool,
             "title": f"{primary.rule_id} ({primary.tool})", "file": cluster.file,
-            "line": cluster.line}
+            "line": cluster.line, "tool_severity": cluster.severity}
     v = outcome.verdicts.get(cluster.id)
     if v is None:
         return ReportEntry(**base, verdict="NEEDS_REVIEW", confidence=0.0,

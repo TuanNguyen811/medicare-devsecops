@@ -73,6 +73,9 @@ class ReportEntry(BaseModel):
     verdict: VerdictKind
     confidence: float = Field(ge=0, le=1)
     severity: Severity
+    # The scanners' severity of the finding (None for the agent's own findings): the quality
+    # gate decides on it, while `severity` is the agent's assessment.
+    tool_severity: Severity | None = None
     cwe: str | None = None
     owasp: str | None = None
     violated_rule: str | None = None

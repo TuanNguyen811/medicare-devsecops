@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from secagent.context.redact import redact
@@ -18,7 +19,7 @@ SEVERITY_ORDER = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
 
 
 def _cell(text: str) -> str:
-    return text.replace("|", "\\|").replace("\n", " ")
+    return re.sub(r"\s*[\r\n]+\s*", " ", text).replace("|", "\\|")
 
 
 def _where(e: ReportEntry) -> str:
@@ -41,19 +42,21 @@ def _details(e: ReportEntry) -> str:
 
 
 def _is_app_alert(e: ReportEntry) -> bool:
-    """A non-severe finding of the scan of the running app (ZAP): usually app-wide settings
-    such as security headers, often there before this PR. Severe ones stay with the PR's."""
-    return e.file.startswith(DAST_PREFIX) and e.severity not in SEVERE
+    """A judged, non-blocking finding of the scan of the running app (ZAP): usually app-wide
+    settings such as security headers, often there before this PR. It must be low for the
+    scanners (the gate blocks on their severity) and for the agent; NEEDS_REVIEW stays visible."""
+    return (e.file.startswith(DAST_PREFIX) and e.verdict != "NEEDS_REVIEW"
+            and e.severity not in SEVERE and (e.tool_severity or "LOW") not in SEVERE)
 
 
 def _app_alerts(alerts: list[ReportEntry]) -> list[str]:
     """One row per alert kind and verdict, with the routes it was seen on."""
-    groups: dict[tuple[str, str], list[ReportEntry]] = {}
+    groups: dict[tuple[str, str, str], list[ReportEntry]] = {}
     for e in alerts:
-        groups.setdefault((e.title, e.verdict), []).append(e)
+        groups.setdefault((e.title, e.verdict, e.severity), []).append(e)
     rows = ["| Kết luận | Mức | Cảnh báo | Route | Phân tích | Đề xuất sửa |",
             "|---|---|---|---|---|---|"]
-    for (title, verdict), items in groups.items():
+    for (title, verdict, _), items in groups.items():
         first = items[0]
         routes = ", ".join(f"`{_cell(e.file.removeprefix(DAST_PREFIX))}`" for e in items)
         fix = first.fix.description if first.fix else ""
@@ -71,6 +74,7 @@ def render_markdown(report: Report, head_sha: str | None = None) -> str:
     fps = [e for e in own if e.verdict == "FP"]
     counts = Counter(e.verdict for e in issues)
     new = sum(1 for e in issues if e.source == "agent")
+    m = report.meta
     if issues:
         found = []
         if counts["TP"]:
@@ -79,6 +83,10 @@ def render_markdown(report: Report, head_sha: str | None = None) -> str:
         if counts["NEEDS_REVIEW"]:
             found.append(f"🟡 {counts['NEEDS_REVIEW']} cần người xem")
         summary = "**Code của PR này:** " + " · ".join(found)
+    elif m.limit_hit or m.error:
+        summary = ("⚠️ **Agent chưa thẩm định xong**"
+                   + (f" ({m.error})" if m.error else " (hết thời gian hoặc số bước)")
+                   + ": chưa thể kết luận code của PR này không có lỗ hổng.")
     else:
         summary = "✅ **Không tìm thấy lỗ hổng nào trong code của PR này.**"
     extra = []
@@ -93,14 +101,13 @@ def render_markdown(report: Report, head_sha: str | None = None) -> str:
         parts += ["", " · ".join(extra)]
     parts.append("")
     if issues:
-        parts += ["### 🔴 Lỗi cần sửa", "",
+        parts += ["### 🔴 Lỗi cần sửa" if counts["TP"] else "### 🟡 Cần người xem", "",
                   "| | Mức | Lỗ hổng | Vị trí | Nguồn | Độ tin cậy |", "|---|---|---|---|---|---|"]
         parts += [f"| {ICON[e.verdict]} {e.verdict} | {e.severity} | {_cell(e.title)} | "
                   f"`{_cell(_where(e))}` | {e.source} | {e.confidence:.2f} |"
                   for e in issues[:MAX_ROWS]]
         if len(issues) > MAX_ROWS:
             parts.append(f"\n… và {len(issues) - MAX_ROWS} mục khác (xem report.json).")
-    m = report.meta
     # How the LLM was reached (API key or claude-mcp) stays in report.json, not on the PR.
     head = f"model `{m.model}` · chiến lược `{m.strategy}`"
     footer = ["", "---", (

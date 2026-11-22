@@ -80,6 +80,32 @@ def test_vulnerabilities_of_the_pr_come_first_and_severe_dast_stays_visible():
     assert "40018 (zap)" in main and "IDOR khi xuất" in main and "SQL ghép chuỗi" in main
 
 
+def test_dast_alert_the_gate_blocks_or_nobody_judged_stays_visible():
+    """The gate blocks on the scanner's severity: an alert ZAP rated HIGH stays in view even if
+    the agent rated it MEDIUM; so does an alert left as NEEDS_REVIEW."""
+    lowered = dast("GET /a", rule="40012").model_copy(update={"tool_severity": "HIGH"})
+    unjudged = dast("GET /b", rule="10021", verdict="NEEDS_REVIEW", sev="LOW")
+    text = render_markdown(Report(meta=meta(), findings=[lowered, unjudged, dast("GET /")]))
+    main = text[:text.index("<details>")]
+    assert "40012 (zap)" in main and "`dast:GET /b:0`" in main
+    assert "Cảnh báo khi quét ứng dụng đang chạy (ZAP): 1" in text
+
+
+def test_only_needs_review_gets_a_neutral_heading_and_a_cut_short_run_is_not_clean():
+    review = entry("NEEDS_REVIEW")
+    text = render_markdown(Report(meta=meta(), findings=[review]))
+    assert "### 🟡 Cần người xem" in text and "🔴" not in text
+    cut = render_markdown(Report(meta=meta(limit_hit=True), findings=[dast("GET /")]))
+    assert "Agent chưa thẩm định xong" in cut and "Không tìm thấy lỗ hổng" not in cut
+
+
+def test_table_cells_keep_carriage_returns_out():
+    alert = dast("GET /").model_copy(update={"reasoning": "dòng 1\r\ndòng 2\rdòng 3"})
+    text = render_markdown(Report(meta=meta(), findings=[alert]))
+    row = next(line for line in text.split("\n") if "dòng 1" in line)
+    assert "\r" not in row and "dòng 1 dòng 2 dòng 3" in row
+
+
 def test_markdown_report_does_not_name_how_the_llm_was_reached():
     """The PR comment shows the model, not whether it ran with an API key or claude-mcp."""
     for provider in ("claude-mcp", "anthropic", "gemini"):
