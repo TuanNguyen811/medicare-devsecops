@@ -27,6 +27,12 @@
               <button class="btn btn-outline-primary btn-sm" type="submit">Xác nhận</button>
             </form>
             {% endif %}
+            {% if can_confirm and a.status.value == "CONFIRMED" %}
+            <form class="d-inline" method="post" action="/appointments/{{ a.id }}/remind">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-outline-success btn-sm" type="submit" title="Gửi SMS nhắc lịch"><i class="bi bi-chat-dots"></i> Nhắc lịch</button>
+            </form>
+            {% endif %}
             {% if can_cancel %}
             <form class="d-inline" method="post" action="/appointments/{{ a.id }}/cancel">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
