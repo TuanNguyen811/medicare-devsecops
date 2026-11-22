@@ -12,6 +12,7 @@ CREATE_RECORD = "CREATE_RECORD"
 UPDATE_RECORD = "UPDATE_RECORD"
 VIEW_PRESCRIPTION = "VIEW_PRESCRIPTION"
 CREATE_PRESCRIPTION = "CREATE_PRESCRIPTION"
+EXPORT_PATIENT = "EXPORT_PATIENT"
 
 
 def log_access(
@@ -21,6 +22,20 @@ def log_access(
     db.add(
         AuditLog(actor_id=actor.id, action=action, entity_type=entity_type,
                  entity_id=entity_id, ip=ip)
+    )
+    db.flush()
+    metrics.record_access(actor, action)
+
+
+def log_bulk_access(
+    db: Session, actor: User, action: str, entity_type: str, entity_ids: list[int],
+    ip: str | None,
+) -> None:
+    """One audit row per object, for operations that touch many objects at once (R-19)."""
+    db.add_all(
+        AuditLog(actor_id=actor.id, action=action, entity_type=entity_type,
+                 entity_id=entity_id, ip=ip)
+        for entity_id in entity_ids
     )
     db.flush()
     metrics.record_access(actor, action)

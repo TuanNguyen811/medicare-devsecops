@@ -13,6 +13,7 @@ from medicare.patient.models import Patient
 from medicare.patient.schemas import PatientForm
 
 SEARCH_LIMIT = 50
+EXPORT_LIMIT = 5000
 
 
 class PatientDataError(ValueError):
@@ -44,8 +45,10 @@ def _scope_filter(user: User):
     return or_(*conditions) if conditions else false()
 
 
-def search_patients(db: Session, user: User, q: str | None) -> list[Patient]:
-    stmt = select(Patient).order_by(Patient.code).limit(SEARCH_LIMIT)
+def search_patients(
+    db: Session, user: User, q: str | None, limit: int = SEARCH_LIMIT
+) -> list[Patient]:
+    stmt = select(Patient).order_by(Patient.code).limit(limit)
     scope = _scope_filter(user)
     if scope is not None:
         stmt = stmt.where(scope)
