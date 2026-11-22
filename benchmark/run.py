@@ -104,10 +104,16 @@ def _scan_views(scenario_dir: Path, gate) -> None:
     work = Path(tempfile.mkdtemp(prefix="bench-fetch-"))
     try:
         with _git_lock:
-            built = sc.materialize(scenario, work / "repo", ROOT)
-        if (built["base"], built["head"]) != (meta["base"], meta["head"]):
-            raise sc.ScenarioError(f"{meta['id']}: local commits differ from CI's: {built} "
-                                   f"vs {meta}")
+            if "pr" in meta:  # a real PR (pr_bench.py): its own commits on GitHub
+                subprocess.run(["git", "fetch", "--quiet", "origin", meta["base"],
+                                f"pull/{meta['pr']}/head"], cwd=ROOT, check=True)
+                subprocess.run(["git", "worktree", "add", "--quiet", "--detach",
+                                str(work / "repo"), meta["head"]], cwd=ROOT, check=True)
+            else:
+                built = sc.materialize(scenario, work / "repo", ROOT)
+                if (built["base"], built["head"]) != (meta["base"], meta["head"]):
+                    raise sc.ScenarioError(f"{meta['id']}: local commits differ from CI's: "
+                                           f"{built} vs {meta}")
         repo = work / "repo"
         changed = sorted(gate.changed_from_git(meta["base"], meta["head"], repo))
         (scenario_dir / "changed.json").write_text(json.dumps(changed, indent=2),
