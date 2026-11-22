@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
-from medicare.common.ids import ObjectId
+from medicare.common.ids import ObjectId, parse_id
 from medicare.common.templating import flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
 from medicare.prescription import service
+from medicare.record.service import get_patient_for_records
 
 router = APIRouter()
 
@@ -91,6 +92,28 @@ def create_prescription(
     db.commit()
     flash(request, "Đã kê đơn thuốc")
     return RedirectResponse(f"/prescriptions/{prescription.id}", status_code=303)
+
+
+@router.get("/patients/{patient_id}/prescriptions")
+def prescription_history(
+    request: Request,
+    patient_id: ObjectId,
+    page: str = "1",
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    patient = get_patient_for_records(db, user, patient_id)
+    result = service.history_for_patient(db, user, patient, parse_id(page) or 1, _ip(request))
+    db.commit()
+    base_url = f"/patients/{patient.id}/prescriptions"
+    return render(request, "prescription/history.html", {
+        "patient": patient,
+        "result": result,
+        "prev_page_url": f"{base_url}?page={result.page - 1}",
+        "next_page_url": f"{base_url}?page={result.page + 1}",
+        "breadcrumbs": [("Trang chủ", "/"), ("Bệnh nhân", "/patients"),
+                        (patient.code, f"/patients/{patient.id}"), ("Đơn thuốc", None)],
+    })
 
 
 @router.get("/prescriptions/{prescription_id}")

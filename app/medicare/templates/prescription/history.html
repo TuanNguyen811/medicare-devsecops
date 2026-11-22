@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Đơn thuốc {{ patient.code }}{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Lịch sử đơn thuốc: {{ patient.full_name }} <span class="text-secondary">{{ patient.code }}</span></h1>
+<div class="card mc-card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Ngày kê</th><th>Phiếu khám</th><th>Bác sĩ kê đơn</th><th>Thuốc</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for p in result.items %}
+        <tr>
+          <td class="text-nowrap">{{ p.created_at | datetime_vn }}</td>
+          <td><a href="/records/{{ p.record_id }}">#{{ p.record_id }}</a></td>
+          <td>{{ p.doctor.full_name }}</td>
+          <td>{% for item in p.items %}{{ item.medicine.name }} ({{ item.quantity }} {{ item.medicine.unit }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
+          <td class="text-end"><a class="btn btn-outline-primary btn-sm" href="/prescriptions/{{ p.id }}">Xem</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-secondary py-3">Chưa có đơn thuốc</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer d-flex justify-content-between align-items-center small">
+    <span class="text-secondary">{{ result.total }} đơn thuốc</span>
+    {% if result.pages > 1 %}
+    <nav aria-label="Phân trang">
+      <ul class="pagination pagination-sm mb-0">
+        <li class="page-item{% if result.page == 1 %} disabled{% endif %}"><a class="page-link" href="{{ prev_page_url }}">Trang trước</a></li>
+        <li class="page-item disabled"><span class="page-link">Trang {{ result.page }}/{{ result.pages }}</span></li>
+        <li class="page-item{% if result.page == result.pages %} disabled{% endif %}"><a class="page-link" href="{{ next_page_url }}">Trang sau</a></li>
+      </ul>
+    </nav>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

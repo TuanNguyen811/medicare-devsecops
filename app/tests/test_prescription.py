@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -162,3 +163,63 @@ def test_record_page_offers_prescribing_to_attending_only(client, db):
     client.cookies.clear()
     login(client, make_user(db, Role.NURSE, department=dept))
     assert f"/records/{record.id}/prescriptions/new" not in client.get(f"/records/{record.id}").text
+
+
+def history(client, patient, **params):
+    return client.get(f"/patients/{patient.id}/prescriptions", params=params)
+
+
+def test_history_newest_first_and_audited(client, db):
+    dept, doc, patient, record = ward(db)
+    older = make_prescription(db, record, doc, [(make_medicine(db), 1)])
+    newer = make_prescription(db, record, doc, [(make_medicine(db), 2)])
+    older.created_at = newer.created_at - timedelta(days=3)
+    db.flush()
+    login(client, make_user(db, Role.NURSE, department=dept))
+    r = history(client, patient)
+    assert r.status_code == 200
+    assert r.text.index(f"/prescriptions/{newer.id}") < r.text.index(f"/prescriptions/{older.id}")
+    rows = db.scalars(select(AuditLog).where(AuditLog.action == "LIST_PRESCRIPTIONS")).all()
+    assert [(a.entity_type, a.entity_id) for a in rows] == [("patient", patient.id)]
+
+
+def test_history_paginates(client, db):
+    _, doc, patient, record = ward(db)
+    med = make_medicine(db)
+    for _ in range(23):
+        make_prescription(db, record, doc, [(med, 1)])
+    login(client, doc)
+    first, second = history(client, patient).text, history(client, patient, page="2").text
+    assert first.count(f"{med.name} (1 viên)") == 20 and "Trang 1/2" in first
+    assert second.count(f"{med.name} (1 viên)") == 3 and "Trang 2/2" in second
+    assert "Trang 2/2" in history(client, patient, page="999").text
+    assert "Trang 1/2" in history(client, patient, page="abc").text
+
+
+def test_history_linked_from_patient_page(client, db):
+    _, doc, patient, _ = ward(db)
+    login(client, doc)
+    assert f'href="/patients/{patient.id}/prescriptions"' in client.get(f"/patients/{patient.id}").text
+    client.cookies.clear()
+    login(client, make_user(db, Role.RECEPTIONIST))
+    assert "/prescriptions" not in client.get(f"/patients/{patient.id}").text
+
+
+def test_history_hidden_outside_clinical_scope(client, db):
+    _, doc, patient, record = ward(db)
+    make_prescription(db, record, doc, [(make_medicine(db), 1)])
+    other_dept = make_department(db, "NGOAI")
+    for user in (make_user(db, Role.RECEPTIONIST), make_user(db, Role.ADMIN),
+                 make_user(db, Role.NURSE, department=other_dept),
+                 make_user(db, Role.DOCTOR, department=other_dept),
+                 make_user(db, Role.PATIENT, patient=make_patient(db))):
+        client.cookies.clear()
+        login(client, user)
+        assert history(client, patient).status_code == 404
+
+
+def test_patient_sees_own_history(client, db):
+    _, doc, patient, record = ward(db)
+    p = make_prescription(db, record, doc, [(make_medicine(db), 1)])
+    login(client, make_user(db, Role.PATIENT, patient=patient))
+    assert f"/prescriptions/{p.id}" in history(client, patient).text

@@ -1,6 +1,7 @@
+from dataclasses import dataclass
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from medicare import policy
@@ -14,6 +15,7 @@ from medicare.record.models import MedicalRecord
 
 ENTITY = "prescription"
 MAX_ITEMS = 20
+HISTORY_PAGE_SIZE = 20
 
 
 class PrescriptionError(ValueError):
@@ -89,6 +91,36 @@ def list_for_record(db: Session, record_id: int) -> list[Prescription]:
         .order_by(Prescription.created_at, Prescription.id)
     )
     return list(db.scalars(stmt).unique())
+
+
+@dataclass
+class PrescriptionPage:
+    items: list[Prescription]
+    total: int
+    page: int
+    pages: int
+
+
+def history_for_patient(
+    db: Session, user: User, patient: Patient, page: int, ip: str | None
+) -> PrescriptionPage:
+    """A patient's prescriptions, newest first, one page at a time.
+
+    The caller has already checked policy.can_view_record for this patient; the listing
+    itself is audited like the record list (R-05).
+    """
+    audit.log_access(db, user, audit.LIST_PRESCRIPTIONS, "patient", patient.id, ip)
+    stmt = select(Prescription).where(Prescription.patient_id == patient.id)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    pages = max(1, -(-total // HISTORY_PAGE_SIZE))
+    page = min(max(page, 1), pages)
+    stmt = (
+        stmt.order_by(Prescription.created_at.desc(), Prescription.id.desc())
+        .limit(HISTORY_PAGE_SIZE)
+        .offset((page - 1) * HISTORY_PAGE_SIZE)
+    )
+    return PrescriptionPage(items=list(db.scalars(stmt).unique()), total=total, page=page,
+                            pages=pages)
 
 
 def list_medicines(db: Session, *, active_only: bool) -> list[Medicine]:
