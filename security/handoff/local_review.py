@@ -46,30 +46,42 @@ def gh_json(path: str):
     return json.loads(sh("gh", "api", path))
 
 
-def find_run(repo: str, head: str, timeout_s: float) -> int:
+def pick_run(runs: dict, pr: int) -> int | None:
+    """The latest PR Security run of this PR (the same head commit may be in several PRs)."""
+    mine = [r for r in runs.get("workflow_runs", [])
+            if r.get("path", "").endswith("pr-security.yml")
+            and any(p.get("number") == pr for p in r.get("pull_requests") or [])]
+    return max(mine, key=lambda r: r["id"])["id"] if mine else None
+
+
+def find_run(repo: str, pr: int, head: str, timeout_s: float) -> int:
     deadline = time.monotonic() + timeout_s
     while True:
-        runs = gh_json(f"repos/{repo}/actions/runs?head_sha={head}&event=pull_request")
-        mine = [r for r in runs.get("workflow_runs", [])
-                if r.get("path", "").endswith("pr-security.yml")]
-        if mine:
-            return max(mine, key=lambda r: r["id"])["id"]
+        run = pick_run(gh_json(f"repos/{repo}/actions/runs?head_sha={head}&event=pull_request"),
+                       pr)
+        if run is not None:
+            return run
         if time.monotonic() > deadline:
             sys.exit(f"local-review: no PR Security run for {head[:7]}")
         time.sleep(POLL_S)
 
 
-def wait_for_agent_job(repo: str, run: int, timeout_s: float) -> None:
-    """The agent job starts once every scanner has uploaded its SARIF."""
+def wait_for_agent_job(repo: str, run: int, timeout_s: float) -> bool:
+    """Wait until every scanner has uploaded its SARIF (the agent job has started).
+
+    False if the agent job already finished: the report can still be posted, and is picked up
+    when the workflow is re-run ("Re-run all jobs"; the job only accepts reports for this head).
+    """
     deadline = time.monotonic() + timeout_s
     while True:
         jobs = gh_json(f"repos/{repo}/actions/runs/{run}/jobs?per_page=100")["jobs"]
         job = next((j for j in jobs if j["name"] == AGENT_JOB), None)
         if job and job["status"] == "in_progress":
-            return
+            return True
         if job and job["status"] == "completed":
-            sys.exit(f"local-review: {AGENT_JOB} already finished ({job['conclusion']}); "
-                     "re-run the workflow and try again")
+            print(f"local-review: {AGENT_JOB} already finished ({job['conclusion']}); "
+                  "the report will be posted for a re-run of the workflow", flush=True)
+            return False
         if time.monotonic() > deadline:
             sys.exit(f"local-review: {AGENT_JOB} did not start in time")
         pending = sorted(j["name"] for j in jobs if j["status"] != "completed")
@@ -88,9 +100,9 @@ def main(argv: list[str] | None = None) -> int:
     pr = gh_json(f"repos/{repo}/pulls/{args.pr}")
     base, head = pr["base"]["sha"], pr["head"]["sha"]
     print(f"local-review: {repo}#{args.pr} {base[:7]}..{head[:7]}", flush=True)
-    run = find_run(repo, head, args.timeout)
+    run = find_run(repo, args.pr, head, args.timeout)
     print(f"local-review: run {run}", flush=True)
-    wait_for_agent_job(repo, run, args.timeout)
+    in_time = wait_for_agent_job(repo, run, args.timeout)
 
     work = Path(tempfile.mkdtemp(prefix="secagent-local-"))
     tree = work / "repo"
@@ -120,12 +132,17 @@ def main(argv: list[str] | None = None) -> int:
         body = work / "comment.md"
         body.write_text(pack(out, head), encoding="utf-8", newline="")
         sh("gh", "api", f"repos/{repo}/issues/{args.pr}/comments", "-F", f"body=@{body}")
-        print(f"local-review: report posted to {repo}#{args.pr}; {AGENT_JOB} picks it up",
-              flush=True)
+        if in_time:
+            print(f"local-review: report posted to {repo}#{args.pr}; {AGENT_JOB} picks it up",
+                  flush=True)
+        else:
+            print(f"local-review: report posted to {repo}#{args.pr}; re-run all jobs of run "
+                  f"{run} (gh run rerun {run}) for the gate to use it", flush=True)
         return 0
     finally:
         subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=ROOT,
                        capture_output=True, check=False)
+        subprocess.run(["git", "worktree", "prune"], cwd=ROOT, capture_output=True, check=False)
         if args.keep:
             print(f"local-review: kept {work}")
         else:

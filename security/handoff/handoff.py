@@ -1,14 +1,17 @@
 """Hand a secagent report produced on the reviewer's machine over to the PR pipeline.
 
 With LLM_PROVIDER=claude-mcp the LLM is Claude Code logged in on one machine, which never runs
-on CI. `scripts/local-agent-review.py` runs secagent there on the PR's own scanner results and
+on CI. `security/handoff/local_review.py` runs secagent there on the PR's own scanner results and
 posts the report as a PR comment (`pack`). The `ai-security-agent` job waits for that comment
 (`wait`) and continues as if it had run the agent itself: agent-comment and the quality gate
 are unchanged.
 
-Trust: only a comment written by AGENT_REPORT_AUTHOR (the reviewer running Claude Code) for the
-PR's exact head commit is accepted. Anyone else's comment is ignored, so a PR author cannot hand
-in an "all false positives" report to get through the gate.
+Trust: only a comment written by AGENT_REPORT_AUTHOR (a human login: the reviewer running Claude
+Code) for the PR's exact head commit, and never edited, is accepted. Other users' comments are
+ignored, and so are edited ones: anyone with write access can edit someone else's comment, which
+keeps its author, so an edited handoff proves nothing. When AGENT_REPORT_AUTHOR opens the PR
+themselves, nothing stops them from handing in any verdict: this mode is not an independent check
+of the reviewer.
 
     python3 security/handoff/handoff.py pack --dir out --sha <head>      > comment.md
     python3 security/handoff/handoff.py wait --repo o/r --pr 12 --sha <head> \\
@@ -53,15 +56,22 @@ def pack(out: Path, sha: str) -> str:
     files = {n: (out / n).read_text(encoding="utf-8") for n in FILES if (out / n).is_file()}
     if "report.json" not in files:
         raise HandoffError(f"no report.json in {out}")
-    blob = base64.b64encode(gzip.compress(json.dumps(files).encode("utf-8"))).decode("ascii")
-    lines = "\n".join(blob[i:i + 76] for i in range(0, len(blob), 76))
-    body = (f"{marker(sha)}\n"
-            "<details><summary>secagent: kết quả chạy trên máy người review (claude-mcp), "
-            f"chuyển cho pipeline của commit <code>{sha[:7]}</code></summary>\n\n"
-            f"```\n{lines}\n```\n</details>\n")
+    body = _body(files, sha)
+    if len(body) > MAX_COMMENT and "agent.sarif" in files:
+        # agent.sarif only feeds the Security tab: drop it rather than lose the report.
+        body = _body({n: v for n, v in files.items() if n != "agent.sarif"}, sha)
     if len(body) > MAX_COMMENT:
         raise HandoffError(f"report too large for a PR comment ({len(body)} characters)")
     return body
+
+
+def _body(files: dict[str, str], sha: str) -> str:
+    blob = base64.b64encode(gzip.compress(json.dumps(files).encode("utf-8"))).decode("ascii")
+    lines = "\n".join(blob[i:i + 76] for i in range(0, len(blob), 76))
+    return (f"{marker(sha)}\n"
+            "<details><summary>secagent: kết quả chạy trên máy người review (claude-mcp), "
+            f"chuyển cho pipeline của commit <code>{sha[:7]}</code></summary>\n\n"
+            f"```\n{lines}\n```\n</details>\n")
 
 
 def unpack(body: str, sha: str) -> dict[str, str]:
@@ -78,7 +88,9 @@ def unpack(body: str, sha: str) -> dict[str, str]:
         if len(data) > MAX_BYTES or inflater.unconsumed_tail:
             raise HandoffError("payload too large")
         files = json.loads(data.decode("utf-8"))
-    except (binascii.Error, zlib.error, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        if not inflater.eof:
+            raise HandoffError("truncated payload")
+    except (binascii.Error, zlib.error, UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise HandoffError(f"unreadable payload ({type(exc).__name__})") from None
     if not isinstance(files, dict) or "report.json" not in files:
         raise HandoffError("payload has no report.json")
@@ -87,7 +99,7 @@ def unpack(body: str, sha: str) -> dict[str, str]:
         raise HandoffError(f"unexpected payload entries {sorted(unknown)}")
     try:
         report = json.loads(files["report.json"])
-    except json.JSONDecodeError:
+    except (ValueError, RecursionError):
         raise HandoffError("report.json is not JSON") from None
     if not isinstance(report, dict) or not isinstance(report.get("findings"), list):
         raise HandoffError("report.json has no findings list")
@@ -97,14 +109,15 @@ def unpack(body: str, sha: str) -> dict[str, str]:
 def wait(fetch: Callable[[], Iterable[dict]], sha: str, author: str, out: Path,
          timeout_s: float, sleep: Callable[[float], object] = time.sleep,
          clock: Callable[[], float] = time.monotonic) -> int:
-    """Poll the PR comments until the trusted author's handoff for `sha` arrives."""
+    """Poll the PR comments until the trusted author's unedited handoff for `sha` arrives."""
     if not author:
         print("handoff: AGENT_REPORT_AUTHOR is not set; no report can be accepted")
         return 2
     deadline = clock() + timeout_s
     while True:
         handoffs = [c for c in fetch()
-                    if c.get("login") == author and str(c.get("body", "")).startswith(marker(sha))]
+                    if c.get("login") == author and c.get("edited") is False
+                    and str(c.get("body", "")).startswith(marker(sha))]
         if handoffs:
             latest = max(handoffs, key=lambda c: c.get("id", 0))
             try:
@@ -123,16 +136,38 @@ def wait(fetch: Callable[[], Iterable[dict]], sha: str, author: str, out: Path,
         sleep(POLL_S)
 
 
+COMMENTS_QUERY = """
+query($owner: String!, $name: String!, $pr: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $pr) {
+      comments(last: 100) { nodes { databaseId body lastEditedAt author { login } } }
+    }
+  }
+}"""
+
+
+def parse_comments(data: dict) -> list[dict]:
+    """GraphQL answer -> [{id, login, body, edited}]; a deleted (ghost) author has no login."""
+    nodes = data["data"]["repository"]["pullRequest"]["comments"]["nodes"]
+    return [{"id": n.get("databaseId") or 0, "login": (n.get("author") or {}).get("login"),
+             "body": n.get("body") or "", "edited": n.get("lastEditedAt") is not None}
+            for n in nodes]
+
+
 def _gh_comments(repo: str, pr: int) -> list[dict]:
-    """The PR's issue comments as {id, login, body} (gh CLI, GH_TOKEN from the job)."""
+    """The PR's latest 100 comments (gh CLI with the job's GH_TOKEN)."""
+    owner, name = repo.split("/", 1)
     done = subprocess.run(
-        ["gh", "api", "--paginate", f"repos/{repo}/issues/{pr}/comments",
-         "--jq", ".[] | {id: .id, login: .user.login, body: .body}"],
+        ["gh", "api", "graphql", "-f", f"query={COMMENTS_QUERY}", "-f", f"owner={owner}",
+         "-f", f"name={name}", "-F", f"pr={pr}"],
         capture_output=True, text=True, encoding="utf-8", check=False)
-    if done.returncode != 0:
-        print(f"handoff: listing comments failed: {done.stderr.strip()[:200]}")
+    try:
+        if done.returncode != 0:
+            raise ValueError(done.stderr.strip()[:200])
+        return parse_comments(json.loads(done.stdout))
+    except (ValueError, KeyError, TypeError) as exc:
+        print(f"handoff: listing comments failed: {exc}")
         return []
-    return [json.loads(line) for line in done.stdout.splitlines() if line.strip()]
 
 
 def main(argv: list[str] | None = None) -> int:
