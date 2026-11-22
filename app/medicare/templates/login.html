@@ -19,6 +19,15 @@
         <label class="form-label" for="password">Mật khẩu</label>
         <input class="form-control" id="password" name="password" type="password" maxlength="128" autocomplete="current-password" required>
       </div>
+      <div class="mb-3">
+        <label class="form-label" for="shift">Ca làm việc</label>
+        <select class="form-select" id="shift" name="shift">
+          <option value="hc" selected>Hành chính</option>
+          <option value="12h">Ca 12 giờ</option>
+          <option value="24h">Trực 24 giờ</option>
+        </select>
+        <div class="form-text">Phiên đăng nhập hết hạn khi hết ca. Bệnh nhân giữ mặc định.</div>
+      </div>
       <button class="btn btn-primary w-100" type="submit">Đăng nhập</button>
     </form>
     <p class="text-secondary small text-center mt-3 mb-0">Chỉ dành cho nhân viên và bệnh nhân đã được cấp tài khoản</p>

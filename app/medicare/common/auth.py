@@ -1,3 +1,4 @@
+import logging
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -12,8 +13,16 @@ from medicare.common.csrf import rotate_csrf_token
 from medicare.common.passwords import hash_password, verify_password
 from medicare.db import get_db
 
+logger = logging.getLogger("medicare.auth")
+
 MAX_FAILED_LOGINS = 5
 LOCK_DURATION = timedelta(minutes=15)
+
+# Absolute session lifetime by shift. "hc" (office hours) uses SESSION_MAX_AGE; staff on
+# 12-hour shifts or 24-hour duty choose a longer one at login so they are not signed out
+# in the middle of a shift.
+SHIFT_MAX_AGE = {"hc": None, "12h": 12 * 3600, "24h": 24 * 3600}
+DEFAULT_SHIFT = "hc"
 
 # Verified against when the username is unknown, so response time does not reveal
 # whether an account exists. Computed once at import.
@@ -61,12 +70,13 @@ def authenticate(db: Session, username: str, password: str, now: datetime) -> Us
     return user
 
 
-def start_session(request: Request, user: User) -> None:
+def start_session(request: Request, user: User, shift: str = DEFAULT_SHIFT) -> None:
     """Fresh session after authentication (R-08: no fixation)."""
     request.session.clear()
     request.session["user_id"] = user.id
     request.session["sv"] = user.session_version
     request.session["iat"] = int(_now())
+    request.session["shift"] = shift if user.role != Role.PATIENT else DEFAULT_SHIFT
     rotate_csrf_token(request)
 
 
@@ -75,22 +85,40 @@ def revoke_sessions(user: User) -> None:
     user.session_version += 1
 
 
-def _session_valid(request: Request, user: User | None) -> bool:
-    if user is None or not user.is_active:
-        return False
-    if request.session.get("sv") != user.session_version:
-        return False
+def _max_age(request: Request) -> int:
+    shift_age = SHIFT_MAX_AGE[request.session.get("shift", DEFAULT_SHIFT)]
+    return shift_age or request.app.state.settings.session_max_age
+
+
+def _session_user(request: Request, db: Session) -> User | None:
+    """The session's user, or None when the session can no longer be used.
+
+    The cookie is checked first, so expired sessions never cost a database query.
+    """
+    user_id = request.session.get("user_id")
     issued_at = request.session.get("iat")
-    max_age = request.app.state.settings.session_max_age
+    if not isinstance(user_id, int) or not isinstance(issued_at, int):
+        return None
     # Absolute lifetime: the signed cookie is re-issued on every response, so its
     # max_age alone would only be an idle timeout.
-    return isinstance(issued_at, int) and 0 <= _now() - issued_at <= max_age
+    if not 0 <= _now() - issued_at <= _max_age(request):
+        return None
+    user = db.get(User, user_id)
+    if user is None or not user.is_active or request.session.get("sv") != user.session_version:
+        return None
+    return user
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    user_id = request.session.get("user_id")
-    user = db.get(User, user_id) if isinstance(user_id, int) else None
-    if not _session_valid(request, user):
+    try:
+        user = _session_user(request, db)
+    except Exception as exc:  # noqa: BLE001
+        # A fault in the check itself must not sign staff out in the middle of a shift:
+        # keep the session's user and let the next request check again.
+        logger.warning("Session check failed: %s", type(exc).__name__)
+        user_id = request.session.get("user_id")
+        user = db.get(User, user_id) if isinstance(user_id, int) else None
+    if user is None:
         request.session.clear()
         raise LoginRequired
     request.state.current_user = user
