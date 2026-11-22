@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,7 @@ from medicare.common.ids import ObjectId
 from medicare.common.templating import flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
-from medicare.prescription import service
+from medicare.prescription import legacy_import, service
 
 router = APIRouter()
 
@@ -149,4 +149,43 @@ def add_medicine(
         return _medicines_page(request, db, values=values, errors=[str(exc)], status_code=400)
     db.commit()
     flash(request, "Đã thêm thuốc vào danh mục")
+    return RedirectResponse("/admin/medicines", status_code=303)
+
+
+def _import_page(request, *, errors=None, status_code=200):
+    return render(request, "prescription/import.html", {
+        "errors": errors or [],
+        "max_mb": legacy_import.MAX_UPLOAD_BYTES // (1024 * 1024),
+        "breadcrumbs": [("Trang chủ", "/"), ("Danh mục thuốc", "/admin/medicines"),
+                        ("Nhập từ hệ thống cũ", None)],
+    }, status_code=status_code)
+
+
+@router.get("/admin/medicines/import")
+def import_medicines_page(request: Request, user: User = Depends(admin_user)) -> Response:
+    return _import_page(request)
+
+
+@router.post("/admin/medicines/import", dependencies=[Depends(verify_csrf)])
+def import_medicines(
+    request: Request,
+    file: UploadFile,
+    user: User = Depends(admin_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    data = file.file.read(legacy_import.MAX_UPLOAD_BYTES + 1)
+    if len(data) > legacy_import.MAX_UPLOAD_BYTES:
+        return _import_page(request, errors=["File vượt quá dung lượng cho phép"],
+                            status_code=400)
+    try:
+        rows = legacy_import.parse_export(file.filename or "", data)
+    except service.PrescriptionError as exc:
+        return _import_page(request, errors=[str(exc)], status_code=400)
+    result = legacy_import.import_medicines(db, rows)
+    db.commit()
+    flash(request, f"Đã nhập {result.added} thuốc, bỏ qua {result.skipped} mã đã có")
+    for error in result.errors[:10]:
+        flash(request, error, "warning")
+    if len(result.errors) > 10:
+        flash(request, f"... và {len(result.errors) - 10} dòng lỗi khác", "warning")
     return RedirectResponse("/admin/medicines", status_code=303)
