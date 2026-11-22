@@ -28,7 +28,7 @@ import time
 from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from handoff import pack  # noqa: E402
+from handoff import HandoffError, pack  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 AGENT_JOB = "ai-security-agent"
@@ -157,17 +157,19 @@ def benchmark_view(tree: Path, base: str, head: str) -> None:
     import scenario as sc  # needs PyYAML
 
     origin = sc.base_commit()
+    # The commit the PR branched from (the PR's base sha moves when main does).
+    fork = sh("git", "-C", str(tree), "merge-base", base, head).strip()
 
     def since(kind: str) -> list[str]:
         out = sh("git", "-C", str(tree), "-c", "core.quotePath=false", "diff", "--name-only",
-                 "--no-renames", f"--diff-filter={kind}", "-z", origin, base)
+                 "--no-renames", f"--diff-filter={kind}", "-z", origin, fork)
         return [f for f in out.split("\0") if f]
 
     pr_files = set(sh("git", "-C", str(tree), "-c", "core.quotePath=false", "diff",
                       "--name-only", "--no-renames", "-z", f"{base}...{head}").split("\0"))
     # Files main changed or removed since the benchmark base go back to that version, unless
     # the PR itself changes them (the PR's version is what is under review).
-    restore = [f for f in since("MD") if f not in pr_files]
+    restore = [f for f in since("MDT") if f not in pr_files]
     for start in range(0, len(restore), 100):
         sh("git", "-C", str(tree), "checkout", origin, "--",
            *(f":(literal){f}" for f in restore[start:start + 100]))
@@ -242,8 +244,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"local-review: secagent exited {done.returncode}; nothing posted "
                   "(the job will time out and the gate falls back to traditional mode)")
             return done.returncode
+        report = json.loads((out / "report.json").read_text(encoding="utf-8"))
+        if (report.get("meta") or {}).get("error"):
+            print(f"local-review: secagent stopped midway ({report['meta']['error']}); "
+                  "nothing posted")
+            return 3
         body = work / "comment.md"
-        body.write_text(pack(out, head), encoding="utf-8", newline="")
+        try:
+            body.write_text(pack(out, head), encoding="utf-8", newline="")
+        except HandoffError as exc:
+            print(f"local-review: {exc}; nothing posted")
+            return 4
         sh("gh", "api", f"repos/{repo}/issues/{args.pr}/comments", "-F", f"body=@{body}")
         if in_time:
             print(f"local-review: report posted to {repo}#{args.pr}; {AGENT_JOB} picks it up",
