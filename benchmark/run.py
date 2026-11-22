@@ -12,8 +12,10 @@ fetch    downloads the artifacts of a `Benchmark scan` workflow run into
          stay out of git (large; the workflow run keeps them for 90 days).
 agent    runs secagent (LLM mode claude-mcp) on every selected scenario x repetition, in a
          throwaway worktree that has no benchmark/ and no design documents, into
-         results/runs/<config>/<ID>/rep<N>/. Runs already done are skipped; when the Claude plan's
-         usage limit is reached it waits and retries.
+         results/runs/<scan>/<config>/<ID>/rep<N>/. Runs already done are skipped; when the
+         Claude plan's usage limit is reached it waits and retries. Runs are grouped by scan
+         run and record the agent commit, so results of different scans or agent versions
+         never mix.
 
 The agent never reads this directory: its worktree, its prompt and its tools only reach the
 scenario's code (benchmark/scenario.py).
@@ -25,6 +27,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -149,7 +152,9 @@ def fetch(run_id: str, baseline_run: str | None) -> Path:
     try:
         subprocess.run(["gh", "run", "download", run_id, "--dir", str(raw)], check=True)
         gate = _load_gate()
-        scanned = sorted(p.name.removeprefix("scan-") for p in raw.glob("scan-*"))
+        # S00 first: scenarios that do not change what runs reuse its zap.sarif.
+        scanned = sorted((p.name.removeprefix("scan-") for p in raw.glob("scan-*")),
+                         key=lambda i: (i != sc.BASELINE, i))
         if not scanned:
             raise sc.ScenarioError(f"run {run_id} has no scan-* artifact")
         for scenario_id in scanned:
@@ -186,24 +191,52 @@ def _baseline_zap(out: Path, baseline_run: str | None) -> Path:
 
 # --- agent ------------------------------------------------------------------------------------
 
+_LIMIT = re.compile(r"claude-mcp: (usage-limit|[^\n]*(limit|quota|\b429\b))", re.IGNORECASE)
+_AUTH = re.compile(r"claude-mcp: auth", re.IGNORECASE)
 
-def _done(rundir: Path) -> bool:
-    timing = rundir / "timing.json"
-    if not timing.is_file():
+
+def agent_version() -> dict:
+    """The secagent code that produced a run: the git tree of agent/ (prompts included; it
+    changes only when agent/ does), and whether agent/ had uncommitted edits."""
+    commit = subprocess.run(["git", "rev-parse", "HEAD:agent"], cwd=ROOT, capture_output=True,
+                            text=True, check=True).stdout.strip()
+    dirty = subprocess.run(["git", "status", "--porcelain", "--", "agent"], cwd=ROOT,
+                           capture_output=True, text=True, check=True).stdout.strip()
+    return {"agent_commit": commit, "agent_dirty": bool(dirty)}
+
+
+def _timing(rundir: Path) -> dict:
+    path = rundir / "timing.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+
+
+def _done(rundir: Path, version: dict) -> bool:
+    timing = _timing(rundir)
+    if timing.get("exit") != 0:
         return False
-    return json.loads(timing.read_text(encoding="utf-8")).get("exit") == 0
+    if timing.get("agent_commit") != version["agent_commit"]:
+        raise sc.ScenarioError(f"{rundir} was produced by agent {timing.get('agent_commit')}, "
+                               f"not {version['agent_commit']}: move it away first")
+    return True
 
 
-def _classify(rundir: Path) -> str | None:
-    """'usage-limit' or 'auth' when Claude Code refused to run, from the failure report."""
+def classify(rundir: Path) -> str | None:
+    """'usage-limit' or 'auth' when Claude Code could not run, whether secagent failed (exit 2)
+    or stopped midway (exit 0 with meta.error)."""
     text = ""
-    for name in ("report.md", "trace.jsonl"):
-        path = rundir / name
-        if path.is_file():
-            text += path.read_text(encoding="utf-8", errors="replace")
-    for kind in ("usage-limit", "auth"):
-        if f"claude-mcp: {kind}" in text:
-            return kind
+    report = rundir / "report.json"
+    if report.is_file():
+        meta = json.loads(report.read_text(encoding="utf-8")).get("meta") or {}
+        text += str(meta.get("error") or "")
+    else:
+        for name in ("report.md", "trace.jsonl"):
+            path = rundir / name
+            if path.is_file():
+                text += path.read_text(encoding="utf-8", errors="replace")
+    if _AUTH.search(text):
+        return "auth"
+    if _LIMIT.search(text):
+        return "usage-limit"
     return None
 
 
@@ -211,12 +244,26 @@ class Abort(Exception):
     pass
 
 
+def _child_env() -> dict[str, str]:
+    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    env.update(LLM_PROVIDER="claude-mcp", PYTHONIOENCODING="utf-8")
+    return env
+
+
+def _scrub(text: str) -> str:
+    """Committed logs must not carry this machine's paths."""
+    return text.replace(str(Path.home()), "~").replace(Path.home().as_posix(), "~")
+
+
 def run_one(config: str, scan: Path, scenario: sc.Scenario, rep: int, validate: bool,
-            stop: threading.Event) -> str:
-    rundir = RESULTS / "runs" / config / scenario.id / f"rep{rep}"
-    if _done(rundir):
+            version: dict, stop: threading.Event) -> str:
+    from secagent.llm.claude_mcp import spawn  # kills the whole process tree on timeout
+
+    rundir = RESULTS / "runs" / scan.name / config / scenario.id / f"rep{rep}"
+    if _done(rundir, version):
         return "skip"
     meta = json.loads((scan / scenario.id / "scenario.json").read_text(encoding="utf-8"))
+    agent = ["uv", "run", "--project", str(ROOT / "agent"), "--locked"]
     for attempt in range(USAGE_MAX_WAITS + 1):
         if stop.is_set():
             return "stopped"
@@ -230,44 +277,44 @@ def run_one(config: str, scan: Path, scenario: sc.Scenario, rep: int, validate: 
                 built = sc.materialize(scenario, repo, ROOT)
             if built["head"] != meta["head"]:
                 raise sc.ScenarioError(f"{scenario.id}: commits differ from the scan")
-            env = {**os.environ, "LLM_PROVIDER": "claude-mcp", "PYTHONIOENCODING": "utf-8"}
             started = time.monotonic()
-            cmd = ["uv", "run", "--project", str(ROOT / "agent"), "--locked", "secagent",
-                   "--mode", "benchmark", "--repo", str(repo), "--base", meta["base"],
-                   "--head", meta["head"], "--sarif-dir", str(scan / scenario.id),
-                   "--requirements", "docs/security-requirements.md", "--out", str(rundir),
-                   *CONFIGS[config]]
-            done = subprocess.run(cmd, env=env, capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace", timeout=RUN_TIMEOUT_S,
-                                  check=False)
+            done = spawn([*agent, "secagent", "--mode", "benchmark", "--repo", str(repo),
+                          "--base", meta["base"], "--head", meta["head"],
+                          "--sarif-dir", str(scan / scenario.id),
+                          "--requirements", "docs/security-requirements.md",
+                          "--out", str(rundir), *CONFIGS[config]],
+                         "", ROOT, _child_env(), RUN_TIMEOUT_S)
             wall = round(time.monotonic() - started, 2)
+            exit_code = -1 if done.timed_out else done.returncode
+            kind = classify(rundir)
+            if exit_code == 0 and kind:  # stopped midway by the plan's limit: not a result
+                exit_code = 3
             validated = None
-            if done.returncode == 0 and validate:
-                v = subprocess.run(["uv", "run", "--project", str(ROOT / "agent"), "--locked",
-                                    "secagent-validate", "--out", str(rundir), "--repo",
-                                    str(repo), "--head", meta["head"]],
-                                   env=env, capture_output=True, text=True, encoding="utf-8",
-                                   errors="replace", timeout=RUN_TIMEOUT_S, check=False)
-                validated = v.returncode
+            if exit_code == 0 and validate:
+                with _git_lock:  # validation adds and prunes worktrees of the same repository
+                    v = spawn([*agent, "secagent-validate", "--out", str(rundir), "--repo",
+                               str(repo), "--head", meta["head"]], "", ROOT, _child_env(),
+                              RUN_TIMEOUT_S)
+                validated = -1 if v.timed_out else v.returncode
             (rundir / "timing.json").write_text(json.dumps({
                 "config": config, "scenario": scenario.id, "rep": rep, "scan": scan.name,
-                "exit": done.returncode, "wall_s": wall, "validate_exit": validated,
+                "base": meta["base"], "head": meta["head"], **version,
+                "exit": exit_code, "wall_s": wall, "validate_exit": validated,
                 "attempt": attempt, "finished_at": datetime.now(UTC).isoformat(timespec="seconds"),
             }, indent=2), encoding="utf-8")
-            (rundir / "stderr.txt").write_text(done.stderr[-4000:], encoding="utf-8")
+            (rundir / "stderr.txt").write_text(_scrub(done.stderr[-4000:]), encoding="utf-8")
         finally:
             with _git_lock:
                 subprocess.run(["git", "worktree", "remove", "--force", str(repo)], cwd=ROOT,
                                check=False, capture_output=True)
             shutil.rmtree(work, ignore_errors=True)
-        if done.returncode == 0:
+        if exit_code == 0:
             return "ok"
-        kind = _classify(rundir)
         if kind == "auth":
             stop.set()
             raise Abort("Claude Code is not logged in (claude-mcp: auth); log in, then rerun")
         if kind != "usage-limit":
-            return f"failed (exit {done.returncode})"
+            return f"failed (exit {exit_code})"
         _say(f"{config} {scenario.id} rep{rep}: usage limit reached, waiting "
              f"{USAGE_WAIT_S // 60} min ({attempt + 1}/{USAGE_MAX_WAITS})")
         stop.wait(USAGE_WAIT_S)
@@ -283,16 +330,19 @@ def agent(config: str, scan_run: str, selection: str, reps: int, jobs: int,
     missing = [s.id for s in scenarios if not (scan / s.id / "clusters.json").is_file()]
     if missing:
         raise sc.ScenarioError(f"not fetched from scan run {scan_run}: {', '.join(missing)}")
+    version = agent_version()
+    if version["agent_dirty"]:
+        _say("warning: agent/ has uncommitted changes; runs record agent_dirty=true")
     tasks = [(s, rep) for rep in range(1, reps + 1) for s in scenarios]
     stop, failures = threading.Event(), []
 
     def work(task):
         scenario, rep = task
         try:
-            status = run_one(config, scan, scenario, rep, validate and rep == 1, stop)
+            status = run_one(config, scan, scenario, rep, validate and rep == 1, version, stop)
         except Abort as exc:
             status = f"aborted: {exc}"
-        except (sc.ScenarioError, subprocess.TimeoutExpired, OSError) as exc:
+        except Exception as exc:  # one broken run must not take the batch down
             status = f"failed: {type(exc).__name__}: {str(exc)[:200]}"
         _say(f"{config} {scenario.id} rep{rep}: {status}")
         if status not in ("ok", "skip"):

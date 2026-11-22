@@ -60,7 +60,8 @@ REWRITES = {
     # Comments only: the scanners' behaviour is unchanged.
     "security/tool-versions.env": [
         ("(CI workflows, local scans, benchmark).", "(CI workflows, local scans)."),
-        ("so CI, local scans and the benchmark get one tree.", "so CI and local scans get one tree."),
+        ("so CI, local scans and the benchmark get one tree.",
+         "so CI and local scans get one tree."),
     ],
     "security/dast/run-dast.sh": [
         ("# Used by the PR pipeline, the local deploy (phase 3) and the benchmark (phase 5).",

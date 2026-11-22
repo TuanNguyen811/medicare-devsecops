@@ -65,7 +65,17 @@
 - [x] Chạy thật C2 trên S00:
   - 36 giây, 14 lượt gọi LLM, khoảng 0,10 USD quy đổi;
   - agent kết luận 9 cụm ZAP có sẵn là TP. Kết luận này đúng: thiếu header bảo mật là vấn đề thật. Vì vậy có quy ước loại phát hiện DAST có sẵn khỏi TP/FP.
-- [ ] Review toàn nhánh (Opus), PR.
+- [x] Review toàn nhánh (Opus): 0 Critical, 7 Important, 6 Minor; đã sửa hết.
+  - **Cách chấm chặt đã đúng spec 5.3:** NEEDS_REVIEW tính là FP, không tính TP.
+  - **Phát hiện DAST có sẵn** nhận theo rule ZAP, bắt buộc có S00.
+  - **Lần chạy lỗi hoặc thiếu** tính là FN; ở cấp PR dùng quyết định truyền thống.
+  - **Bằng chứng:** khớp đáp án với bất kỳ đoạn nào.
+  - **Kết quả theo lần quét và phiên bản agent.**
+  - **Hạn mức của gói:** lần chạy dừng giữa chừng vì hạn mức được chạy lại.
+  - **Timeout:** giết cả cây tiến trình.
+  - **Kiểm chứng bản vá:** chạy trong khóa git.
+  - **Log:** không chứa đường dẫn máy.
+- [ ] PR.
 
 ## Bước 3: Tập dev và chốt prompt
 - [ ] S01, S07, S10, S14, D1: patch và đáp án; áp sạch lên `v0.3-baseline`; test của app vẫn đạt (trừ khi lỗi cài vào cố ý làm hỏng test).
