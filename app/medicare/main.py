@@ -15,6 +15,7 @@ from medicare.common.errors import CatchAllErrorsMiddleware, register_error_hand
 from medicare.common.metrics import MetricsMiddleware, start_metrics_server
 from medicare.config import Settings
 from medicare.db import create_db
+from medicare.mobile.router import router as mobile_router
 from medicare.patient.router import router as patient_router
 from medicare.prescription.router import router as prescription_router
 from medicare.record.router import router as record_router
@@ -67,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(billing_router)
     app.include_router(admin_router)
     app.include_router(audit_router)
+    app.include_router(mobile_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:
