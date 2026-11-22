@@ -39,7 +39,9 @@ Các khái niệm dùng trong ma trận:
 | Hủy lịch hẹn | ✅ (khi còn hiệu lực) | ✅ (khi còn hiệu lực) | ❌ | ❌ | của mình, khi `REQUESTED` |
 | Lập / thu hóa đơn | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Xem hóa đơn | ✅ | ✅ | ❌ | ❌ | của mình |
-| Quản lý tài khoản, danh mục thuốc | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Quản lý tài khoản (tạo, đổi vai trò, khóa), danh mục thuốc | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Tự sửa thông tin cá nhân của tài khoản mình | chỉ các trường cho phép (R-16) | như ADMIN | như ADMIN | như ADMIN | như ADMIN |
+| Xuất danh sách bệnh nhân ra file | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Xem audit log | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ## Quy tắc
@@ -105,3 +107,25 @@ Server không dùng đường dẫn file hay URL do người dùng cung cấp m�
 ### R-15: Không để lộ sự tồn tại của đối tượng
 
 Đối tượng không tồn tại và đối tượng không có quyền truy cập đều trả về 404 giống hệt nhau.
+
+### R-16: Quản trị tài khoản chỉ dành cho ADMIN
+
+Chỉ ADMIN được tạo tài khoản, đổi vai trò, đổi khoa, gắn tài khoản với hồ sơ bệnh nhân, khóa hay mở khóa tài khoản.
+
+Người dùng tự sửa thông tin của mình chỉ được đổi các trường nằm trong danh sách cho phép (họ tên hiển thị, số điện thoại liên hệ). Server bỏ qua hoặc từ chối mọi trường khác, như `role`, `department_id`, `patient_id`, `is_active`, kể cả khi client gửi lên.
+
+### R-17: Hóa đơn đúng luồng và tính ở server
+
+Hóa đơn chỉ chuyển trạng thái theo luồng cho phép: `UNPAID` → `PAID`, do lễ tân thực hiện. Không có bước nào bị bỏ qua, và không quay ngược lại.
+
+Mỗi dòng hóa đơn có số lượng là số nguyên dương. Đơn giá lấy từ danh mục ở server. Thành tiền, tổng tiền và phần BHYT chi trả đều tính ở server (R-04). Client không gửi lên đơn giá hay thành tiền.
+
+### R-18: Đặt lại mật khẩu an toàn
+
+Token đặt lại mật khẩu được sinh bằng bộ sinh số ngẫu nhiên an toàn (`secrets`), dài ít nhất 128 bit. Token chỉ dùng được một lần và hết hạn sau 15 phút. Server chỉ lưu bản băm của token.
+
+Đặt lại mật khẩu thành công thì mọi phiên cũ của tài khoản bị hủy (R-08). Phản hồi cho yêu cầu đặt lại giống hệt nhau, dù tài khoản có tồn tại hay không (như R-07).
+
+### R-19: Xuất dữ liệu ra file
+
+Dữ liệu xuất ra file (CSV, Excel) phải trung hòa các ô bắt đầu bằng `=`, `+`, `-`, `@`, tab hoặc xuống dòng, để chống chèn công thức. Dữ liệu xuất ra tuân theo R-11: CCCD và mã BHYT chỉ đầy đủ với vai trò được phép xem. Mỗi lần xuất đều ghi audit log.

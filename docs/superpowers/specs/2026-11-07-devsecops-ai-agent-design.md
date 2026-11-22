@@ -35,7 +35,7 @@
 | Secret Scan | Gitleaks (pre-commit + PR) |
 | IaC Scan | Checkov (Terraform, K8s, Dockerfile) |
 | AI Agent | Tự xây bằng Python, dùng Function Calling trực tiếp, không dùng framework agent |
-| LLM | Mặc định DeepSeek. Đổi nhà cung cấp bằng `LLM_PROVIDER`: `deepseek`, `openai`, `gemini` (qua thư viện `openai`), `anthropic` (Claude, qua thư viện `anthropic`) hoặc `openai-compatible` (OpenRouter, Ollama…). Model cấu hình bằng `LLM_MODEL` (cập nhật 2026-11-07 theo yêu cầu người dùng) |
+| LLM | Chọn bằng `LLM_PROVIDER`: `anthropic` (Claude, mặc định, qua thư viện `anthropic`), `openai`, `gemini` (qua thư viện `openai`), hoặc `claude-mcp` (Claude Code đăng nhập trên máy, không cần key, chỉ chạy trên máy). Model cấu hình bằng `LLM_MODEL` |
 | Hosting | Không cần VPS. CI chạy trên GitHub-hosted runner, staging tạm thời trên runner, demo chạy `docker compose` trên máy cá nhân |
 | Repo | Một repo duy nhất (monorepo): `github.com/TuanNguyen811/medicare-devsecops` |
 
@@ -95,7 +95,7 @@ medicare-devsecops/
 | Staging | Tạm thời ngay trên runner: `docker compose up` → smoke test → dọn dẹp | Miễn phí |
 | Container registry | GHCR | Miễn phí (repo public) |
 | Demo và phát triển | Máy cá nhân: Docker Desktop + `docker compose` | Miễn phí |
-| LLM | DeepSeek API | Trả theo token (ước tính vài USD cho toàn bộ benchmark) |
+| LLM | API của Claude, OpenAI hoặc Gemini (trả theo token); benchmark chạy chế độ `claude-mcp` bằng gói Claude trên máy | Benchmark không tốn tiền API |
 
 - **Không dùng self-hosted runner**, vì GitHub khuyến cáo không dùng loại runner này cho repo public: PR từ người ngoài có thể chạy code trên máy của mình.
 - **Tùy chọn sau này:** một VPS giá rẻ chạy bản `main` (bản sạch) để có URL cố định cho nhóm hoặc hội đồng. **Tuyệt đối không triển khai các nhánh kịch bản lỗ hổng lên môi trường public.**
@@ -191,7 +191,7 @@ build-test → full-scan (upload lên tab Security) → docker build → Trivy q
 - Khai báo `permissions` tối thiểu cho từng job.
 - Cố định phiên bản Action bằng commit SHA.
 - **Không dùng `pull_request_target`.**
-- `DEEPSEEK_API_KEY` để trong GitHub Secrets. Job Agent bỏ qua PR từ fork.
+- `LLM_API_KEY` để trong GitHub Secrets. Job Agent bỏ qua PR từ fork.
 - Branch protection trên `main`: bắt buộc `quality-gate` đạt và có 1 người duyệt.
 
 ### 3.6 Mục tiêu hiệu năng
@@ -245,8 +245,8 @@ Agent dùng mô hình **review một lượt**: chỉ có một phiên Agent duy
 
 - `--mode ci | cli | benchmark`. Chế độ `cli` hiển thị trực tiếp từng bước suy luận và từng lần gọi công cụ, dùng khi demo.
 - Cờ ablation: `--strategy single-shot` (không dùng công cụ), `--no-requirements`, `--no-ast-tools`, `--model <name>`.
-- Biến môi trường: `LLM_PROVIDER` (mặc định `deepseek`), `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL` (mặc định theo nhà cung cấp, ví dụ `https://api.deepseek.com`), `LLM_TEMPERATURE`.
-- `--thinking`: dùng chế độ suy luận của mô hình (chậm hơn, có thể chính xác hơn), phục vụ cấu hình C2-thinking. Với DeepSeek là `deepseek-reasoner`, Claude là extended thinking, OpenAI/Gemini là `reasoning_effort`.
+- Biến môi trường: `LLM_PROVIDER` (mặc định `anthropic`), `LLM_API_KEY` (không cần với `claude-mcp`), `LLM_MODEL`, `LLM_BASE_URL` (mặc định theo nhà cung cấp), `LLM_TEMPERATURE`.
+- `--thinking`: dùng chế độ suy luận của mô hình (chậm hơn, có thể chính xác hơn). Claude là extended thinking, OpenAI/Gemini là `reasoning_effort`.
 - `temperature = 0`. Thử lại với thời gian chờ tăng dần (3 lần), timeout cho mỗi lần gọi, ngân sách token cho mỗi lần chạy.
 
 ### 4.5 Xử lý lỗi
@@ -316,7 +316,7 @@ Agent dùng mô hình **review một lượt**: chỉ có một phiên Agent duy
 
 ### 5.4 Cấu hình so sánh
 
-C1 truyền thống · **C2 Agent đầy đủ** (DeepSeek chế độ thường) · C2-thinking (DeepSeek chế độ suy luận, đo đánh đổi tốc độ và độ chính xác) · C3 LLM gọi một lần · C4 không có tài liệu quy tắc · C5 không có công cụ AST · C6 (tùy chọn) công cụ AI review có sẵn. Mỗi cấu hình có AI chạy 3 lần trên mỗi kịch bản.
+C1 truyền thống · **C2 Agent đầy đủ** · C3 LLM gọi một lần · C4 không có tài liệu quy tắc · C5 không có công cụ AST. Bảng cấu hình hiện hành (model, số lần chạy) ở spec bổ sung `2026-11-21-ops-dast-benchmark-design.md` mục 8.3.
 
 ### 5.5 Chỉ số
 
@@ -331,7 +331,7 @@ Precision, Recall, F1 (tách theo nhóm pattern/logic và theo OWASP) · tỷ l�
 
 ### 5.7 Hạn chế
 
-Dữ liệu tự tạo có thể thiên vị (giảm thiểu bằng đăng ký đáp án trước, tách dev/test, kiểm chứng trên PyGoat) · mẫu nhỏ · LLM không ổn định và phiên bản mô hình thay đổi · có thể rò rỉ dữ liệu huấn luyện · gửi mã nguồn cho bên thứ ba (DeepSeek), cần cân nhắc trong môi trường bệnh viện thật.
+Dữ liệu tự tạo có thể thiên vị (giảm thiểu bằng đăng ký đáp án trước, tách dev/test, kiểm chứng trên PyGoat) · mẫu nhỏ · LLM không ổn định và phiên bản mô hình thay đổi · có thể rò rỉ dữ liệu huấn luyện · gửi mã nguồn cho bên thứ ba (nhà cung cấp LLM), cần cân nhắc trong môi trường bệnh viện thật.
 
 **Đánh đổi tốc độ và độ chính xác** (được đo, không giấu):
 

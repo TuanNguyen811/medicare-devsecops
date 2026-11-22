@@ -18,7 +18,7 @@
 
 **Tech Stack:** prometheus-client 0.26, Prometheus v3.16.0, Alertmanager v0.35.0, Grafana 13.3.1 (ghim digest).
 
-**Spec:** `docs/superpowers/specs/2026-11-21-ops-dast-engine-design.md` mục 7 (các quyết định khi làm ở 7.4).
+**Spec:** `docs/superpowers/specs/2026-11-21-ops-dast-benchmark-design.md` mục 7 (các quyết định khi làm ở 7.4).
 
 ## Global Constraints
 
@@ -70,5 +70,5 @@
   - **M4:** `HighErrorRate` và dashboard bỏ `/health` khỏi phép tính, và không chia cho 0.
   - **M5:** `simulate-traffic.py` không đi qua proxy hệ thống.
   - Test server metrics dùng cổng trống bất kỳ.
-- [ ] PR, theo dõi CI.
-- [ ] Sau merge: `pull-deploy.sh` thật, rồi chạy lại `brute-force` để xác nhận số đếm đủ.
+- [x] PR #11: CI xanh, đã merge.
+- [x] Sau merge: `pull-deploy.sh` thật với bản `main` (`sha256:117a592e…`) đạt. Chạy lại `brute-force`: Prometheus đếm được 30 lần sai trong 5 phút, `BruteForceSuspected` và `AccountLockout` bật.
