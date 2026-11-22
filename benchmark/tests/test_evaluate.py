@@ -107,8 +107,7 @@ def test_summary_counts_failed_runs_as_misses():
          "D01": []}
     cost = {"cost_usd": 0.05, "duration_s": 20.0, "wall_s": 25.0, "llm_calls": 5,
             "tool_calls": 7, "tokens_in": 30000, "tokens_out": 2000, "provider": "claude-mcp",
-            "model": "claude-sonnet-5-5", "patches": 2, "patches_validated": 1,
-            "patches_failed": 1}
+            "model": "claude-sonnet-5-5"}
     rows = [
         _row("C1", "S01", "vuln", 1, ["S01-1"], 2, 2),
         _row("C1", "D01", "decoy", 1, [], 1, 0, blocked=True, gate_ok=False),
@@ -130,3 +129,68 @@ def test_summary_counts_failed_runs_as_misses():
     assert summary["C2"]["cost"]["cost_usd"] == pytest.approx(0.05)
     text = ev.render(summary, {"rows": rows, "truths": t})
     assert "| C2 | claude-mcp/claude-sonnet-5-5 | 2 |" in text and "S01-2 IDOR" in text
+
+
+def test_logic_bug_matches_on_violated_rule_when_cwe_family_differs():
+    rate = ev.Truth("S07-1", "S07", "tỷ lệ BHYT từ client", "logic",
+                    frozenset({"CWE-602"}), "app/medicare/billing/router.py", 100, 117,
+                    violated_rules=frozenset({"R-04", "R-17"}))
+    same_rule = P("app/medicare/billing/router.py", 96, 120, cwes=["CWE-639"])
+    same_rule.violated_rule = "R-04"
+    other_rule = P("app/medicare/billing/router.py", 96, 120, cwes=["CWE-639"])
+    other_rule.violated_rule = "R-01"
+    assert ev.matches(same_rule, rate)
+    assert not ev.matches(other_rule, rate)
+    assert not ev.matches(P("app/medicare/billing/router.py", 96, 120, cwes=["CWE-639"]), rate)
+    moved = P("app/medicare/billing/service.py", 100, cwes=["CWE-639"])
+    moved.violated_rule = "R-04"
+    assert not ev.matches(moved, rate)  # the rule never replaces the location
+
+
+def test_agent_predictions_carry_the_violated_rule():
+    report = {"findings": [{"verdict": "TP", "cwe": "CWE-639", "violated_rule": "R-04",
+                            "finding_ids": [], "file": "app/a.py", "line": 3,
+                            "evidence": [{"file": "app/a.py", "start_line": 3,
+                                          "end_line": 4}]}]}
+    (pred,) = ev.agent_predictions(report, [])
+    assert pred.violated_rule == "R-04"
+
+
+def test_either_listed_rule_matches_and_no_rule_never_does():
+    rate = ev.Truth("S07-1", "S07", "tỷ lệ BHYT từ client", "logic",
+                    frozenset({"CWE-602"}), "app/medicare/billing/router.py", 100, 117,
+                    violated_rules=frozenset({"R-04", "R-17"}))
+    r17 = P("app/medicare/billing/router.py", 110, cwes=["CWE-639"])
+    r17.violated_rule = "R-17"
+    assert ev.matches(r17, rate)
+    plain = ev.Truth("S01-1", "S01", "SQLi", "pattern", frozenset({"CWE-89"}),
+                     "app/medicare/patient/service.py", 40, 44)
+    no_rule = P("app/medicare/patient/service.py", 42, cwes=["CWE-639"])
+    assert not ev.matches(no_rule, plain)  # None never matches an empty rule set
+
+
+def test_ground_truth_rule_may_be_one_or_several():
+    assert ev._rule_set(None) == frozenset()
+    assert ev._rule_set("R-03") == {"R-03"}
+    assert ev._rule_set(["R-04", "R-17"]) == {"R-04", "R-17"}
+
+
+def test_added_lines_and_fp_on_existing_code_are_counted_apart():
+    patch = ("diff --git a/infra/main.tf b/infra/main.tf\n--- a/infra/main.tf\n"
+             "+++ b/infra/main.tf\n@@ -10,2 +10,4 @@\n a\n+b\n+c\n d\n"
+             "--- /dev/null\n+++ b/infra/new.yaml\n@@ -0,0 +1,2 @@\n+x\n+y\n")
+    added = ev.sc.added_lines(patch)
+    assert added == {"infra/main.tf": {11, 12}, "infra/new.yaml": {1, 2}}
+    old = P("infra/main.tf", 3, 5, rules=["CKV_AWS_144"])  # existing resource, untouched
+    new = P("infra/main.tf", 11, 12, rules=["CKV_AWS_144"])  # on the added lines
+    s = ev.score([old, new], [], strict=True, added=added)
+    assert (s.fp, s.fp_old) == (2, 1)
+
+
+def test_truths_are_written_as_json():
+    import json
+
+    rate = ev.Truth("S07-1", "S07", "x", "logic", frozenset({"CWE-602"}), "a.py", 1, 2,
+                    violated_rules=frozenset({"R-17", "R-04"}))
+    (data,) = json.loads(json.dumps(ev._truth_dicts({"S07": [rate]})))["S07"]
+    assert data["violated_rules"] == ["R-04", "R-17"]

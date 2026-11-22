@@ -11,9 +11,15 @@ Units and matching (addendum 8.4):
   ignores it (spec 5.3).
 - A prediction matches a ground-truth vulnerability when one of its locations is in the same
   file with lines within +-3 of the vulnerable range and in the same CWE family (or names one
-  of its scanner `rules`); a DAST prediction matches on route (`METHOD /template`) and family.
+  of its scanner `rules`, or, for an agent finding, one of the business rules R-xx the bug
+  violates: the CWE of a logic bug is a matter of judgement, the broken rules are listed in
+  the ground truth); a DAST prediction matches on route (`METHOD /template`) and family.
 - TP: vulnerabilities matched by at least one prediction (several tools reporting the same bug
   count once). FP: predictions matching no vulnerability. FN: vulnerabilities left unmatched.
+- Scanner findings in a file the PR changed but entirely on lines it did not add (e.g. the
+  existing Checkov findings of main.tf when a PR adds a bucket to it) score as usual (FP when
+  they match no vulnerability) and are also counted apart, so the FP reduction is not
+  overstated.
 - ZAP findings of the unchanged baseline S00 (same ZAP rule) are pre-existing issues of the
   running app, reported again in every scenario: neither TP nor FP, counted apart.
 - Every expected (scenario x repetition) of a config is scored. A failed or missing agent run
@@ -56,6 +62,7 @@ class Truth:
     end: int
     routes: frozenset[str] = frozenset()
     rules: frozenset[str] = frozenset()
+    violated_rules: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -64,10 +71,18 @@ class Prediction:
     cwes: set[str] = field(default_factory=set)
     rules: set[str] = field(default_factory=set)
     needs_review: bool = False
+    violated_rule: str | None = None
 
     @property
     def runtime(self) -> bool:
         return any(f.startswith("dast:") for f, _, _ in self.spans)
+
+
+def _rule_set(value) -> frozenset[str]:
+    """`violated_rule` in ground_truth.yaml: null, one rule, or a list of rules."""
+    if not value:
+        return frozenset()
+    return frozenset([value] if isinstance(value, str) else value)
 
 
 def load_truth(scenario: sc.Scenario) -> list[Truth]:
@@ -80,7 +95,8 @@ def load_truth(scenario: sc.Scenario) -> list[Truth]:
             category=item["category"], cwes=frozenset(item["cwe"]), file=item["file"],
             start=int(lines[0]), end=int(lines[-1]),
             routes=frozenset(item.get("routes") or []),
-            rules=frozenset(item.get("rules") or [])))
+            rules=frozenset(item.get("rules") or []),
+            violated_rules=_rule_set(item.get("violated_rule"))))
     return out
 
 
@@ -90,12 +106,13 @@ def _families(cwes) -> set[str]:
 
 def matches(p: Prediction, t: Truth) -> bool:
     same_family = bool(_families(p.cwes) & _families(t.cwes))
+    same_rule = p.violated_rule is not None and p.violated_rule in t.violated_rules
     for file, start, end in p.spans:
         if file.startswith("dast:"):
             if file.removeprefix("dast:") in t.routes and same_family:
                 return True
         elif (file == t.file and start - LINE_SLACK <= t.end and end + LINE_SLACK >= t.start
-              and (same_family or bool(p.rules & t.rules))):
+              and (same_family or same_rule or bool(p.rules & t.rules))):
             return True
     return False
 
@@ -113,6 +130,16 @@ def is_known(p: Prediction, known: Known) -> bool:
     return p.runtime and bool(p.rules & known)
 
 
+Added = sc.Added
+
+
+def on_old_code(p: Prediction, added: Added) -> bool:
+    """Every location is on a line the PR did not add (pre-existing code)."""
+    if p.runtime:
+        return False
+    return all(not (added.get(f, set()) & set(range(start, end + 1))) for f, start, end in p.spans)
+
+
 @dataclass
 class Score:
     tp: set[str] = field(default_factory=set)
@@ -120,16 +147,23 @@ class Score:
     fn: set[str] = field(default_factory=set)
     known: int = 0  # pre-existing baseline DAST findings reported again
     needs_review: int = 0
+    fp_old: int = 0  # FPs located only on code the PR did not add
 
 
 def score(predictions: list[Prediction], truths: list[Truth], strict: bool,
-          known: Known = frozenset()) -> Score:
+          known: Known = frozenset(), added: Added | None = None) -> Score:
     s = Score()
+
+    def false_positive(p: Prediction) -> None:
+        s.fp += 1
+        if added is not None and on_old_code(p, added):
+            s.fp_old += 1
+
     for p in predictions:
         if p.needs_review:
             s.needs_review += 1
             if strict and not is_known(p, known):
-                s.fp += 1  # spec 5.3: NEEDS_REVIEW counts as an FP in the strict view
+                false_positive(p)  # spec 5.3: NEEDS_REVIEW counts as an FP in the strict view
             continue
         hit = [t.id for t in truths if matches(p, t)]
         if hit:
@@ -137,7 +171,7 @@ def score(predictions: list[Prediction], truths: list[Truth], strict: bool,
         elif is_known(p, known):
             s.known += 1
         else:
-            s.fp += 1
+            false_positive(p)
     s.fn = {t.id for t in truths} - s.tp
     return s
 
@@ -166,6 +200,7 @@ def agent_predictions(report: dict, clusters: list[dict]) -> list[Prediction]:
             p = Prediction(spans or [(e.get("file") or "", int(e.get("line") or 0),
                                       int(e.get("line") or 0))], cwes)
         p.needs_review = e["verdict"] == "NEEDS_REVIEW"
+        p.violated_rule = e.get("violated_rule") or None
         out.append(p)
     return out
 
@@ -183,7 +218,9 @@ class EvaluateError(Exception):
 
 def _truth_dicts(truths: dict[str, list[Truth]]) -> dict[str, list[dict]]:
     return {k: [t.__dict__ | {"cwes": sorted(t.cwes), "routes": sorted(t.routes),
-                              "rules": sorted(t.rules)} for t in v] for k, v in truths.items()}
+                              "rules": sorted(t.rules),
+                              "violated_rules": sorted(t.violated_rules)} for t in v]
+            for k, v in truths.items()}
 
 
 def collect(scan: Path, baseline: Path, scenarios: list[sc.Scenario], configs: list[str],
@@ -240,12 +277,13 @@ def collect(scan: Path, baseline: Path, scenarios: list[sc.Scenario], configs: l
 
 def _row(config: str, s: sc.Scenario, rep: int, preds: list[Prediction], truths: list[Truth],
          blocked: bool, report: dict | None, known: Known = frozenset()) -> dict:
-    strict = score(preds, truths, True, known)
+    added = sc.added_lines(s.patch_text())
+    strict = score(preds, truths, True, known, added)
     lenient = score(preds, truths, False, known)
     row = {"config": config, "scenario": s.id, "kind": s.kind, "split": s.split, "rep": rep,
            "truths": len(truths), "tp": sorted(strict.tp), "fp": strict.fp,
            "fn": sorted(strict.fn), "fp_lenient": lenient.fp, "known": strict.known,
-           "needs_review": strict.needs_review, "blocked": blocked,
+           "needs_review": strict.needs_review, "fp_old": strict.fp_old, "blocked": blocked,
            "gate_ok": blocked == (s.kind in EXPECT_BLOCK), "failed": False}
     if report is not None:
         meta = report.get("meta") or {}
@@ -253,11 +291,6 @@ def _row(config: str, s: sc.Scenario, rep: int, preds: list[Prediction], truths:
                                              "tool_calls", "tokens_in", "tokens_out",
                                              "cost_usd", "limit_hit")})
         row["degraded"] = bool(meta.get("error"))  # ran out of time or failed midway
-        fixes = [e.get("fix") for e in report.get("findings") or []
-                 if e.get("verdict") == "TP" and e.get("fix") and e["fix"].get("patch")]
-        row["patches"] = len(fixes)
-        row["patches_validated"] = sum(1 for f in fixes if f.get("validated") is True)
-        row["patches_failed"] = sum(1 for f in fixes if f.get("validated") is False)
     return row
 
 
@@ -318,6 +351,7 @@ def summarize(data: dict) -> dict:
             "failed_runs": sum(r["failed"] for r in mine),
             "degraded_runs": sum(bool(r.get("degraded")) for r in mine),
             "known": sum(r["known"] for r in mine),
+            "fp_old": sum(r.get("fp_old", 0) for r in mine),
             "needs_review": sum(r["needs_review"] for r in mine),
         }
         if ran:
@@ -326,9 +360,6 @@ def summarize(data: dict) -> dict:
                                              "tokens_in", "tokens_out", "cost_usd")}
             out[config]["model"] = sorted({f"{r.get('provider')}/{r.get('model')}"
                                            for r in ran})
-            out[config]["patches"] = {k: sum(r.get(k) or 0 for r in ran)
-                                      for k in ("patches", "patches_validated",
-                                                "patches_failed")}
     return out
 
 
@@ -376,15 +407,18 @@ def render(summary: dict, data: dict) -> str:
         lines.append("(các kịch bản được chọn không có lỗ hổng nào)")
     lines += ["", "## Quyết định của quality gate (cấp PR) và các lần chạy", "",
               ("Phát hiện ZAP đã có trên bản gốc S00 (cùng rule ZAP) là vấn đề có sẵn của app "
-               "đang chạy, không do PR gây ra: không tính TP hay FP, đếm ở cột riêng."), "",
+               "đang chạy, không do PR gây ra: không tính TP hay FP, đếm ở cột riêng. "
+               "\"FP ở code có sẵn\": số FP (chấm chặt, cộng mọi lần chạy) chỉ nằm trên dòng PR "
+               "không thêm, trong file PR có sửa; đã tính trong cột FP ở trên."), "",
               ("| Cấu hình | PR có lỗ hổng bị chặn | PR sạch / mồi nhử được qua | "
-               "FP trên PR sạch (mỗi lần chạy) | Phát hiện DAST có sẵn | NEEDS_REVIEW | "
-               "Lần chạy lỗi | Lần chạy dở dang |"),
-              "|---|---|---|---|---|---|---|---|"]
+               "FP trên PR sạch (mỗi lần chạy) | FP ở code có sẵn | Phát hiện DAST có sẵn | "
+               "NEEDS_REVIEW | Lần chạy lỗi | Lần chạy dở dang |"),
+              "|---|---|---|---|---|---|---|---|---|"]
     for config, s in summary.items():
         lines.append(f"| {config} | {s['vuln_blocked']}/{s['vuln_total']} | "
                      f"{s['clean_passed']}/{s['clean_total']} | "
-                     f"{', '.join(map(str, s['fp_on_clean']))} | {s['known']} | "
+                     f"{', '.join(map(str, s['fp_on_clean']))} | {s['fp_old']} | "
+                     f"{s['known']} | "
                      f"{s['needs_review']} | {s['failed_runs']} | {s['degraded_runs']} |")
     costly = {c: s for c, s in summary.items() if "cost" in s}
     if costly:
@@ -397,13 +431,6 @@ def render(summary: dict, data: dict) -> str:
             lines.append(f"| {config} | {c['duration_s']:.1f} | {c['wall_s']:.1f} | "
                          f"{c['llm_calls']:.1f} | {c['tool_calls']:.1f} | {c['tokens_in']:.0f} "
                          f"| {c['tokens_out']:.0f} | {c['cost_usd']:.4f} |")
-        lines += ["", "## Bản vá đề xuất (cho kết luận TP)", "",
-                  "| Cấu hình | Bản vá | Kiểm chứng đạt | Kiểm chứng không đạt |",
-                  "|---|---|---|---|"]
-        for config, s in costly.items():
-            p = s["patches"]
-            lines.append(f"| {config} | {p['patches']} | {p['patches_validated']} | "
-                         f"{p['patches_failed']} |")
     truths = [t for ts in data["truths"].values() for t in ts]
     if truths:
         lines += ["", "## Từng lỗ hổng: số lần được phát hiện / số lần chạy", "",
