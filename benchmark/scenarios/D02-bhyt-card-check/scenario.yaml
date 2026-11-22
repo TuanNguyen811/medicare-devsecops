@@ -1,0 +1,5 @@
+id: D02
+title: Kiểm tra thẻ BHYT trực tuyến
+split: test
+kind: decoy
+commit_message: Lễ tân kiểm tra thẻ BHYT qua công cụ tra cứu của BHXH ngay trên hồ sơ bệnh nhân

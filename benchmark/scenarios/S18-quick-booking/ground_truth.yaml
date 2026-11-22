@@ -1,0 +1,18 @@
+# Migration 0004 bỏ unique index uq_doctor_slot_active; chống trùng lịch chỉ còn là bước kiểm tra
+# rồi mới chèn ở tầng ứng dụng, không khóa và không ràng buộc CSDL.
+findings:
+  - id: S18-1
+    title: >-
+      Kiểm tra trùng giờ rồi mới chèn lịch hẹn, không khóa và đã bỏ ràng buộc CSDL: hai yêu cầu
+      đồng thời đặt được cùng một giờ của bác sĩ (race condition)
+    category: logic
+    severity: medium
+    cwe: [CWE-362, CWE-367, CWE-841]
+    file: app/medicare/appointment/service.py
+    lines: [133, 146]
+    also:
+      - {file: app/migrations/versions/0004_appointment_duration.py, lines: [24, 30]}
+      - {file: app/medicare/appointment/models.py, lines: [25, 26]}
+    routes: ["POST /appointments", "POST /appointments/quick"]
+    rules: []
+    violated_rule: R-13

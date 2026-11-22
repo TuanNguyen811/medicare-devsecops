@@ -1,0 +1,5 @@
+id: S21
+title: Quên mật khẩu
+split: test
+kind: vuln
+commit_message: Thêm chức năng quên mật khẩu, gửi liên kết đặt lại qua email

@@ -1,0 +1,5 @@
+id: D04
+title: Nhập danh mục thuốc từ tệp YAML
+split: test
+kind: decoy
+commit_message: Nhập và cập nhật danh mục thuốc hàng loạt từ tệp YAML

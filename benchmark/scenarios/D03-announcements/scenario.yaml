@@ -1,0 +1,5 @@
+id: D03
+title: Thông báo nội bộ trên trang chủ
+split: test
+kind: decoy
+commit_message: Quản trị viên đăng thông báo có định dạng, hiển thị trên trang chủ

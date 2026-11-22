@@ -1,0 +1,5 @@
+id: S23
+title: Bác sĩ nhận phụ trách bệnh nhân
+split: test
+kind: vuln
+commit_message: Bác sĩ trực nhận phụ trách bệnh nhân khi bàn giao ca hoặc tiếp nhận từ cấp cứu

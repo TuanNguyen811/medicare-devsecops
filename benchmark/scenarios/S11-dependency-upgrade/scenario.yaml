@@ -1,0 +1,5 @@
+id: S11
+title: "Nâng cấp tiện ích: nhập bảng giá thuốc từ file YAML"
+split: test
+kind: vuln
+commit_message: Nhập bảng giá thuốc từ file YAML của nhà cung cấp, dùng PyYAML cùng phiên bản với hệ thống kho dược

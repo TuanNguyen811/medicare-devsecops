@@ -1,0 +1,16 @@
+findings:
+  - id: S11-1
+    title: Ghim PyYAML 5.3.1 có CVE-2020-14343 (FullLoader cho phép thực thi mã) và gọi yaml.full_load trên file bảng giá tải lên
+    category: pattern
+    severity: high
+    cwe: [CWE-1395, CWE-502, CWE-20]
+    # Trivy báo lỗ hổng phụ thuộc ở dòng 1 của uv.lock; khoảng dòng kéo tới khối pyyaml.
+    file: app/uv.lock
+    lines: [1, 6]
+    also:
+      - {file: app/uv.lock, lines: [602, 606]}
+      - {file: app/pyproject.toml, lines: [17, 18]}
+      - {file: app/medicare/prescription/price_list.py, lines: [41, 41]}
+    routes: ["POST /admin/medicines/import"]
+    rules: [CVE-2020-14343]
+    violated_rule: null

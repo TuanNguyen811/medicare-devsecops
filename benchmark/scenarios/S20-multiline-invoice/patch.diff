@@ -1,0 +1,490 @@
+diff --git a/app/medicare/billing/catalog.py b/app/medicare/billing/catalog.py
+new file mode 100644
+index 0000000..f7417e6
+--- /dev/null
++++ b/app/medicare/billing/catalog.py
+@@ -0,0 +1,17 @@
++"""Billable services and their list prices in VND.
++
++Invoice lines only ever take their unit price from this catalog (R-17).
++"""
++
++from decimal import Decimal
++
++SERVICES: dict[str, tuple[str, Decimal]] = {
++    "XN-CTM": ("Xét nghiệm công thức máu", Decimal(90000)),
++    "XN-SHM": ("Xét nghiệm sinh hóa máu", Decimal(150000)),
++    "XN-NT": ("Xét nghiệm nước tiểu", Decimal(45000)),
++    "XQ-NGUC": ("Chụp X-quang ngực thẳng", Decimal(120000)),
++    "SA-BUNG": ("Siêu âm ổ bụng", Decimal(180000)),
++    "DIEN-TIM": ("Điện tim thường", Decimal(70000)),
++    "THAY-BANG": ("Thay băng vết thương", Decimal(55000)),
++    "GIUONG-NOI": ("Ngày giường bệnh nội khoa", Decimal(250000)),
++}
+diff --git a/app/medicare/billing/models.py b/app/medicare/billing/models.py
+index d820ba3..023450f 100644
+--- a/app/medicare/billing/models.py
++++ b/app/medicare/billing/models.py
+@@ -2,7 +2,7 @@ from datetime import datetime
+ from decimal import Decimal
+ from enum import StrEnum
+ 
+-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, func
++from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, func
+ from sqlalchemy.orm import Mapped, mapped_column, relationship
+ 
+ from medicare.db import Base, str_enum
+@@ -34,3 +34,24 @@ class Invoice(Base):
+     )
+ 
+     patient: Mapped[Patient] = relationship(lazy="joined")
++    lines: Mapped[list["InvoiceLine"]] = relationship(
++        lazy="selectin", order_by="InvoiceLine.id"
++    )
++
++
++class InvoiceLine(Base):
++    """A billed service; the unit price is copied from the catalog at billing time."""
++
++    __tablename__ = "invoice_lines"
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"), index=True)
++    service_code: Mapped[str] = mapped_column(String(20))
++    description: Mapped[str] = mapped_column(String(100))
++    quantity: Mapped[int]
++    unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 0))
++    amount: Mapped[Decimal] = mapped_column(Numeric(12, 0))
++    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), server_default=func.now()
++    )
+diff --git a/app/medicare/billing/router.py b/app/medicare/billing/router.py
+index 8b9a485..0a70e89 100644
+--- a/app/medicare/billing/router.py
++++ b/app/medicare/billing/router.py
+@@ -1,9 +1,10 @@
+-from fastapi import APIRouter, Depends, Request
++from fastapi import APIRouter, Depends, Form, Request
+ from fastapi.responses import RedirectResponse, Response
+ from sqlalchemy.orm import Session
+ 
+ from medicare.auth.models import Role, User
+ from medicare.billing import service
++from medicare.billing.catalog import SERVICES
+ from medicare.common.auth import get_current_user, require_roles
+ from medicare.common.csrf import verify_csrf
+ from medicare.common.ids import ObjectId
+@@ -16,6 +17,7 @@ receptionist_user = require_roles(Role.RECEPTIONIST)
+ invoice_reader = require_roles(Role.RECEPTIONIST, Role.ADMIN, Role.PATIENT)
+ 
+ STATUS_LABELS = {"UNPAID": ("Chưa thanh toán", "warning"), "PAID": ("Đã thanh toán", "success")}
++LINE_ROWS = 5
+ 
+ 
+ @router.post("/records/{record_id}/invoice", dependencies=[Depends(verify_csrf)])
+@@ -56,26 +58,57 @@ def invoice_detail(
+     db: Session = Depends(get_db),
+ ) -> Response:
+     invoice = service.get_invoice_for(db, user, invoice_id)
++    services_amount = service.services_amount(invoice)
+     return render(request, "billing/detail.html", {
+         "invoice": invoice,
+         "exam_fee": service.EXAM_FEE,
+-        "drug_cost": invoice.total_amount - service.EXAM_FEE,
++        "drug_cost": invoice.total_amount - service.EXAM_FEE - services_amount,
++        "services_amount": services_amount,
+         "can_pay": user.role == Role.RECEPTIONIST,
++        "catalog": SERVICES,
++        "line_rows": LINE_ROWS,
+         "status_labels": STATUS_LABELS,
+         "breadcrumbs": [("Trang chủ", "/"), ("Hóa đơn", "/invoices"),
+                         (f"Hóa đơn #{invoice.id}", None)],
+     })
+ 
+ 
+-@router.post("/invoices/{invoice_id}/pay", dependencies=[Depends(verify_csrf)])
+-def pay_invoice(
++@router.post("/invoices/{invoice_id}/lines", dependencies=[Depends(verify_csrf)])
++def add_invoice_lines(
+     request: Request,
+     invoice_id: ObjectId,
++    service_code: list[str] = Form([]),
++    quantity: list[str] = Form([]),
+     user: User = Depends(receptionist_user),
+     db: Session = Depends(get_db),
+ ) -> Response:
++    # R-17: only service codes and quantities are read; prices come from the catalog.
+     invoice = service.get_invoice_for(db, user, invoice_id)
+-    service.mark_paid(invoice)
++    try:
++        service.add_lines(db, user, invoice, service.parse_lines(service_code, quantity))
++    except service.BillingError as exc:
++        flash(request, str(exc), "danger")
++        return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
+     db.commit()
+-    flash(request, f"Đã thu tiền hóa đơn #{invoice.id}")
++    flash(request, f"Đã thêm dịch vụ vào hóa đơn #{invoice.id}")
++    return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
++
++
++@router.post("/invoices/{invoice_id}/status", dependencies=[Depends(verify_csrf)])
++def change_invoice_status(
++    request: Request,
++    invoice_id: ObjectId,
++    status: str = Form(""),
++    user: User = Depends(receptionist_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    invoice = service.get_invoice_for(db, user, invoice_id)
++    try:
++        service.change_status(invoice, status)
++    except service.BillingError as exc:
++        flash(request, str(exc), "danger")
++        return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
++    db.commit()
++    label, _ = STATUS_LABELS[invoice.status.value]
++    flash(request, f"Hóa đơn #{invoice.id}: {label}")
+     return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
+diff --git a/app/medicare/billing/service.py b/app/medicare/billing/service.py
+index d966fb7..2cdabd4 100644
+--- a/app/medicare/billing/service.py
++++ b/app/medicare/billing/service.py
+@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
+ 
+ from medicare import policy
+ from medicare.auth.models import Role, User
+-from medicare.billing.models import Invoice, InvoiceStatus
++from medicare.billing.catalog import SERVICES
++from medicare.billing.models import Invoice, InvoiceLine, InvoiceStatus
+ from medicare.common import metrics
+ from medicare.common.errors import Conflict, NotFound
+ from medicare.patient.models import Patient
+@@ -19,6 +20,11 @@ from medicare.validators import coverage_rate
+ EXAM_FEE = Decimal(150000)
+ ALREADY_INVOICED = "Phiếu khám này đã có hóa đơn"
+ PENDING_LIMIT = 50
++MAX_LINES = 30
++
++
++class BillingError(ValueError):
++    """Invalid billing input; the message is user-facing."""
+ 
+ 
+ def compute_amounts(total: Decimal, rate: Decimal) -> tuple[Decimal, Decimal]:
+@@ -27,6 +33,13 @@ def compute_amounts(total: Decimal, rate: Decimal) -> tuple[Decimal, Decimal]:
+     return insurance, total - insurance
+ 
+ 
++def visit_amount(db: Session, record_id: int) -> Decimal:
++    """Exam fee plus the medicines prescribed during the visit."""
++    return EXAM_FEE + sum(
++        (prescription_total(p) for p in list_for_record(db, record_id)), Decimal(0)
++    )
++
++
+ def create_invoice(db: Session, user: User, record_id: int) -> Invoice:
+     """Bill one visit. Reception never reads clinical content, so no VIEW_RECORD (R-12)."""
+     record = db.get(MedicalRecord, record_id)
+@@ -35,9 +48,7 @@ def create_invoice(db: Session, user: User, record_id: int) -> Invoice:
+     if db.scalar(select(Invoice.id).where(Invoice.record_id == record.id)) is not None:
+         raise Conflict(ALREADY_INVOICED)
+     patient = db.get(Patient, record.patient_id)
+-    total = EXAM_FEE + sum(
+-        (prescription_total(p) for p in list_for_record(db, record.id)), Decimal(0)
+-    )
++    total = visit_amount(db, record.id)
+     rate = coverage_rate(patient.insurance_number)
+     insurance, patient_part = compute_amounts(total, rate)
+     invoice = Invoice(
+@@ -92,7 +103,52 @@ def get_invoice_for(db: Session, user: User, invoice_id: int) -> Invoice:
+     return invoice
+ 
+ 
+-def mark_paid(invoice: Invoice) -> None:
++def parse_lines(codes: list[str], quantities: list[str]) -> list[tuple[str, int]]:
++    """Pair the submitted service codes with their quantities, skipping empty rows."""
++    lines = []
++    for code, quantity in zip(codes, quantities):
++        code = code.strip()
++        if not code:
++            continue
++        if code not in SERVICES:
++            raise BillingError("Dịch vụ không có trong danh mục")
++        try:
++            lines.append((code, int(quantity)))
++        except ValueError:
++            raise BillingError("Số lượng phải là số nguyên") from None
++    if not lines:
++        raise BillingError("Chưa chọn dịch vụ nào")
++    return lines
++
++
++def add_lines(db: Session, user: User, invoice: Invoice, lines: list[tuple[str, int]]) -> None:
++    """Add service lines priced from the catalog, then recompute the totals (R-04, R-17)."""
+     if invoice.status != InvoiceStatus.UNPAID:
+-        raise Conflict("Hóa đơn đã được thanh toán")
+-    invoice.status = InvoiceStatus.PAID
++        raise Conflict("Hóa đơn đã thanh toán, không thể thêm dịch vụ")
++    if len(invoice.lines) + len(lines) > MAX_LINES:
++        raise BillingError(f"Mỗi hóa đơn có tối đa {MAX_LINES} dòng dịch vụ")
++    for code, quantity in lines:
++        description, unit_price = SERVICES[code]
++        invoice.lines.append(InvoiceLine(
++            service_code=code, description=description, quantity=quantity,
++            unit_price=unit_price, amount=unit_price * quantity, created_by_id=user.id,
++        ))
++    total = visit_amount(db, invoice.record_id) + services_amount(invoice)
++    invoice.total_amount = total
++    invoice.insurance_amount, invoice.patient_amount = compute_amounts(
++        total, invoice.coverage_rate
++    )
++    db.flush()
++
++
++def services_amount(invoice: Invoice) -> Decimal:
++    return sum((line.amount for line in invoice.lines), Decimal(0))
++
++
++def change_status(invoice: Invoice, status: str) -> None:
++    if status not in InvoiceStatus.__members__:
++        raise BillingError("Trạng thái hóa đơn không hợp lệ")
++    new_status = InvoiceStatus(status)
++    if invoice.status == new_status:
++        raise Conflict("Hóa đơn đã ở trạng thái này")
++    invoice.status = new_status
+diff --git a/app/medicare/templates/billing/detail.html b/app/medicare/templates/billing/detail.html
+index f0a1332..fc2ffcd 100644
+--- a/app/medicare/templates/billing/detail.html
++++ b/app/medicare/templates/billing/detail.html
+@@ -2,21 +2,26 @@
+ {% block title %}Hóa đơn #{{ invoice.id }}{% endblock %}
+ {% block content %}
+ {% set label, color = status_labels[invoice.status.value] %}
++{% set editable = can_pay and invoice.status.value == "UNPAID" %}
+ <div class="d-flex justify-content-between align-items-center mb-3">
+   <h1 class="h5 mb-0">Hóa đơn #{{ invoice.id }} <span class="badge text-bg-{{ color }} align-middle">{{ label }}</span></h1>
+-  {% if can_pay and invoice.status.value == "UNPAID" %}
+-  <form method="post" action="/invoices/{{ invoice.id }}/pay">
++  {% if editable %}
++  <form method="post" action="/invoices/{{ invoice.id }}/status">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++    <input type="hidden" name="status" value="PAID">
+     <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-cash-coin"></i> Thu tiền</button>
+   </form>
+   {% endif %}
+ </div>
+-<div class="card mc-card" style="max-width: 640px;">
++<div class="card mc-card" style="max-width: 720px;">
+   <div class="card-header">{{ invoice.patient.code }} - {{ invoice.patient.full_name }} · Phiếu khám #{{ invoice.record_id }}</div>
+   <table class="table table-sm mb-0">
+     <tbody>
+       <tr><td>Phí khám bệnh</td><td class="text-end">{{ exam_fee | vnd }}</td></tr>
+       <tr><td>Tiền thuốc</td><td class="text-end">{{ drug_cost | vnd }}</td></tr>
++      {% for line in invoice.lines %}
++      <tr><td>{{ line.description }} <span class="text-secondary small">({{ line.quantity }} x {{ line.unit_price | vnd }})</span></td><td class="text-end">{{ line.amount | vnd }}</td></tr>
++      {% endfor %}
+       <tr class="fw-semibold"><td>Tổng chi phí</td><td class="text-end">{{ invoice.total_amount | vnd }}</td></tr>
+       <tr><td>BHYT chi trả ({{ (invoice.coverage_rate * 100) | int }}%)</td><td class="text-end">{{ invoice.insurance_amount | vnd }}</td></tr>
+       <tr class="fw-semibold"><td>Người bệnh thanh toán</td><td class="text-end">{{ invoice.patient_amount | vnd }}</td></tr>
+@@ -24,4 +29,30 @@
+   </table>
+   <div class="card-footer small text-secondary">Lập lúc {{ invoice.created_at | datetime_vn }}. Tỷ lệ BHYT được hệ thống tính theo mã thẻ.</div>
+ </div>
++{% if editable %}
++<div class="card mc-card mt-3" style="max-width: 720px;">
++  <div class="card-header">Thêm dịch vụ</div>
++  <div class="card-body">
++    <form method="post" action="/invoices/{{ invoice.id }}/lines">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      {% for _ in range(line_rows) %}
++      <div class="row g-2 mb-2">
++        <div class="col-sm-9">
++          <select class="form-select form-select-sm" name="service_code" aria-label="Dịch vụ">
++            <option value="">-</option>
++            {% for code, (name, price) in catalog.items() %}
++            <option value="{{ code }}">{{ name }} ({{ price | vnd }})</option>
++            {% endfor %}
++          </select>
++        </div>
++        <div class="col-sm-3">
++          <input class="form-control form-control-sm" name="quantity" type="number" min="1" max="99" value="1" aria-label="Số lượng">
++        </div>
++      </div>
++      {% endfor %}
++      <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-plus-lg"></i> Thêm vào hóa đơn</button>
++    </form>
++  </div>
++</div>
++{% endif %}
+ {% endblock %}
+diff --git a/app/migrations/versions/0004_invoice_lines.py b/app/migrations/versions/0004_invoice_lines.py
+new file mode 100644
+index 0000000..f7b0988
+--- /dev/null
++++ b/app/migrations/versions/0004_invoice_lines.py
+@@ -0,0 +1,35 @@
++"""invoice_lines: billed services on an invoice
++
++Revision ID: 0004
++Revises: 0003
++"""
++import sqlalchemy as sa
++from alembic import op
++
++revision = '0004'
++down_revision = '0003'
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.create_table('invoice_lines',
++    sa.Column('id', sa.Integer(), nullable=False),
++    sa.Column('invoice_id', sa.Integer(), nullable=False),
++    sa.Column('service_code', sa.String(length=20), nullable=False),
++    sa.Column('description', sa.String(length=100), nullable=False),
++    sa.Column('quantity', sa.Integer(), nullable=False),
++    sa.Column('unit_price', sa.Numeric(precision=12, scale=0), nullable=False),
++    sa.Column('amount', sa.Numeric(precision=12, scale=0), nullable=False),
++    sa.Column('created_by_id', sa.Integer(), nullable=False),
++    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
++    sa.ForeignKeyConstraint(['created_by_id'], ['users.id'], name=op.f('fk_invoice_lines_created_by_id_users')),
++    sa.ForeignKeyConstraint(['invoice_id'], ['invoices.id'], name=op.f('fk_invoice_lines_invoice_id_invoices')),
++    sa.PrimaryKeyConstraint('id', name=op.f('pk_invoice_lines'))
++    )
++    op.create_index(op.f('ix_invoice_lines_invoice_id'), 'invoice_lines', ['invoice_id'])
++
++
++def downgrade() -> None:
++    op.drop_index(op.f('ix_invoice_lines_invoice_id'), table_name='invoice_lines')
++    op.drop_table('invoice_lines')
+diff --git a/app/tests/test_billing.py b/app/tests/test_billing.py
+index 365b51c..ebc8a43 100644
+--- a/app/tests/test_billing.py
++++ b/app/tests/test_billing.py
+@@ -39,6 +39,17 @@ def invoice_of(db, record) -> Invoice:
+     return db.scalar(select(Invoice).where(Invoice.record_id == record.id))
+ 
+ 
++def pay(client, invoice, page="/invoices"):
++    data = {"status": "PAID", "csrf_token": csrf_token(client, page)}
++    return client.post(f"/invoices/{invoice.id}/status", data=data, follow_redirects=False)
++
++
++def add_lines(client, invoice, *lines):
++    data = {"service_code": [c for c, _ in lines], "quantity": [q for _, q in lines],
++            "csrf_token": csrf_token(client, f"/invoices/{invoice.id}")}
++    return client.post(f"/invoices/{invoice.id}/lines", data=data, follow_redirects=False)
++
++
+ def test_invoice_with_80_percent_coverage(client, db):
+     _, record = visit(db)
+     login(client, make_user(db, Role.RECEPTIONIST))
+@@ -150,12 +161,11 @@ def test_receptionist_marks_invoice_paid_once(client, db):
+     login(client, make_user(db, Role.RECEPTIONIST))
+     create_invoice(client, record)
+     inv = invoice_of(db, record)
+-    token = csrf_token(client, "/invoices")
+-    r = client.post(f"/invoices/{inv.id}/pay", data={"csrf_token": token}, follow_redirects=False)
++    r = pay(client, inv)
+     assert r.status_code == 303
+     db.refresh(inv)
+     assert inv.status == InvoiceStatus.PAID
+-    assert client.post(f"/invoices/{inv.id}/pay", data={"csrf_token": token}).status_code == 409
++    assert pay(client, inv).status_code == 409
+ 
+ 
+ def test_patient_cannot_mark_paid(client, db):
+@@ -165,5 +175,89 @@ def test_patient_cannot_mark_paid(client, db):
+     inv = invoice_of(db, record)
+     client.cookies.clear()
+     login(client, make_user(db, Role.PATIENT, patient=me))
+-    r = client.post(f"/invoices/{inv.id}/pay", data={"csrf_token": csrf_token(client, "/")})
+-    assert r.status_code == 403
++    assert pay(client, inv, "/").status_code == 403
++
++
++def test_receptionist_adds_service_lines(client, db):
++    _, record = visit(db)  # 230_000, 80% coverage
++    login(client, make_user(db, Role.RECEPTIONIST))
++    create_invoice(client, record)
++    inv = invoice_of(db, record)
++    r = add_lines(client, inv, ("XN-CTM", "1"), ("XQ-NGUC", "2"), ("", "1"))
++    assert r.status_code == 303 and r.headers["location"] == f"/invoices/{inv.id}"
++    db.refresh(inv)
++    assert [(line.service_code, line.quantity, line.amount) for line in inv.lines] == [
++        ("XN-CTM", 1, Decimal(90000)), ("XQ-NGUC", 2, Decimal(240000))]
++    assert (inv.total_amount, inv.insurance_amount, inv.patient_amount) == (
++        Decimal(560000), Decimal(448000), Decimal(112000))
++    page = client.get(f"/invoices/{inv.id}").text
++    assert "Chụp X-quang ngực thẳng" in page and "560.000 ₫" in page and "80.000 ₫" in page
++
++
++def test_line_prices_come_from_catalog(client, db):
++    _, record = visit(db, insurance_number=None, drug_cost=0)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    create_invoice(client, record)
++    inv = invoice_of(db, record)
++    data = {"service_code": "SA-BUNG", "quantity": "1", "unit_price": "1", "amount": "1",
++            "csrf_token": csrf_token(client, f"/invoices/{inv.id}")}
++    client.post(f"/invoices/{inv.id}/lines", data=data)
++    db.refresh(inv)
++    assert inv.lines[0].unit_price == Decimal(180000)
++    assert inv.total_amount == inv.patient_amount == Decimal(330000)
++
++
++def test_unknown_service_is_rejected(client, db):
++    _, record = visit(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    create_invoice(client, record)
++    inv = invoice_of(db, record)
++    add_lines(client, inv, ("KHONG-CO", "1"))
++    assert "Dịch vụ không có trong danh mục" in client.get(f"/invoices/{inv.id}").text
++    db.refresh(inv)
++    assert inv.lines == [] and inv.total_amount == Decimal(230000)
++
++
++def test_non_numeric_quantity_is_rejected(client, db):
++    _, record = visit(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    create_invoice(client, record)
++    inv = invoice_of(db, record)
++    add_lines(client, inv, ("XN-NT", "hai"))
++    db.refresh(inv)
++    assert inv.lines == []
++
++
++def test_paid_invoice_cannot_get_new_lines(client, db):
++    _, record = visit(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    create_invoice(client, record)
++    inv = invoice_of(db, record)
++    pay(client, inv)
++    assert add_lines(client, inv, ("XN-CTM", "1")).status_code == 409
++    assert "/lines" not in client.get(f"/invoices/{inv.id}").text
++
++
++def test_only_receptionist_adds_lines(client, db):
++    me, record = visit(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    create_invoice(client, record)
++    inv = invoice_of(db, record)
++    for user in (make_user(db, Role.ADMIN), make_user(db, Role.PATIENT, patient=me)):
++        client.cookies.clear()
++        login(client, user)
++        assert add_lines(client, inv, ("XN-CTM", "1")).status_code == 403
++    db.refresh(inv)
++    assert inv.lines == []
++
++
++def test_patient_sees_service_lines_on_own_invoice(client, db):
++    me, record = visit(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    create_invoice(client, record)
++    inv = invoice_of(db, record)
++    add_lines(client, inv, ("DIEN-TIM", "1"))
++    client.cookies.clear()
++    login(client, make_user(db, Role.PATIENT, patient=me))
++    page = client.get(f"/invoices/{inv.id}").text
++    assert "Điện tim thường" in page and "/lines" not in page and "/status" not in page

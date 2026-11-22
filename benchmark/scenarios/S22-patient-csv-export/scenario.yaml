@@ -1,0 +1,5 @@
+id: S22
+title: Xuất danh sách bệnh nhân CSV
+split: test
+kind: vuln
+commit_message: Thêm chức năng xuất danh sách bệnh nhân ra file CSV

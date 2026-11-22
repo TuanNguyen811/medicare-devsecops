@@ -1,0 +1,5 @@
+id: S18
+title: Đặt lịch nhanh
+split: test
+kind: vuln
+commit_message: Đặt lịch khám nhanh 15 phút, chọn giờ trống của bác sĩ trong ngày

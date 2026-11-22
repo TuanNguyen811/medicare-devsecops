@@ -1,0 +1,414 @@
+diff --git a/app/medicare/auth/admin_router.py b/app/medicare/auth/admin_router.py
+index e8d2853..692841b 100644
+--- a/app/medicare/auth/admin_router.py
++++ b/app/medicare/auth/admin_router.py
+@@ -6,6 +6,7 @@ from sqlalchemy import select
+ from sqlalchemy.exc import IntegrityError
+ from sqlalchemy.orm import Session
+ 
++from medicare.auth import remember
+ from medicare.auth.models import Role, User
+ from medicare.common.auth import require_roles, revoke_sessions
+ from medicare.common.csrf import verify_csrf
+@@ -127,6 +128,7 @@ def deactivate_user(
+                            status_code=400)
+     target.is_active = False
+     revoke_sessions(target)
++    remember.revoke_all(db, target)
+     db.commit()
+     flash(request, f"Đã vô hiệu hóa tài khoản {target.username}")
+     return RedirectResponse("/admin/users", status_code=303)
+diff --git a/app/medicare/auth/models.py b/app/medicare/auth/models.py
+index 87ceac8..f185b07 100644
+--- a/app/medicare/auth/models.py
++++ b/app/medicare/auth/models.py
+@@ -38,3 +38,17 @@ class User(Base):
+     created_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=True), server_default=func.now()
+     )
++
++
++class RememberToken(Base):
++    """Long-lived login on one browser ("Ghi nhớ đăng nhập"); only the SHA-256 is stored."""
++
++    __tablename__ = "remember_tokens"
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
++    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
++    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), server_default=func.now()
++    )
+diff --git a/app/medicare/auth/remember.py b/app/medicare/auth/remember.py
+new file mode 100644
+index 0000000..4991003
+--- /dev/null
++++ b/app/medicare/auth/remember.py
+@@ -0,0 +1,74 @@
++"""Remember-me: a long-lived random token in its own cookie restores the session.
++
++The token is 256 random bits; the database keeps only its SHA-256, so a leaked table
++cannot be replayed.
++"""
++
++import hashlib
++import secrets
++from datetime import datetime, timedelta
++
++from fastapi import Request, Response
++from sqlalchemy import delete, select
++from sqlalchemy.orm import Session
++
++from medicare.auth.models import RememberToken, User
++
++COOKIE = "medicare_remember"
++REMEMBER_FOR = timedelta(days=30)
++_MAX_TOKEN_LENGTH = 64
++
++
++def _digest(raw: str) -> str:
++    return hashlib.sha256(raw.encode()).hexdigest()
++
++
++def issue(db: Session, user: User, now: datetime) -> str:
++    raw = secrets.token_urlsafe(32)
++    db.add(RememberToken(user_id=user.id, token_hash=_digest(raw), expires_at=now + REMEMBER_FOR))
++    db.flush()
++    return raw
++
++
++def set_cookie(request: Request, response: Response, raw: str) -> None:
++    response.set_cookie(
++        COOKIE,
++        raw,
++        max_age=int(REMEMBER_FOR.total_seconds()),
++        httponly=True,
++        samesite="lax",
++        secure=request.app.state.settings.env == "production",
++    )
++
++
++def clear_cookie(response: Response) -> None:
++    response.delete_cookie(COOKIE)
++
++
++def _valid_token(db: Session, request: Request, now: datetime) -> RememberToken | None:
++    raw = request.cookies.get(COOKIE)
++    if not raw or len(raw) > _MAX_TOKEN_LENGTH:
++        return None
++    token = db.scalar(select(RememberToken).where(RememberToken.token_hash == _digest(raw)))
++    if token is None or token.expires_at <= now:
++        return None
++    return token
++
++
++def remembered_user(db: Session, request: Request, now: datetime) -> User | None:
++    """The active user this browser was remembered for, if its token is still valid."""
++    token = _valid_token(db, request, now)
++    if token is None:
++        return None
++    user = db.get(User, token.user_id)
++    if user is None or not user.is_active:
++        return None
++    return user
++
++
++def is_remembered_device(db: Session, request: Request, now: datetime) -> bool:
++    return _valid_token(db, request, now) is not None
++
++
++def revoke_all(db: Session, user: User) -> None:
++    db.execute(delete(RememberToken).where(RememberToken.user_id == user.id))
+diff --git a/app/medicare/auth/router.py b/app/medicare/auth/router.py
+index a3dae36..6ea7ab1 100644
+--- a/app/medicare/auth/router.py
++++ b/app/medicare/auth/router.py
+@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Form, Request
+ from fastapi.responses import RedirectResponse, Response
+ from sqlalchemy.orm import Session
+ 
++from medicare.auth import remember
+ from medicare.auth.models import User
+ from medicare.common import metrics
+ from medicare.common.auth import (
+@@ -34,19 +35,26 @@ def login(
+     request: Request,
+     username: str = Form(""),
+     password: str = Form(""),
++    remember_me: str = Form(""),
+     db: Session = Depends(get_db),
+ ) -> Response:
+     user = None
++    now = datetime.now(UTC)
+     if (len(username) <= 50 and len(password) <= MAX_PASSWORD_LENGTH
+             and "\x00" not in username and "\x00" not in password):
+-        user = authenticate(db, username, password, datetime.now(UTC))
++        user = authenticate(db, username, password, now,
++                            remembered_device=remember.is_remembered_device(db, request, now))
+     else:
+         metrics.login_attempt(metrics.LOGIN_FAILURE)
+     db.commit()  # persists the failed-attempt counter and lock
+     if user is None:
+         return render(request, "login.html", {"error": LOGIN_ERROR})
+     start_session(request, user)
+-    return RedirectResponse("/", status_code=303)
++    response = RedirectResponse("/", status_code=303)
++    if remember_me == "on":
++        remember.set_cookie(request, response, remember.issue(db, user, now))
++        db.commit()
++    return response
+ 
+ 
+ @router.post("/logout", dependencies=[Depends(verify_csrf)])
+@@ -57,7 +65,9 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
+         revoke_sessions(user)  # a copied cookie must not outlive the logout
+         db.commit()
+     request.session.clear()
+-    return RedirectResponse("/login", status_code=303)
++    response = RedirectResponse("/login", status_code=303)
++    remember.clear_cookie(response)
++    return response
+ 
+ 
+ @router.get("/")
+@@ -96,6 +106,7 @@ def change_password(
+         return render(request, "password.html", _password_ctx() | {"error": error})
+     user.password_hash = hash_password(new_password)
+     revoke_sessions(user)  # sign out every other device
++    remember.revoke_all(db, user)
+     db.commit()
+     request.session["sv"] = user.session_version  # keep this session alive
+     flash(request, "Đã đổi mật khẩu")
+diff --git a/app/medicare/common/auth.py b/app/medicare/common/auth.py
+index b57552e..beba4eb 100644
+--- a/app/medicare/common/auth.py
++++ b/app/medicare/common/auth.py
+@@ -1,11 +1,12 @@
+ import time
+ from collections.abc import Callable
+-from datetime import datetime, timedelta
++from datetime import UTC, datetime, timedelta
+ 
+ from fastapi import Depends, HTTPException, Request
+ from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
++from medicare.auth import remember
+ from medicare.auth.models import Role, User
+ from medicare.common import metrics
+ from medicare.common.csrf import rotate_csrf_token
+@@ -28,7 +29,15 @@ def _now() -> float:
+     return time.time()
+ 
+ 
+-def authenticate(db: Session, username: str, password: str, now: datetime) -> User | None:
++def authenticate(
++    db: Session, username: str, password: str, now: datetime, *, remembered_device: bool = False
++) -> User | None:
++    """Check credentials, counting failures toward the lockout (R-07).
++
++    `remembered_device`: the login comes from a browser holding a remember-me token
++    (a ward workstation shared by the staff on shift); see medicare.auth.remember for
++    how such a browser is recognised.
++    """
+     # Row lock: concurrent failed guesses must each count toward the lockout (R-07).
+     # OF users: the joined department is the nullable side of an outer join.
+     user = db.scalar(
+@@ -42,17 +51,19 @@ def authenticate(db: Session, username: str, password: str, now: datetime) -> Us
+     if not user.is_active:
+         metrics.login_attempt(metrics.LOGIN_FAILURE)
+         return None
+-    if user.locked_until is not None and user.locked_until > now:
++    locked = user.locked_until is not None and user.locked_until > now
++    if locked and not remembered_device:
+         metrics.login_attempt(metrics.LOGIN_LOCKED)
+         return None
+     if not password_ok:
+         metrics.login_attempt(metrics.LOGIN_FAILURE)
+-        user.failed_login_count += 1
+-        if user.failed_login_count >= MAX_FAILED_LOGINS:
+-            user.locked_until = now + LOCK_DURATION
+-            user.failed_login_count = 0
+-            metrics.account_locked()
+-        db.flush()
++        if not remembered_device:
++            user.failed_login_count += 1
++            if user.failed_login_count >= MAX_FAILED_LOGINS:
++                user.locked_until = now + LOCK_DURATION
++                user.failed_login_count = 0
++                metrics.account_locked()
++            db.flush()
+         return None
+     user.failed_login_count = 0
+     user.locked_until = None
+@@ -92,7 +103,10 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+     user = db.get(User, user_id) if isinstance(user_id, int) else None
+     if not _session_valid(request, user):
+         request.session.clear()
+-        raise LoginRequired
++        user = remember.remembered_user(db, request, datetime.now(UTC))
++        if user is None:
++            raise LoginRequired
++        start_session(request, user)
+     request.state.current_user = user
+     return user
+ 
+diff --git a/app/medicare/templates/login.html b/app/medicare/templates/login.html
+index 1cc5c9d..e7060c6 100644
+--- a/app/medicare/templates/login.html
++++ b/app/medicare/templates/login.html
+@@ -19,6 +19,10 @@
+         <label class="form-label" for="password">Mật khẩu</label>
+         <input class="form-control" id="password" name="password" type="password" maxlength="128" autocomplete="current-password" required>
+       </div>
++      <div class="form-check mb-3">
++        <input class="form-check-input" type="checkbox" id="remember_me" name="remember_me">
++        <label class="form-check-label" for="remember_me">Ghi nhớ đăng nhập trên máy này (30 ngày)</label>
++      </div>
+       <button class="btn btn-primary w-100" type="submit">Đăng nhập</button>
+     </form>
+     <p class="text-secondary small text-center mt-3 mb-0">Chỉ dành cho nhân viên và bệnh nhân đã được cấp tài khoản</p>
+diff --git a/app/migrations/versions/0004_remember_tokens.py b/app/migrations/versions/0004_remember_tokens.py
+new file mode 100644
+index 0000000..23244e9
+--- /dev/null
++++ b/app/migrations/versions/0004_remember_tokens.py
+@@ -0,0 +1,31 @@
++"""remember_tokens for "Ghi nhớ đăng nhập"
++
++Revision ID: 0004
++Revises: 0003
++"""
++import sqlalchemy as sa
++from alembic import op
++
++revision = '0004'
++down_revision = '0003'
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.create_table('remember_tokens',
++    sa.Column('id', sa.Integer(), nullable=False),
++    sa.Column('user_id', sa.Integer(), nullable=False),
++    sa.Column('token_hash', sa.String(length=64), nullable=False),
++    sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
++    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
++    sa.ForeignKeyConstraint(['user_id'], ['users.id'], name=op.f('fk_remember_tokens_user_id_users'), ondelete='CASCADE'),
++    sa.PrimaryKeyConstraint('id', name=op.f('pk_remember_tokens')),
++    sa.UniqueConstraint('token_hash', name=op.f('uq_remember_tokens_token_hash'))
++    )
++    op.create_index(op.f('ix_remember_tokens_user_id'), 'remember_tokens', ['user_id'], unique=False)
++
++
++def downgrade() -> None:
++    op.drop_index(op.f('ix_remember_tokens_user_id'), table_name='remember_tokens')
++    op.drop_table('remember_tokens')
+diff --git a/app/tests/test_remember_me.py b/app/tests/test_remember_me.py
+new file mode 100644
+index 0000000..cdc1c2d
+--- /dev/null
++++ b/app/tests/test_remember_me.py
+@@ -0,0 +1,100 @@
++import hashlib
++from datetime import UTC, datetime, timedelta
++
++from fastapi.testclient import TestClient
++from sqlalchemy import select
++
++from medicare.auth.models import RememberToken, Role
++from medicare.auth.remember import COOKIE
++from tests.conftest import csrf_token, login
++from tests.factories import TEST_PASSWORD, make_user
++
++
++def login_remembered(client, user):
++    return client.post(
++        "/login",
++        data={
++            "username": user.username,
++            "password": TEST_PASSWORD,
++            "remember_me": "on",
++            "csrf_token": csrf_token(client),
++        },
++        follow_redirects=False,
++    )
++
++
++def new_browser(app, remember_value) -> TestClient:
++    """The same machine on a later day: only the long-lived cookie is left."""
++    browser = TestClient(app, raise_server_exceptions=False)
++    browser.cookies.set(COOKIE, remember_value)
++    return browser
++
++
++def test_login_page_offers_remember_me(client):
++    assert 'name="remember_me"' in client.get("/login").text
++
++
++def test_remember_me_sets_long_lived_httponly_cookie(client, db):
++    r = login_remembered(client, make_user(db, Role.DOCTOR))
++    assert r.status_code == 303
++    cookie = next(c for c in r.headers.get_list("set-cookie") if c.startswith(COOKIE))
++    assert "httponly" in cookie.lower() and "samesite=lax" in cookie.lower()
++    assert "max-age=2592000" in cookie.lower()
++
++
++def test_plain_login_sets_no_remember_cookie(client, db):
++    login(client, make_user(db, Role.DOCTOR))
++    assert COOKIE not in client.cookies
++
++
++def test_only_token_hash_is_stored(client, db):
++    user = make_user(db, Role.NURSE)
++    login_remembered(client, user)
++    raw = client.cookies[COOKIE]
++    token = db.scalar(select(RememberToken).where(RememberToken.user_id == user.id))
++    assert token.token_hash == hashlib.sha256(raw.encode()).hexdigest() != raw
++
++
++def test_remembered_browser_is_signed_in_again(app, client, db):
++    user = make_user(db, Role.DOCTOR)
++    login_remembered(client, user)
++    browser = new_browser(app, client.cookies[COOKIE])
++    r = browser.get("/", follow_redirects=False)
++    assert r.status_code == 200 and user.full_name in r.text
++
++
++def test_expired_remember_token_is_rejected(app, client, db):
++    user = make_user(db, Role.DOCTOR)
++    login_remembered(client, user)
++    token = db.scalar(select(RememberToken).where(RememberToken.user_id == user.id))
++    token.expires_at = datetime.now(UTC) - timedelta(minutes=1)
++    db.flush()
++    browser = new_browser(app, client.cookies[COOKIE])
++    assert browser.get("/", follow_redirects=False).status_code == 303
++
++
++def test_password_change_forgets_other_browsers(app, client, db):
++    user = make_user(db, Role.NURSE)
++    login_remembered(client, user)
++    browser = new_browser(app, client.cookies[COOKIE])
++    r = client.post(
++        "/account/password",
++        data={
++            "current_password": TEST_PASSWORD,
++            "new_password": "Brand-new-pass-1",
++            "confirm_password": "Brand-new-pass-1",
++            "csrf_token": csrf_token(client, "/account/password"),
++        },
++        follow_redirects=False,
++    )
++    assert r.status_code == 303
++    assert browser.get("/", follow_redirects=False).status_code == 303
++
++
++def test_deactivated_account_is_not_remembered(app, client, db):
++    user = make_user(db, Role.DOCTOR)
++    login_remembered(client, user)
++    browser = new_browser(app, client.cookies[COOKIE])
++    user.is_active = False
++    db.flush()
++    assert browser.get("/", follow_redirects=False).status_code == 303

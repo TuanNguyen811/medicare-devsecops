@@ -1,0 +1,220 @@
+diff --git a/app/medicare/appointment/router.py b/app/medicare/appointment/router.py
+index a5f086f..d55bb25 100644
+--- a/app/medicare/appointment/router.py
++++ b/app/medicare/appointment/router.py
+@@ -7,7 +7,7 @@ from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
+ from medicare import policy
+-from medicare.appointment import service
++from medicare.appointment import service, sms
+ from medicare.appointment.schemas import FIELD_LABELS, AppointmentForm
+ from medicare.auth.models import Role, User
+ from medicare.common.auth import get_current_user, require_roles
+@@ -121,6 +121,24 @@ def confirm_appointment(
+     return RedirectResponse("/appointments", status_code=303)
+ 
+ 
++@router.post("/appointments/{appointment_id}/remind", dependencies=[Depends(verify_csrf)])
++def remind_appointment(
++    request: Request,
++    appointment_id: ObjectId,
++    user: User = Depends(receptionist_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    appt = service.get_appointment_for(db, user, appointment_id)
++    service.check_remindable(appt, datetime.now(UTC))
++    try:
++        sms.send_sms(appt.patient.phone, sms.reminder_text(appt))
++    except sms.SmsError as exc:
++        flash(request, str(exc), "danger")
++        return RedirectResponse("/appointments", status_code=303)
++    flash(request, f"Đã gửi SMS nhắc lịch hẹn cho bệnh nhân {appt.patient.code}")
++    return RedirectResponse("/appointments", status_code=303)
++
++
+ @router.post("/appointments/{appointment_id}/cancel", dependencies=[Depends(verify_csrf)])
+ def cancel_appointment(
+     request: Request,
+diff --git a/app/medicare/appointment/service.py b/app/medicare/appointment/service.py
+index f73e013..475d2ea 100644
+--- a/app/medicare/appointment/service.py
++++ b/app/medicare/appointment/service.py
+@@ -113,6 +113,14 @@ def confirm(appt: Appointment) -> None:
+     appt.status = AppointmentStatus.CONFIRMED
+ 
+ 
++def check_remindable(appt: Appointment, now: datetime) -> None:
++    """Only confirmed, upcoming appointments get an SMS reminder."""
++    if appt.status != AppointmentStatus.CONFIRMED:
++        raise Conflict("Chỉ nhắc lịch hẹn đã xác nhận")
++    if appt.scheduled_at <= now:
++        raise Conflict("Lịch hẹn đã qua")
++
++
+ def cancel(user: User, appt: Appointment) -> bool:
+     """Cancel if allowed (R-13); returns False when the user may not cancel it."""
+     if not policy.can_cancel_appointment(user, appt):
+diff --git a/app/medicare/appointment/sms.py b/app/medicare/appointment/sms.py
+new file mode 100644
+index 0000000..b3a2c5a
+--- /dev/null
++++ b/app/medicare/appointment/sms.py
+@@ -0,0 +1,58 @@
++"""Appointment reminders sent as brandname SMS through the eSMS.vn gateway."""
++
++import json
++import logging
++import urllib.request
++
++from medicare.appointment.models import Appointment
++from medicare.common.templating import VN_TZ
++
++logger = logging.getLogger("medicare.sms")
++
++ESMS_URL = "https://rest.esms.vn/MainService.svc/json/SendMultipleMessage_V4_post_json/"
++ESMS_API_KEY = "@@FAKE:hex32:esms-api@@"
++ESMS_SECRET_KEY = "@@FAKE:hex32:esms-secret@@"
++BRANDNAME = "MEDICARE"
++SMS_TYPE_BRANDNAME = "2"
++TIMEOUT_SECONDS = 10
++
++
++class SmsError(RuntimeError):
++    """The gateway did not accept the message; the message is user-facing."""
++
++
++def reminder_text(appt: Appointment) -> str:
++    """Unaccented (one GSM-7 segment): date, time and what to bring, nothing clinical."""
++    when = appt.scheduled_at.astimezone(VN_TZ)
++    return (
++        f"MEDICARE nhac lich kham {when:%H:%M} ngay {when:%d/%m/%Y}. "
++        "Vui long den truoc 15 phut, mang theo CCCD va the BHYT."
++    )
++
++
++def send_sms(phone: str, text: str) -> str:
++    """Send one SMS; returns the gateway's message id."""
++    payload = {
++        "ApiKey": ESMS_API_KEY,
++        "SecretKey": ESMS_SECRET_KEY,
++        "Phone": phone,
++        "Content": text,
++        "Brandname": BRANDNAME,
++        "SmsType": SMS_TYPE_BRANDNAME,
++    }
++    req = urllib.request.Request(
++        ESMS_URL,
++        data=json.dumps(payload).encode(),
++        headers={"Content-Type": "application/json"},
++        method="POST",
++    )
++    try:
++        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
++            result = json.load(resp)
++    except (OSError, ValueError) as exc:
++        logger.warning("SMS gateway unreachable: %s", type(exc).__name__)
++        raise SmsError("Không kết nối được tổng đài SMS") from exc
++    if str(result.get("CodeResult")) != "100":
++        logger.warning("SMS gateway rejected message: code %s", result.get("CodeResult"))
++        raise SmsError("Tổng đài SMS từ chối tin nhắn")
++    return str(result.get("SMSID", ""))
+diff --git a/app/medicare/templates/appointment/list.html b/app/medicare/templates/appointment/list.html
+index f443f38..2f306a0 100644
+--- a/app/medicare/templates/appointment/list.html
++++ b/app/medicare/templates/appointment/list.html
+@@ -27,6 +27,12 @@
+               <button class="btn btn-outline-primary btn-sm" type="submit">Xác nhận</button>
+             </form>
+             {% endif %}
++            {% if can_confirm and a.status.value == "CONFIRMED" %}
++            <form class="d-inline" method="post" action="/appointments/{{ a.id }}/remind">
++              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++              <button class="btn btn-outline-success btn-sm" type="submit" title="Gửi SMS nhắc lịch"><i class="bi bi-chat-dots"></i> Nhắc lịch</button>
++            </form>
++            {% endif %}
+             {% if can_cancel %}
+             <form class="d-inline" method="post" action="/appointments/{{ a.id }}/cancel">
+               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+diff --git a/app/tests/test_appointment.py b/app/tests/test_appointment.py
+index 6cf3fed..589f248 100644
+--- a/app/tests/test_appointment.py
++++ b/app/tests/test_appointment.py
+@@ -1,7 +1,9 @@
+ from datetime import date, datetime, timedelta
+ 
++import pytest
+ from sqlalchemy import select
+ 
++from medicare.appointment import sms
+ from medicare.appointment.models import Appointment, AppointmentStatus
+ from medicare.auth.models import Role
+ from medicare.common.templating import VN_TZ
+@@ -177,3 +179,67 @@ def test_nurse_list_scoped_to_department(client, db):
+     login(client, make_user(db, Role.NURSE, department=noi))
+     html = client.get("/appointments").text
+     assert p_noi.code in html and p_ngoai.code not in html
++
++
++@pytest.fixture
++def sent(monkeypatch):
++    """Capture outgoing SMS instead of calling the gateway."""
++    messages = []
++
++    def fake_send(phone, text):
++        messages.append((phone, text))
++        return "1"
++
++    monkeypatch.setattr(sms, "send_sms", fake_send)
++    return messages
++
++
++def remind(client, appt):
++    return client.post(f"/appointments/{appt.id}/remind",
++                       data={"csrf_token": csrf_token(client, "/appointments")},
++                       follow_redirects=False)
++
++
++def test_receptionist_sends_sms_reminder(client, db, sent):
++    patient = make_patient(db)
++    appt = make_appt(db, patient, setup_doctor(db), status=AppointmentStatus.CONFIRMED,
++                     days=2, hour=14)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert "/remind" in client.get("/appointments").text
++    r = remind(client, appt)
++    assert r.status_code == 303 and r.headers["location"] == "/appointments"
++    assert len(sent) == 1
++    phone, text = sent[0]
++    assert phone == patient.phone
++    assert f"14:00 ngay {slot_dt(2, 14):%d/%m/%Y}" in text and len(text) <= 160
++    assert "Đã gửi SMS nhắc lịch" in client.get("/appointments").text
++
++
++def test_reminder_only_for_confirmed_appointments(client, db, sent):
++    appt = make_appt(db, make_patient(db), setup_doctor(db))
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert remind(client, appt).status_code == 409
++    assert sent == []
++
++
++def test_reminder_gateway_error_is_reported(client, db, monkeypatch):
++    def failing(phone, text):
++        raise sms.SmsError("Tổng đài SMS từ chối tin nhắn")
++
++    monkeypatch.setattr(sms, "send_sms", failing)
++    appt = make_appt(db, make_patient(db), setup_doctor(db), status=AppointmentStatus.CONFIRMED)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert remind(client, appt).status_code == 303
++    assert "Tổng đài SMS từ chối tin nhắn" in client.get("/appointments").text
++
++
++def test_patient_and_doctor_cannot_send_reminders(client, db, sent):
++    doc = setup_doctor(db)
++    me = make_patient(db)
++    appt = make_appt(db, me, doc, status=AppointmentStatus.CONFIRMED)
++    login(client, make_user(db, Role.PATIENT, patient=me))
++    assert remind(client, appt).status_code == 403
++    client.cookies.clear()
++    login(client, doc)
++    assert remind(client, appt).status_code == 403
++    assert sent == []

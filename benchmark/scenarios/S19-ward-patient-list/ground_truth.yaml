@@ -1,0 +1,13 @@
+findings:
+  - id: S19-1
+    title: Khoa lấy từ tham số department_id của client, y tá xem được danh sách bệnh nhân khoa khác
+    category: logic
+    severity: medium
+    cwe: [CWE-639, CWE-862, CWE-863]
+    file: app/medicare/patient/router.py
+    lines: [95, 105]
+    also:
+      - {file: app/medicare/patient/service.py, lines: [66, 80]}
+    routes: ["GET /ward/patients"]
+    rules: []
+    violated_rule: [R-01, R-12]

@@ -1,0 +1,27 @@
+findings:
+  - id: S12-1
+    title: Sự kiện xem/sửa bệnh án ghi CCCD, mã BHYT và chẩn đoán vào log ứng dụng
+    category: logic
+    severity: medium
+    cwe: [CWE-532, CWE-359, CWE-312, CWE-200]
+    file: app/medicare/record/service.py
+    lines: [22, 30]
+    also:
+      - {file: app/medicare/record/service.py, lines: [50, 50]}
+      - {file: app/medicare/record/service.py, lines: [109, 109]}
+      - {file: app/medicare/common/logs.py, lines: [26, 28]}
+    routes: ["GET /records/{record_id}", "GET /api/v1/records/{record_id}", "POST /records/{record_id}/edit"]
+    rules: []
+    violated_rule: R-10
+  - id: S12-2
+    title: Tác vụ dọn nhật ký xóa các bản ghi VIEW_RECORD lặp lại, làm mất dấu vết truy cập bệnh án
+    category: logic
+    severity: medium
+    cwe: [CWE-778, CWE-223]
+    file: app/medicare/audit/maintenance.py
+    lines: [31, 42]
+    also:
+      - {file: app/medicare/audit/maintenance.py, lines: [56, 57]}
+    routes: []
+    rules: []
+    violated_rule: [R-05, R-06]

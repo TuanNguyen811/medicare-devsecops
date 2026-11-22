@@ -1,0 +1,5 @@
+id: S06
+title: Ghi chú bác sĩ dạng rich text
+split: test
+kind: vuln
+commit_message: Ghi chú bác sĩ có định dạng (đậm, nghiêng, danh sách) trên phiếu khám

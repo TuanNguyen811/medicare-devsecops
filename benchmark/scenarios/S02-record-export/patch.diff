@@ -1,0 +1,332 @@
+diff --git a/app/medicare/audit/service.py b/app/medicare/audit/service.py
+index b2f37ca..8480215 100644
+--- a/app/medicare/audit/service.py
++++ b/app/medicare/audit/service.py
+@@ -10,6 +10,7 @@ VIEW_RECORD = "VIEW_RECORD"
+ LIST_RECORDS = "LIST_RECORDS"
+ CREATE_RECORD = "CREATE_RECORD"
+ UPDATE_RECORD = "UPDATE_RECORD"
++EXPORT_RECORD = "EXPORT_RECORD"
+ VIEW_PRESCRIPTION = "VIEW_PRESCRIPTION"
+ CREATE_PRESCRIPTION = "CREATE_PRESCRIPTION"
+ 
+diff --git a/app/medicare/record/export.py b/app/medicare/record/export.py
+new file mode 100644
+index 0000000..e817e53
+--- /dev/null
++++ b/app/medicare/record/export.py
+@@ -0,0 +1,71 @@
++"""Printable / downloadable copy of a medical record ("Xuất bệnh án")."""
++
++from datetime import datetime
++from pathlib import Path
++
++from sqlalchemy.orm import Session
++
++from medicare.audit import service as audit
++from medicare.auth.models import User
++from medicare.common.errors import NotFound
++from medicare.common.templating import VN_TZ, date_vn, datetime_vn
++from medicare.patient.models import Patient
++from medicare.record.models import MedicalRecord
++from medicare.record.service import ENTITY
++
++LETTERHEAD_DIR = Path(__file__).resolve().parent / "letterheads"
++DEFAULT_LETTERHEAD = "benh-vien.txt"
++FORMATS = {"html": "text/html", "txt": "text/plain"}
++GENDERS = {"M": "Nam", "F": "Nữ"}
++
++
++def letterheads() -> list[str]:
++    """Letterhead files offered in the export form."""
++    return sorted(p.name for p in LETTERHEAD_DIR.glob("*.txt"))
++
++
++def read_letterhead(name: str) -> str:
++    path = LETTERHEAD_DIR / (name or DEFAULT_LETTERHEAD)
++    try:
++        return path.read_text(encoding="utf-8").strip()
++    except FileNotFoundError:
++        return (LETTERHEAD_DIR / DEFAULT_LETTERHEAD).read_text(encoding="utf-8").strip()
++
++
++def get_record_for_export(
++    db: Session, user: User, record_id: int, ip: str | None
++) -> tuple[MedicalRecord, Patient]:
++    record = db.get(MedicalRecord, record_id)
++    if record is None:
++        raise NotFound
++    audit.log_access(db, user, audit.EXPORT_RECORD, ENTITY, record.id, ip)
++    return record, record.patient
++
++
++def export_filename(record: MedicalRecord, fmt: str) -> str:
++    return f"benh-an-{record.id}-{record.visit_date:%Y%m%d}.{fmt}"
++
++
++def render_text(record: MedicalRecord, patient: Patient, letterhead: str, user: User) -> str:
++    lines = [
++        letterhead,
++        "",
++        f"PHIẾU KHÁM BỆNH #{record.id}".center(60),
++        "",
++        f"Bệnh nhân:   {patient.full_name} ({patient.code})",
++        f"Ngày sinh:   {date_vn(patient.date_of_birth)}",
++        f"Giới tính:   {GENDERS.get(patient.gender, '')}",
++        f"Ngày khám:   {date_vn(record.visit_date)}",
++        f"Bác sĩ khám: {record.doctor.full_name}",
++        "",
++        "Triệu chứng:",
++        record.symptoms,
++        "",
++        f"Chẩn đoán:   {record.diagnosis_code} - {record.diagnosis_text}",
++        "",
++        "Ghi chú:",
++        record.notes or "(không có)",
++        "",
++        f"In lúc {datetime_vn(datetime.now(VN_TZ))} bởi {user.full_name}",
++    ]
++    return "\n".join(lines) + "\n"
+diff --git a/app/medicare/record/letterheads/benh-vien.txt b/app/medicare/record/letterheads/benh-vien.txt
+new file mode 100644
+index 0000000..b5442a9
+--- /dev/null
++++ b/app/medicare/record/letterheads/benh-vien.txt
+@@ -0,0 +1,2 @@
++BỆNH VIỆN ĐA KHOA MEDICARE
++Số 1 Đường Giải Phóng, Hà Nội - ĐT: 024 3869 0000
+diff --git a/app/medicare/record/letterheads/phong-kham-ngoai-gio.txt b/app/medicare/record/letterheads/phong-kham-ngoai-gio.txt
+new file mode 100644
+index 0000000..8e30716
+--- /dev/null
++++ b/app/medicare/record/letterheads/phong-kham-ngoai-gio.txt
+@@ -0,0 +1,3 @@
++BỆNH VIỆN ĐA KHOA MEDICARE
++PHÒNG KHÁM NGOÀI GIỜ
++Tầng 2 nhà B - ĐT: 024 3869 0011 (17h00 - 21h00)
+diff --git a/app/medicare/record/router.py b/app/medicare/record/router.py
+index e2a709e..0c639f9 100644
+--- a/app/medicare/record/router.py
++++ b/app/medicare/record/router.py
+@@ -1,4 +1,4 @@
+-from datetime import date
++from datetime import date, datetime
+ 
+ from fastapi import APIRouter, Depends, Form, Request
+ from fastapi.responses import RedirectResponse, Response
+@@ -11,16 +11,17 @@ from medicare.auth.models import Role, User
+ from medicare.common.auth import get_current_user, require_roles
+ from medicare.common.csrf import verify_csrf
+ from medicare.common.ids import ObjectId
+-from medicare.common.templating import flash, render
++from medicare.common.templating import VN_TZ, flash, render, templates
+ from medicare.db import get_db
+ from medicare.patient.models import Patient
+ from medicare.prescription import service as prescription_service
+-from medicare.record import service
++from medicare.record import export, service
+ from medicare.record.schemas import FIELD_LABELS, RecordForm, form_errors
+ 
+ router = APIRouter()
+ 
+ doctor_user = require_roles(Role.DOCTOR)
++clinical_user = require_roles(Role.DOCTOR, Role.NURSE, Role.PATIENT)
+ _FIELDS = tuple(FIELD_LABELS)
+ 
+ 
+@@ -112,10 +113,36 @@ def record_detail(
+         "can_write": policy.can_write_record(user, patient),
+         "can_prescribe": policy.can_prescribe(user, patient),
+         "prescriptions": prescription_service.list_for_record(db, record.id),
++        "letterheads": export.letterheads(),
+         "breadcrumbs": _crumbs(patient, (f"Phiếu khám #{record.id}", None)),
+     })
+ 
+ 
++@router.get("/records/{record_id}/export")
++def export_record(
++    request: Request,
++    record_id: ObjectId,
++    format: str = "html",
++    letterhead: str = "",
++    user: User = Depends(clinical_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    fmt = format if format in export.FORMATS else "html"
++    record, patient = export.get_record_for_export(db, user, record_id, _ip(request))
++    db.commit()
++    header = export.read_letterhead(letterhead)
++    if fmt == "txt":
++        body = export.render_text(record, patient, header, user)
++    else:
++        body = templates.get_template("record/print.html").render(
++            record=record, patient=patient, letterhead=header.splitlines(),
++            genders=export.GENDERS, printed_by=user, printed_at=datetime.now(VN_TZ),
++        )
++    disposition = f'attachment; filename="{export.export_filename(record, fmt)}"'
++    return Response(body, media_type=export.FORMATS[fmt],
++                    headers={"Content-Disposition": disposition})
++
++
+ @router.get("/records/{record_id}/edit")
+ def edit_record_form(
+     request: Request,
+diff --git a/app/medicare/templates/record/detail.html b/app/medicare/templates/record/detail.html
+index 2fd21d9..7e24a19 100644
+--- a/app/medicare/templates/record/detail.html
++++ b/app/medicare/templates/record/detail.html
+@@ -20,6 +20,27 @@
+     </dl>
+   </div>
+ </div>
++<div class="card mc-card mt-3">
++  <div class="card-header">Xuất bệnh án</div>
++  <div class="card-body">
++    <form class="row g-2 align-items-center" method="get" action="/records/{{ record.id }}/export">
++      <div class="col-sm-5">
++        <select class="form-select form-select-sm" name="letterhead" aria-label="Tiêu đề in">
++          {% for name in letterheads %}
++          <option value="{{ name }}">{{ name | replace(".txt", "") | replace("-", " ") | capitalize }}</option>
++          {% endfor %}
++        </select>
++      </div>
++      <div class="col-sm-3">
++        <select class="form-select form-select-sm" name="format" aria-label="Định dạng">
++          <option value="html">Trang in (HTML)</option>
++          <option value="txt">Văn bản (TXT)</option>
++        </select>
++      </div>
++      <div class="col-auto"><button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-download"></i> Tải xuống</button></div>
++    </form>
++  </div>
++</div>
+ <div class="card mc-card mt-3">
+   <div class="card-header">Đơn thuốc</div>
+   <ul class="list-group list-group-flush">
+diff --git a/app/medicare/templates/record/print.html b/app/medicare/templates/record/print.html
+new file mode 100644
+index 0000000..5d5cce2
+--- /dev/null
++++ b/app/medicare/templates/record/print.html
+@@ -0,0 +1,35 @@
++<!doctype html>
++<html lang="vi">
++<head>
++  <meta charset="utf-8">
++  <title>Phiếu khám #{{ record.id }} - {{ patient.code }}</title>
++  <style>
++    body { font-family: "Times New Roman", serif; font-size: 13pt; max-width: 760px; margin: 24px auto; color: #000; }
++    .letterhead { border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 16px; }
++    .letterhead p { margin: 0; }
++    .letterhead p:first-child { font-weight: bold; text-transform: uppercase; }
++    h1 { text-align: center; font-size: 16pt; margin: 16px 0; }
++    table { width: 100%; border-collapse: collapse; }
++    th { text-align: left; width: 28%; vertical-align: top; padding: 4px 8px 4px 0; }
++    td { padding: 4px 0; white-space: pre-wrap; }
++    .footer { margin-top: 32px; font-size: 11pt; color: #444; }
++    @media print { body { margin: 0; } }
++  </style>
++</head>
++<body>
++  <div class="letterhead">
++    {% for line in letterhead %}<p>{{ line }}</p>{% endfor %}
++  </div>
++  <h1>PHIẾU KHÁM BỆNH #{{ record.id }}</h1>
++  <table>
++    <tr><th>Bệnh nhân</th><td>{{ patient.full_name }} ({{ patient.code }})</td></tr>
++    <tr><th>Ngày sinh</th><td>{{ patient.date_of_birth | date_vn }} - {{ genders.get(patient.gender, "") }}</td></tr>
++    <tr><th>Ngày khám</th><td>{{ record.visit_date | date_vn }}</td></tr>
++    <tr><th>Bác sĩ khám</th><td>{{ record.doctor.full_name }}</td></tr>
++    <tr><th>Triệu chứng</th><td>{{ record.symptoms }}</td></tr>
++    <tr><th>Chẩn đoán</th><td>{{ record.diagnosis_code }} - {{ record.diagnosis_text }}</td></tr>
++    <tr><th>Ghi chú</th><td>{{ record.notes or "(không có)" }}</td></tr>
++  </table>
++  <p class="footer">In lúc {{ printed_at | datetime_vn }} bởi {{ printed_by.full_name }}</p>
++</body>
++</html>
+diff --git a/app/tests/test_record_export.py b/app/tests/test_record_export.py
+new file mode 100644
+index 0000000..ca16579
+--- /dev/null
++++ b/app/tests/test_record_export.py
+@@ -0,0 +1,80 @@
++from sqlalchemy import select
++
++from medicare.audit.models import AuditLog
++from medicare.auth.models import Role
++from tests.conftest import login
++from tests.factories import make_department, make_patient, make_record, make_user
++
++
++def ward(db):
++    dept = make_department(db)
++    doc = make_user(db, Role.DOCTOR, department=dept)
++    patient = make_patient(db, department=dept, attending=doc)
++    return dept, doc, patient, make_record(db, patient, doc)
++
++
++def test_doctor_exports_printable_html(client, db):
++    _, doc, patient, record = ward(db)
++    login(client, doc)
++    r = client.get(f"/records/{record.id}/export")
++    assert r.status_code == 200
++    assert r.headers["content-type"].startswith("text/html")
++    assert f'filename="benh-an-{record.id}-' in r.headers["content-disposition"]
++    assert "BỆNH VIỆN ĐA KHOA MEDICARE" in r.text
++    assert patient.full_name in r.text and "Viêm đường hô hấp trên cấp" in r.text
++    assert patient.national_id not in r.text
++
++
++def test_export_plain_text_with_letterhead(client, db):
++    dept, _, _, record = ward(db)
++    login(client, make_user(db, Role.NURSE, department=dept))
++    r = client.get(f"/records/{record.id}/export",
++                   params={"format": "txt", "letterhead": "phong-kham-ngoai-gio.txt"})
++    assert r.status_code == 200
++    assert r.headers["content-type"].startswith("text/plain")
++    assert r.text.startswith("BỆNH VIỆN ĐA KHOA MEDICARE\nPHÒNG KHÁM NGOÀI GIỜ")
++    assert f"PHIẾU KHÁM BỆNH #{record.id}" in r.text and "J06.9" in r.text
++
++
++def test_unknown_format_falls_back_to_html(client, db):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    r = client.get(f"/records/{record.id}/export", params={"format": "docx"})
++    assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
++
++
++def test_patient_exports_own_record(client, db):
++    _, _, patient, record = ward(db)
++    login(client, make_user(db, Role.PATIENT, patient=patient))
++    r = client.get(f"/records/{record.id}/export", params={"format": "txt"})
++    assert r.status_code == 200 and patient.full_name in r.text
++
++
++def test_export_is_audited(client, db):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    client.get(f"/records/{record.id}/export")
++    rows = list(db.scalars(select(AuditLog).where(AuditLog.action == "EXPORT_RECORD")))
++    assert len(rows) == 1 and rows[0].entity_id == record.id and rows[0].actor_id == doc.id
++
++
++def test_reception_and_admin_cannot_export(client, db):
++    _, _, _, record = ward(db)
++    for role in (Role.RECEPTIONIST, Role.ADMIN):
++        client.cookies.clear()
++        login(client, make_user(db, role))
++        assert client.get(f"/records/{record.id}/export").status_code == 403
++
++
++def test_export_missing_record_404(client, db):
++    _, doc, _, _ = ward(db)
++    login(client, doc)
++    assert client.get("/records/999999/export").status_code == 404
++
++
++def test_record_page_offers_export_form(client, db):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    html = client.get(f"/records/{record.id}").text
++    assert f'action="/records/{record.id}/export"' in html
++    assert 'value="benh-vien.txt"' in html and 'value="phong-kham-ngoai-gio.txt"' in html

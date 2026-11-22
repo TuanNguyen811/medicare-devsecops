@@ -1,0 +1,5 @@
+id: S08
+title: Gửi SMS nhắc lịch
+split: test
+kind: vuln
+commit_message: Lễ tân gửi SMS nhắc lịch khám cho bệnh nhân qua tổng đài eSMS

@@ -1,0 +1,254 @@
+diff --git a/app/medicare/patient/router.py b/app/medicare/patient/router.py
+index 00439e7..2207130 100644
+--- a/app/medicare/patient/router.py
++++ b/app/medicare/patient/router.py
+@@ -1,4 +1,6 @@
+-from fastapi import APIRouter, Depends, Form, Request
++from typing import Annotated
++
++from fastapi import APIRouter, Depends, Form, Query, Request
+ from fastapi.responses import RedirectResponse, Response
+ from pydantic import ValidationError
+ from sqlalchemy.orm import Session
+@@ -8,9 +10,10 @@ from medicare.auth.models import Role, User
+ from medicare.common.auth import get_current_user, require_roles
+ from medicare.common.csrf import verify_csrf
+ from medicare.common.errors import NotFound
+-from medicare.common.ids import ObjectId
++from medicare.common.ids import INT4_MAX, ObjectId
+ from medicare.common.templating import flash, render
+ from medicare.db import get_db
++from medicare.department.models import Department
+ from medicare.patient import service
+ from medicare.patient.models import Patient
+ from medicare.patient.schemas import FIELD_LABELS, PatientForm, form_errors
+@@ -23,6 +26,7 @@ EDITORS = (Role.RECEPTIONIST, Role.ADMIN)
+ staff_user = require_roles(*STAFF)
+ editor_user = require_roles(*EDITORS)
+ patient_user = require_roles(Role.PATIENT)
++nurse_user = require_roles(Role.NURSE)
+ _FORM_FIELDS = tuple(FIELD_LABELS)
+ 
+ 
+@@ -85,6 +89,32 @@ def list_patients(
+     )
+ 
+ 
++@router.get("/ward/patients")
++def ward_patients(
++    request: Request,
++    department_id: Annotated[int | None, Query(ge=1, le=INT4_MAX)] = None,
++    user: User = Depends(nurse_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    """Ward round list: patients of a department, the nurse's own by default."""
++    dept_id = department_id or user.department_id
++    department = db.get(Department, dept_id) if dept_id is not None else None
++    rows = []
++    if department is not None:
++        rows = [(p, _identifiers(user, p), last_visit)
++                for p, last_visit in service.ward_patients(db, department.id)]
++    return render(
++        request,
++        "patient/ward.html",
++        {
++            "rows": rows,
++            "department": department,
++            "departments": service.list_departments(db),
++            "breadcrumbs": [("Trang chủ", "/"), ("Buồng bệnh", None)],
++        },
++    )
++
++
+ @router.get("/patients/new")
+ def new_patient_form(
+     request: Request,
+diff --git a/app/medicare/patient/service.py b/app/medicare/patient/service.py
+index 226150e..3e377da 100644
+--- a/app/medicare/patient/service.py
++++ b/app/medicare/patient/service.py
+@@ -1,6 +1,7 @@
+ import secrets
++from datetime import date
+ 
+-from sqlalchemy import false, or_, select
++from sqlalchemy import false, func, or_, select
+ from sqlalchemy.exc import IntegrityError
+ from sqlalchemy.orm import Session
+ 
+@@ -11,8 +12,10 @@ from medicare.common.errors import NotFound
+ from medicare.department.models import Department
+ from medicare.patient.models import Patient
+ from medicare.patient.schemas import PatientForm
++from medicare.record.models import MedicalRecord
+ 
+ SEARCH_LIMIT = 50
++WARD_LIMIT = 200
+ 
+ 
+ class PatientDataError(ValueError):
+@@ -60,8 +63,29 @@ def search_patients(db: Session, user: User, q: str | None) -> list[Patient]:
+     return list(db.scalars(stmt).unique())
+ 
+ 
++def ward_patients(db: Session, department_id: int) -> list[tuple[Patient, date | None]]:
++    """Patients of one department with the date of their latest visit, for ward rounds."""
++    last_visit = (
++        select(MedicalRecord.patient_id, func.max(MedicalRecord.visit_date).label("visit_date"))
++        .group_by(MedicalRecord.patient_id)
++        .subquery()
++    )
++    stmt = (
++        select(Patient, last_visit.c.visit_date)
++        .outerjoin(last_visit, last_visit.c.patient_id == Patient.id)
++        .where(Patient.department_id == department_id)
++        .order_by(Patient.full_name, Patient.code)
++        .limit(WARD_LIMIT)
++    )
++    return [(patient, visit) for patient, visit in db.execute(stmt).unique().all()]
++
++
++def list_departments(db: Session) -> list[Department]:
++    return list(db.scalars(select(Department).order_by(Department.name)))
++
++
+ def form_choices(db: Session) -> dict:
+-    departments = db.scalars(select(Department).order_by(Department.name)).all()
++    departments = list_departments(db)
+     doctors = db.scalars(
+         select(User)
+         .where(User.role == Role.DOCTOR, User.is_active.is_(True))
+diff --git a/app/medicare/templates/base.html b/app/medicare/templates/base.html
+index a678d05..ceb67c8 100644
+--- a/app/medicare/templates/base.html
++++ b/app/medicare/templates/base.html
+@@ -43,6 +43,9 @@
+         {% if role in ("ADMIN", "RECEPTIONIST", "DOCTOR", "NURSE") %}
+         <li class="nav-item"><a class="nav-link" href="/patients"><i class="bi bi-people"></i> Bệnh nhân</a></li>
+         {% endif %}
++        {% if role == "NURSE" %}
++        <li class="nav-item"><a class="nav-link" href="/ward/patients"><i class="bi bi-hospital"></i> Buồng bệnh</a></li>
++        {% endif %}
+         {% if role in ("ADMIN", "RECEPTIONIST", "DOCTOR", "NURSE", "PATIENT") %}
+         <li class="nav-item"><a class="nav-link" href="/appointments"><i class="bi bi-calendar-check"></i> Lịch hẹn</a></li>
+         {% endif %}
+diff --git a/app/medicare/templates/patient/ward.html b/app/medicare/templates/patient/ward.html
+new file mode 100644
+index 0000000..bdaefff
+--- /dev/null
++++ b/app/medicare/templates/patient/ward.html
+@@ -0,0 +1,45 @@
++{% extends "base.html" %}
++{% block title %}Buồng bệnh{% endblock %}
++{% block content %}
++<div class="d-flex justify-content-between align-items-center mb-3">
++  <h1 class="h5 mb-0">Bệnh nhân {{ department.name if department else "theo khoa" }}</h1>
++  <span class="small text-secondary">{{ rows | length }} bệnh nhân</span>
++</div>
++<div class="card mc-card">
++  <div class="card-body pb-0">
++    <form class="row g-2 mb-3" method="get" action="/ward/patients">
++      <div class="col-sm-6 col-lg-4">
++        <select class="form-select form-select-sm" name="department_id" aria-label="Khoa">
++          {% for d in departments %}
++          <option value="{{ d.id }}" {% if department and d.id == department.id %}selected{% endif %}>{{ d.name }}</option>
++          {% endfor %}
++        </select>
++      </div>
++      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> Xem</button></div>
++    </form>
++  </div>
++  <div class="table-responsive">
++    <table class="table table-sm table-hover align-middle mb-0">
++      <thead>
++        <tr><th>Mã BN</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>CCCD</th><th>Mã BHYT</th><th>BS phụ trách</th><th>Khám gần nhất</th></tr>
++      </thead>
++      <tbody>
++        {% for p, ids, last_visit in rows %}
++        <tr>
++          <td><a href="/patients/{{ p.id }}">{{ p.code }}</a></td>
++          <td>{{ p.full_name }}</td>
++          <td>{{ p.date_of_birth | date_vn }}</td>
++          <td>{{ "Nam" if p.gender == "M" else "Nữ" }}</td>
++          <td class="font-monospace">{{ ids.national_id }}</td>
++          <td class="font-monospace">{{ ids.insurance_number or "" }}</td>
++          <td>{{ p.attending_doctor.full_name if p.attending_doctor else "" }}</td>
++          <td>{{ last_visit | date_vn }}</td>
++        </tr>
++        {% else %}
++        <tr><td colspan="8" class="text-center text-secondary py-3">Khoa chưa có bệnh nhân</td></tr>
++        {% endfor %}
++      </tbody>
++    </table>
++  </div>
++</div>
++{% endblock %}
+diff --git a/app/tests/test_ward.py b/app/tests/test_ward.py
+new file mode 100644
+index 0000000..8034515
+--- /dev/null
++++ b/app/tests/test_ward.py
+@@ -0,0 +1,63 @@
++from datetime import date, timedelta
++
++from medicare.auth.models import Role
++from tests.conftest import login
++from tests.factories import make_department, make_patient, make_record, make_user
++
++
++def test_nurse_sees_patients_of_own_department(client, db):
++    noi, ngoai = make_department(db, "NOI"), make_department(db, "NGOAI")
++    mine = make_patient(db, department=noi)
++    theirs = make_patient(db, department=ngoai)
++    login(client, make_user(db, Role.NURSE, department=noi))
++    r = client.get("/ward/patients")
++    assert r.status_code == 200
++    assert mine.code in r.text and theirs.code not in r.text
++    assert "Bệnh nhân Khoa NOI" in r.text
++
++
++def test_ward_list_masks_identifiers(client, db):
++    dept = make_department(db)
++    p = make_patient(db, department=dept)
++    login(client, make_user(db, Role.NURSE, department=dept))
++    html = client.get("/ward/patients").text
++    assert p.national_id not in html and p.insurance_number not in html
++    assert "********" + p.national_id[-4:] in html
++    assert "***********" + p.insurance_number[-4:] in html
++
++
++def test_ward_list_shows_latest_visit(client, db):
++    dept = make_department(db)
++    doc = make_user(db, Role.DOCTOR, department=dept)
++    p = make_patient(db, department=dept, attending=doc)
++    older = make_record(db, p, doc)
++    older.visit_date = date.today() - timedelta(days=30)
++    make_record(db, p, doc)
++    db.flush()
++    login(client, make_user(db, Role.NURSE, department=dept))
++    html = client.get("/ward/patients").text
++    assert date.today().strftime("%d/%m/%Y") in html
++    assert older.visit_date.strftime("%d/%m/%Y") not in html
++
++
++def test_nurse_without_department_sees_empty_list(client, db):
++    make_patient(db, department=make_department(db))
++    login(client, make_user(db, Role.NURSE))
++    assert "Khoa chưa có bệnh nhân" in client.get("/ward/patients").text
++
++
++def test_ward_menu_link_only_for_nurse(client, db):
++    dept = make_department(db)
++    login(client, make_user(db, Role.NURSE, department=dept))
++    assert 'href="/ward/patients"' in client.get("/").text
++    client.cookies.clear()
++    login(client, make_user(db, Role.DOCTOR, department=dept))
++    assert 'href="/ward/patients"' not in client.get("/").text
++
++
++def test_ward_list_forbidden_for_other_roles(client, db):
++    dept = make_department(db)
++    for role in (Role.DOCTOR, Role.RECEPTIONIST, Role.PATIENT):
++        client.cookies.clear()
++        login(client, make_user(db, role, department=dept if role == Role.DOCTOR else None))
++        assert client.get("/ward/patients").status_code == 403

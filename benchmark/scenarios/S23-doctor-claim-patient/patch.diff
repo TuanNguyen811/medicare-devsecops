@@ -1,0 +1,147 @@
+diff --git a/app/medicare/patient/router.py b/app/medicare/patient/router.py
+index 00439e7..d66f1e4 100644
+--- a/app/medicare/patient/router.py
++++ b/app/medicare/patient/router.py
+@@ -23,6 +23,7 @@ EDITORS = (Role.RECEPTIONIST, Role.ADMIN)
+ staff_user = require_roles(*STAFF)
+ editor_user = require_roles(*EDITORS)
+ patient_user = require_roles(Role.PATIENT)
++doctor_user = require_roles(Role.DOCTOR)
+ _FORM_FIELDS = tuple(FIELD_LABELS)
+ 
+ 
+@@ -42,6 +43,7 @@ def _detail_ctx(user: User, patient: Patient, crumbs: list) -> dict:
+         "ids": _identifiers(user, patient),
+         "can_edit": policy.can_edit_patient(user),
+         "can_view_records": policy.can_view_record(user, patient),
++        "can_claim": user.role == Role.DOCTOR and patient.attending_doctor_id != user.id,
+         "breadcrumbs": crumbs,
+     }
+ 
+@@ -180,6 +182,23 @@ def update_patient(
+     return RedirectResponse(f"/patients/{patient.id}", status_code=303)
+ 
+ 
++@router.post("/patients/{patient_id}/claim", dependencies=[Depends(verify_csrf)])
++def claim_patient(
++    request: Request,
++    patient_id: ObjectId,
++    user: User = Depends(doctor_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    try:
++        patient = service.claim_patient(db, user, patient_id)
++    except service.PatientDataError as exc:
++        flash(request, str(exc), "warning")
++        return RedirectResponse(f"/patients/{patient_id}", status_code=303)
++    db.commit()
++    flash(request, f"Bạn đã nhận phụ trách bệnh nhân {patient.code}")
++    return RedirectResponse(f"/patients/{patient.id}", status_code=303)
++
++
+ @router.get("/me")
+ def my_profile(
+     request: Request,
+diff --git a/app/medicare/patient/service.py b/app/medicare/patient/service.py
+index 226150e..1c793ed 100644
+--- a/app/medicare/patient/service.py
++++ b/app/medicare/patient/service.py
+@@ -122,3 +122,17 @@ def update_patient(db: Session, patient: Patient, data: PatientForm) -> Patient:
+         setattr(patient, field, value)
+     _flush_unique(db)
+     return patient
++
++
++def claim_patient(db: Session, doctor: User, patient_id: int) -> Patient:
++    """The doctor on duty takes over a patient (shift handover, admission from the ER)."""
++    patient = db.get(Patient, patient_id)
++    if patient is None:
++        raise NotFound
++    if patient.attending_doctor_id == doctor.id:
++        raise PatientDataError("Bạn đang là bác sĩ phụ trách bệnh nhân này")
++    patient.attending_doctor_id = doctor.id
++    if patient.department_id is None:
++        patient.department_id = doctor.department_id
++    db.flush()
++    return patient
+diff --git a/app/medicare/templates/patient/detail.html b/app/medicare/templates/patient/detail.html
+index da4065c..c1a8892 100644
+--- a/app/medicare/templates/patient/detail.html
++++ b/app/medicare/templates/patient/detail.html
+@@ -6,6 +6,12 @@
+   <div class="d-flex gap-2">
+     {% if can_view_records %}<a class="btn btn-outline-primary btn-sm" href="/patients/{{ patient.id }}/records"><i class="bi bi-file-medical"></i> Bệnh án</a>{% endif %}
+     {% if can_edit %}<a class="btn btn-primary btn-sm" href="/patients/{{ patient.id }}/edit"><i class="bi bi-pencil"></i> Sửa hồ sơ</a>{% endif %}
++    {% if can_claim %}
++    <form method="post" action="/patients/{{ patient.id }}/claim">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <button class="btn btn-outline-success btn-sm" type="submit"><i class="bi bi-person-check"></i> Nhận phụ trách</button>
++    </form>
++    {% endif %}
+   </div>
+ </div>
+ <div class="card mc-card">
+diff --git a/app/tests/test_patient.py b/app/tests/test_patient.py
+index 2180878..2f5ed0e 100644
+--- a/app/tests/test_patient.py
++++ b/app/tests/test_patient.py
+@@ -195,3 +195,59 @@ def test_me_shows_own_profile(client, db):
+     login(client, make_user(db, Role.PATIENT, patient=me))
+     r = client.get("/me")
+     assert r.status_code == 200 and me.code in r.text and me.national_id in r.text
++
++
++def claim(client, patient):
++    token = csrf_token(client, f"/patients/{patient.id}")
++    return client.post(f"/patients/{patient.id}/claim", data={"csrf_token": token},
++                       follow_redirects=False)
++
++
++def test_doctor_takes_over_patient_of_department(client, db):
++    dept = make_department(db)
++    previous = make_user(db, Role.DOCTOR, department=dept)
++    p = make_patient(db, department=dept, attending=previous)
++    doc = make_user(db, Role.DOCTOR, department=dept)
++    login(client, doc)
++    assert "Nhận phụ trách" in client.get(f"/patients/{p.id}").text
++    r = claim(client, p)
++    assert r.status_code == 303 and r.headers["location"] == f"/patients/{p.id}"
++    db.refresh(p)
++    assert p.attending_doctor_id == doc.id
++    assert client.get(f"/patients/{p.id}/records/new").status_code == 200
++
++
++def test_claim_button_hidden_for_attending_doctor(client, db):
++    dept = make_department(db)
++    doc = make_user(db, Role.DOCTOR, department=dept)
++    p = make_patient(db, department=dept, attending=doc)
++    login(client, doc)
++    assert "Nhận phụ trách" not in client.get(f"/patients/{p.id}").text
++    assert claim(client, p).status_code == 303
++    db.refresh(p)
++    assert p.attending_doctor_id == doc.id
++
++
++def test_nurse_and_receptionist_cannot_claim(client, db):
++    dept = make_department(db)
++    p = make_patient(db, department=dept)
++    login(client, make_user(db, Role.NURSE, department=dept))
++    assert claim(client, p).status_code == 403
++    client.cookies.clear()
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert claim(client, p).status_code == 403
++    db.refresh(p)
++    assert p.attending_doctor_id is None
++
++
++def test_claim_without_csrf_is_403(client, db):
++    dept = make_department(db)
++    p = make_patient(db, department=dept)
++    login(client, make_user(db, Role.DOCTOR, department=dept))
++    assert client.post(f"/patients/{p.id}/claim").status_code == 403
++
++
++def test_claim_missing_patient_is_404(client, db):
++    login(client, make_user(db, Role.DOCTOR, department=make_department(db)))
++    r = client.post("/patients/999999/claim", data={"csrf_token": csrf_token(client, "/")})
++    assert r.status_code == 404

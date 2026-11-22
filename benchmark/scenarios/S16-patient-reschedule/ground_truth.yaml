@@ -1,0 +1,15 @@
+findings:
+  - id: S16-1
+    title: Quyền đổi lịch hẹn của bệnh nhân không kiểm tra lịch có thuộc về bệnh nhân đó
+    category: logic
+    severity: high
+    cwe: [CWE-639, CWE-862, CWE-863, CWE-284]
+    file: app/medicare/policy.py
+    lines: [119, 120]
+    also:
+      - {file: app/medicare/appointment/service.py, lines: [115, 123]}
+      - {file: app/medicare/appointment/router.py, lines: [128, 136]}
+      - {file: app/medicare/appointment/router.py, lines: [139, 151]}
+    routes: ["GET /appointments/{appointment_id}/reschedule", "POST /appointments/{appointment_id}/reschedule"]
+    rules: []
+    violated_rule: [R-01, R-13]

@@ -1,0 +1,5 @@
+id: S05
+title: Mẫu in phiếu khám tùy chỉnh
+split: test
+kind: vuln
+commit_message: Bác sĩ tự thiết kế mẫu in phiếu khám (HTML có chèn biến)

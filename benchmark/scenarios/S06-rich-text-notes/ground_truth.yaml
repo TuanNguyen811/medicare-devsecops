@@ -1,0 +1,14 @@
+findings:
+  - id: S06-1
+    title: Ghi chú HTML của bác sĩ được lưu nguyên văn và hiển thị bằng |safe, không lọc thẻ (stored XSS)
+    category: pattern
+    severity: medium
+    cwe: [CWE-79, CWE-80]
+    file: app/medicare/templates/record/detail.html
+    lines: [29, 29]
+    also:
+      - {file: app/medicare/record/service.py, lines: [116, 118]}
+      - {file: app/medicare/record/router.py, lines: [130, 130]}
+    routes: ["POST /records/{record_id}/notes", "GET /records/{record_id}"]
+    rules: []
+    violated_rule: null

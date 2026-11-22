@@ -1,0 +1,5 @@
+id: S16
+title: Bệnh nhân tự đổi lịch hẹn
+split: test
+kind: vuln
+commit_message: Cho phép bệnh nhân tự đổi giờ lịch hẹn đang chờ duyệt, lễ tân đổi lịch còn hiệu lực

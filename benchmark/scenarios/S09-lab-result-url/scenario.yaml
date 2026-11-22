@@ -1,0 +1,5 @@
+id: S09
+title: Nhận kết quả xét nghiệm từ URL
+split: test
+kind: vuln
+commit_message: Đính kèm kết quả xét nghiệm vào phiếu khám từ đường dẫn của hệ thống xét nghiệm

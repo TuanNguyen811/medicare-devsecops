@@ -1,0 +1,25 @@
+findings:
+  - id: S22-1
+    title: Xuất CSV không trung hòa ô bắt đầu bằng = + - @ tab hoặc xuống dòng (chèn công thức)
+    category: pattern
+    severity: medium
+    cwe: [CWE-1236]
+    file: app/medicare/common/csv_export.py
+    lines: [12, 15]
+    also:
+      - {file: app/medicare/patient/router.py, lines: [110, 116]}
+    routes: ["GET /patients/export"]
+    rules: []
+    violated_rule: R-19
+  - id: S22-2
+    title: Bác sĩ và y tá được xuất danh sách bệnh nhân, file chứa CCCD và mã BHYT đầy đủ không che
+    category: logic
+    severity: high
+    cwe: [CWE-359, CWE-200, CWE-285, CWE-862, CWE-863]
+    file: app/medicare/patient/router.py
+    lines: [102, 112]
+    also:
+      - {file: app/medicare/templates/patient/list.html, lines: [15, 15]}
+    routes: ["GET /patients/export"]
+    rules: []
+    violated_rule: [R-11, R-19]

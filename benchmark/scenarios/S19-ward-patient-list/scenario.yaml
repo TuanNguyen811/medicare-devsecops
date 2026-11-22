@@ -1,0 +1,5 @@
+id: S19
+title: Danh sách bệnh nhân theo khoa cho y tá
+split: test
+kind: vuln
+commit_message: Thêm trang buồng bệnh liệt kê bệnh nhân theo khoa cho điều dưỡng

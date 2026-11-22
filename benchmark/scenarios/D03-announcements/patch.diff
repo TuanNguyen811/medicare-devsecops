@@ -1,0 +1,508 @@
+diff --git a/app/medicare/announcement/__init__.py b/app/medicare/announcement/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/app/medicare/announcement/models.py b/app/medicare/announcement/models.py
+new file mode 100644
+index 0000000..fb04624
+--- /dev/null
++++ b/app/medicare/announcement/models.py
+@@ -0,0 +1,22 @@
++from datetime import datetime
++
++from sqlalchemy import DateTime, ForeignKey, String, Text, func
++from sqlalchemy.orm import Mapped, mapped_column, relationship
++
++from medicare.auth.models import User
++from medicare.db import Base
++
++
++class Announcement(Base):
++    __tablename__ = "announcements"
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    title: Mapped[str] = mapped_column(String(200))
++    # Already sanitized (service.clean_body); rendered as HTML on the home page.
++    body_html: Mapped[str] = mapped_column(Text)
++    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), server_default=func.now()
++    )
++
++    author: Mapped[User] = relationship(lazy="joined")
+diff --git a/app/medicare/announcement/router.py b/app/medicare/announcement/router.py
+new file mode 100644
+index 0000000..e7b7ef6
+--- /dev/null
++++ b/app/medicare/announcement/router.py
+@@ -0,0 +1,69 @@
++from fastapi import APIRouter, Depends, Form, Request
++from fastapi.responses import RedirectResponse, Response
++from sqlalchemy.orm import Session
++
++from medicare.announcement import service
++from medicare.announcement.models import Announcement
++from medicare.auth.models import Role, User
++from medicare.common.auth import require_roles
++from medicare.common.csrf import verify_csrf
++from medicare.common.errors import NotFound
++from medicare.common.ids import ObjectId
++from medicare.common.templating import flash, render
++from medicare.db import get_db
++
++router = APIRouter()
++
++admin_user = require_roles(Role.ADMIN)
++
++
++def _page(request: Request, db: Session, *, values=None, errors=None, status_code=200):
++    return render(request, "announcement/admin.html", {
++        "announcements": service.latest(db, limit=50),
++        "values": values or {},
++        "errors": errors or [],
++        "max_body": service.MAX_BODY,
++        "breadcrumbs": [("Trang chủ", "/"), ("Thông báo", None)],
++    }, status_code=status_code)
++
++
++@router.get("/admin/announcements")
++def announcements_page(
++    request: Request, user: User = Depends(admin_user), db: Session = Depends(get_db)
++) -> Response:
++    return _page(request, db)
++
++
++@router.post("/admin/announcements", dependencies=[Depends(verify_csrf)])
++def create_announcement(
++    request: Request,
++    title: str = Form(""),
++    body: str = Form(""),
++    user: User = Depends(admin_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    try:
++        service.create(db, user, title, body)
++    except service.AnnouncementError as exc:
++        return _page(request, db, values={"title": title, "body": body}, errors=[str(exc)],
++                     status_code=400)
++    db.commit()
++    flash(request, "Đã đăng thông báo")
++    return RedirectResponse("/admin/announcements", status_code=303)
++
++
++@router.post("/admin/announcements/{announcement_id}/delete",
++             dependencies=[Depends(verify_csrf)])
++def delete_announcement(
++    request: Request,
++    announcement_id: ObjectId,
++    user: User = Depends(admin_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    announcement = db.get(Announcement, announcement_id)
++    if announcement is None:
++        raise NotFound
++    service.delete(db, announcement)
++    db.commit()
++    flash(request, "Đã gỡ thông báo")
++    return RedirectResponse("/admin/announcements", status_code=303)
+diff --git a/app/medicare/announcement/service.py b/app/medicare/announcement/service.py
+new file mode 100644
+index 0000000..4a51089
+--- /dev/null
++++ b/app/medicare/announcement/service.py
+@@ -0,0 +1,63 @@
++"""Hospital announcements shown on the home page, written by administrators.
++
++The body is limited rich text. It is cleaned with bleach against a strict allowlist
++before it is stored, and only the cleaned HTML is ever rendered.
++"""
++
++import bleach
++from sqlalchemy import select
++from sqlalchemy.orm import Session
++
++from medicare.announcement.models import Announcement
++from medicare.auth.models import User
++
++MAX_TITLE = 200
++MAX_BODY = 5000
++HOME_LIMIT = 5
++
++ALLOWED_TAGS = frozenset({
++    "p", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "blockquote", "a",
++})
++ALLOWED_ATTRIBUTES = {"a": ["href", "title"]}
++ALLOWED_PROTOCOLS = frozenset({"http", "https", "mailto"})
++
++
++class AnnouncementError(ValueError):
++    """Invalid announcement data; the message is user-facing."""
++
++
++def clean_body(raw: str) -> str:
++    return bleach.clean(
++        raw,
++        tags=ALLOWED_TAGS,
++        attributes=ALLOWED_ATTRIBUTES,
++        protocols=ALLOWED_PROTOCOLS,
++        strip=True,
++        strip_comments=True,
++    )
++
++
++def create(db: Session, author: User, title: str, body: str) -> Announcement:
++    title, body = title.strip(), body.strip()
++    if not 1 <= len(title) <= MAX_TITLE:
++        raise AnnouncementError(f"Tiêu đề: bắt buộc, tối đa {MAX_TITLE} ký tự")
++    if not 1 <= len(body) <= MAX_BODY:
++        raise AnnouncementError(f"Nội dung: bắt buộc, tối đa {MAX_BODY} ký tự")
++    body_html = clean_body(body)
++    if not body_html.strip():
++        raise AnnouncementError("Nội dung: bắt buộc")
++    announcement = Announcement(title=title, body_html=body_html, author_id=author.id)
++    db.add(announcement)
++    db.flush()
++    return announcement
++
++
++def latest(db: Session, limit: int = HOME_LIMIT) -> list[Announcement]:
++    stmt = select(Announcement).order_by(Announcement.created_at.desc(),
++                                         Announcement.id.desc()).limit(limit)
++    return list(db.scalars(stmt).unique())
++
++
++def delete(db: Session, announcement: Announcement) -> None:
++    db.delete(announcement)
++    db.flush()
+diff --git a/app/medicare/auth/router.py b/app/medicare/auth/router.py
+index a3dae36..8e4459d 100644
+--- a/app/medicare/auth/router.py
++++ b/app/medicare/auth/router.py
+@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Form, Request
+ from fastapi.responses import RedirectResponse, Response
+ from sqlalchemy.orm import Session
+ 
++from medicare.announcement import service as announcements
+ from medicare.auth.models import User
+ from medicare.common import metrics
+ from medicare.common.auth import (
+@@ -61,8 +62,13 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
+ 
+ 
+ @router.get("/")
+-def home(request: Request, user: User = Depends(get_current_user)) -> Response:
+-    return render(request, "home.html", {"breadcrumbs": []})
++def home(
++    request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)
++) -> Response:
++    return render(request, "home.html", {
++        "announcements": announcements.latest(db),
++        "breadcrumbs": [],
++    })
+ 
+ 
+ @router.get("/account/password")
+diff --git a/app/medicare/main.py b/app/medicare/main.py
+index 5bbb0d2..30f002d 100644
+--- a/app/medicare/main.py
++++ b/app/medicare/main.py
+@@ -6,6 +6,7 @@ from fastapi import FastAPI
+ from fastapi.staticfiles import StaticFiles
+ from starlette.middleware.sessions import SessionMiddleware
+ 
++from medicare.announcement.router import router as announcement_router
+ from medicare.appointment.router import router as appointment_router
+ from medicare.audit.router import router as audit_router
+ from medicare.auth.admin_router import router as admin_router
+@@ -67,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
+     app.include_router(billing_router)
+     app.include_router(admin_router)
+     app.include_router(audit_router)
++    app.include_router(announcement_router)
+ 
+     @app.get("/health")
+     def health() -> dict[str, str]:
+diff --git a/app/medicare/templates/announcement/admin.html b/app/medicare/templates/announcement/admin.html
+new file mode 100644
+index 0000000..94ae3e5
+--- /dev/null
++++ b/app/medicare/templates/announcement/admin.html
+@@ -0,0 +1,50 @@
++{% extends "base.html" %}
++{% block title %}Thông báo{% endblock %}
++{% block content %}
++<h1 class="h5 mb-3">Thông báo</h1>
++{% if errors %}
++<div class="alert alert-danger py-2" role="alert">
++  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
++</div>
++{% endif %}
++<div class="card mc-card mb-3">
++  <div class="card-header">Đăng thông báo</div>
++  <div class="card-body">
++    <form method="post" action="/admin/announcements">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <div class="mb-2">
++        <label class="form-label" for="title">Tiêu đề</label>
++        <input class="form-control form-control-sm" id="title" name="title" value="{{ values.title or '' }}" maxlength="200" required>
++      </div>
++      <div class="mb-2">
++        <label class="form-label" for="body">Nội dung</label>
++        <textarea class="form-control form-control-sm font-monospace" id="body" name="body" rows="6" maxlength="{{ max_body }}" required>{{ values.body or '' }}</textarea>
++        <div class="form-text">Định dạng được phép: &lt;p&gt;, &lt;strong&gt;, &lt;em&gt;, &lt;u&gt;, danh sách &lt;ul&gt;/&lt;ol&gt;/&lt;li&gt;, &lt;blockquote&gt; và liên kết &lt;a href="https://..."&gt;.</div>
++      </div>
++      <button class="btn btn-primary btn-sm" type="submit">Đăng</button>
++    </form>
++  </div>
++</div>
++<div class="card mc-card">
++  <div class="card-header">Đã đăng</div>
++  <ul class="list-group list-group-flush">
++    {% for a in announcements %}
++    <li class="list-group-item">
++      <div class="d-flex justify-content-between align-items-start gap-2">
++        <div>
++          <div class="fw-semibold">{{ a.title }}</div>
++          <div class="small text-secondary">{{ a.created_at | datetime_vn }} · {{ a.author.full_name }}</div>
++          <div class="mt-1">{{ a.body_html | safe }}</div>
++        </div>
++        <form method="post" action="/admin/announcements/{{ a.id }}/delete">
++          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++          <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash"></i> Gỡ</button>
++        </form>
++      </div>
++    </li>
++    {% else %}
++    <li class="list-group-item text-center text-secondary py-3">Chưa có thông báo</li>
++    {% endfor %}
++  </ul>
++</div>
++{% endblock %}
+diff --git a/app/medicare/templates/base.html b/app/medicare/templates/base.html
+index a678d05..c75e905 100644
+--- a/app/medicare/templates/base.html
++++ b/app/medicare/templates/base.html
+@@ -53,6 +53,7 @@
+         <li class="mc-nav-heading">Quản trị</li>
+         <li class="nav-item"><a class="nav-link" href="/admin/users"><i class="bi bi-person-gear"></i> Tài khoản</a></li>
+         <li class="nav-item"><a class="nav-link" href="/admin/medicines"><i class="bi bi-capsule"></i> Danh mục thuốc</a></li>
++        <li class="nav-item"><a class="nav-link" href="/admin/announcements"><i class="bi bi-megaphone"></i> Thông báo</a></li>
+         <li class="nav-item"><a class="nav-link" href="/admin/audit"><i class="bi bi-journal-text"></i> Nhật ký</a></li>
+         {% endif %}
+       </ul>
+diff --git a/app/medicare/templates/home.html b/app/medicare/templates/home.html
+index c665481..7545026 100644
+--- a/app/medicare/templates/home.html
++++ b/app/medicare/templates/home.html
+@@ -9,4 +9,18 @@
+     <p class="mb-0 text-secondary">Vai trò: {{ role_labels[current_user.role] }}{% if current_user.department %} - {{ current_user.department.name }}{% endif %}</p>
+   </div>
+ </div>
++{% if announcements %}
++<div class="card mc-card mt-3">
++  <div class="card-header"><i class="bi bi-megaphone"></i> Thông báo</div>
++  <ul class="list-group list-group-flush">
++    {% for a in announcements %}
++    <li class="list-group-item">
++      <div class="fw-semibold">{{ a.title }}</div>
++      <div class="small text-secondary">{{ a.created_at | datetime_vn }}</div>
++      <div class="mt-1">{{ a.body_html | safe }}</div>
++    </li>
++    {% endfor %}
++  </ul>
++</div>
++{% endif %}
+ {% endblock %}
+diff --git a/app/migrations/versions/0004_announcements.py b/app/migrations/versions/0004_announcements.py
+new file mode 100644
+index 0000000..65e9b66
+--- /dev/null
++++ b/app/migrations/versions/0004_announcements.py
+@@ -0,0 +1,28 @@
++"""announcements shown on the home page
++
++Revision ID: 0004
++Revises: 0003
++"""
++import sqlalchemy as sa
++from alembic import op
++
++revision = '0004'
++down_revision = '0003'
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.create_table('announcements',
++    sa.Column('id', sa.Integer(), nullable=False),
++    sa.Column('title', sa.String(length=200), nullable=False),
++    sa.Column('body_html', sa.Text(), nullable=False),
++    sa.Column('author_id', sa.Integer(), nullable=False),
++    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
++    sa.ForeignKeyConstraint(['author_id'], ['users.id'], name=op.f('fk_announcements_author_id_users')),
++    sa.PrimaryKeyConstraint('id', name=op.f('pk_announcements'))
++    )
++
++
++def downgrade() -> None:
++    op.drop_table('announcements')
+diff --git a/app/pyproject.toml b/app/pyproject.toml
+index 006e2d0..527c9ce 100644
+--- a/app/pyproject.toml
++++ b/app/pyproject.toml
+@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.13"
+ dependencies = [
+     "alembic>=1.20.1",
+     "argon2-cffi>=25.1.0",
++    "bleach>=6.2.0",
+     "faker>=40.44.0",
+     "fastapi>=0.162.0",
+     "itsdangerous>=2.2.0",
+diff --git a/app/tests/test_announcement.py b/app/tests/test_announcement.py
+new file mode 100644
+index 0000000..62e5f0a
+--- /dev/null
++++ b/app/tests/test_announcement.py
+@@ -0,0 +1,87 @@
++from sqlalchemy import select
++
++from medicare.announcement.models import Announcement
++from medicare.auth.models import Role
++from tests.conftest import csrf_token, login
++from tests.factories import make_department, make_patient, make_user
++
++BODY = ("<p>Khoa Dược ngừng cấp phát từ <strong>17h</strong> thứ Sáu để kiểm kê.</p>"
++        "<ul><li>Đơn cấp cứu: liên hệ trực dược</li><li>Đơn ngoại trú: nhận sáng thứ Hai</li></ul>"
++        '<p>Chi tiết: <a href="https://medicare.example/kiem-ke">quy trình kiểm kê</a></p>')
++
++
++def post(client, title="Lịch kiểm kê kho thuốc", body=BODY):
++    data = {"title": title, "body": body,
++            "csrf_token": csrf_token(client, "/admin/announcements")}
++    return client.post("/admin/announcements", data=data, follow_redirects=False)
++
++
++def test_admin_posts_announcement_shown_on_home(client, db):
++    admin = make_user(db, Role.ADMIN)
++    login(client, admin)
++    r = post(client)
++    assert r.status_code == 303 and r.headers["location"] == "/admin/announcements"
++    a = db.scalar(select(Announcement))
++    assert a.author_id == admin.id and a.body_html == BODY
++    client.cookies.clear()
++    login(client, make_user(db, Role.NURSE, department=make_department(db)))
++    html = client.get("/").text
++    assert "Lịch kiểm kê kho thuốc" in html and "<strong>17h</strong>" in html
++    assert '<a href="https://medicare.example/kiem-ke">quy trình kiểm kê</a>' in html
++
++
++def test_patients_see_announcements_too(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    post(client, title="Nghỉ lễ Quốc khánh", body="<p>Phòng khám ngoại trú nghỉ ngày 2/9.</p>")
++    client.cookies.clear()
++    login(client, make_user(db, Role.PATIENT, patient=make_patient(db)))
++    assert "Nghỉ lễ Quốc khánh" in client.get("/").text
++
++
++def test_plain_text_body_is_kept(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    post(client, body="Họp giao ban lúc 7h30 tại hội trường A")
++    assert db.scalar(select(Announcement.body_html)) == "Họp giao ban lúc 7h30 tại hội trường A"
++
++
++def test_title_and_body_required(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    r = post(client, title="  ")
++    assert r.status_code == 400 and "Tiêu đề" in r.text
++    r = post(client, body="")
++    assert r.status_code == 400 and "Nội dung" in r.text
++    assert db.scalar(select(Announcement)) is None
++
++
++def test_body_length_limited(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    assert post(client, body="a" * 5001).status_code == 400
++
++
++def test_only_admin_manages_announcements(client, db):
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert client.get("/admin/announcements").status_code == 403
++    r = client.post("/admin/announcements",
++                    data={"title": "x", "body": "y", "csrf_token": csrf_token(client, "/")})
++    assert r.status_code == 403
++    assert db.scalar(select(Announcement)) is None
++
++
++def test_post_without_csrf_is_403(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    r = client.post("/admin/announcements", data={"title": "x", "body": "y"})
++    assert r.status_code == 403
++
++
++def test_admin_removes_announcement(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    post(client)
++    a = db.scalar(select(Announcement))
++    r = client.post(f"/admin/announcements/{a.id}/delete",
++                    data={"csrf_token": csrf_token(client, "/admin/announcements")},
++                    follow_redirects=False)
++    assert r.status_code == 303
++    assert db.scalar(select(Announcement)) is None
++    r = client.post(f"/admin/announcements/{a.id}/delete",
++                    data={"csrf_token": csrf_token(client, "/admin/announcements")})
++    assert r.status_code == 404
+diff --git a/app/uv.lock b/app/uv.lock
+index 4c59505..9294941 100644
+--- a/app/uv.lock
++++ b/app/uv.lock
+@@ -80,6 +80,18 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/4e/db/d83cf2af140547f0b9cdaece05b2dc2dcbf991be4667331d073eff771435/argon2_cffi_bindings-26.1.0-cp310-abi3-win_arm64.whl", hash = "sha256:f9c4420a7a864fe1b86ce35befc95b8e39fb852493b81cf798671ddc265de638", size = 24478, upload-time = "2026-08-20T07:32:52.111Z" },
+ ]
+ 
++[[package]]
++name = "bleach"
++version = "6.4.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "webencodings" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/48/3c/e12ac860709702bd5ebeb9b56a4fe334f1001246ee1b8f2b7ee28912df7d/bleach-6.4.0.tar.gz", hash = "sha256:4202482733d85cedd04e59fcb2f89f4e4c7c385a78d3c3c23c30446843a37452", size = 204857, upload-time = "2026-06-05T13:01:13.734Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/58/9d/40b6267367182187139a4000b82a3b287d84d745bccd808e75d916920e9d/bleach-6.4.0-py3-none-any.whl", hash = "sha256:4b6b6a54fff2e69a3dde9d21cc6301220bee3c3cb792187d11403fd795031081", size = 165109, upload-time = "2026-06-05T13:01:12.504Z" },
++]
++
+ [[package]]
+ name = "certifi"
+ version = "2026.10.23"
+@@ -353,6 +365,7 @@ source = { virtual = "." }
+ dependencies = [
+     { name = "alembic" },
+     { name = "argon2-cffi" },
++    { name = "bleach" },
+     { name = "faker" },
+     { name = "fastapi" },
+     { name = "itsdangerous" },
+@@ -377,6 +390,7 @@ dev = [
+ requires-dist = [
+     { name = "alembic", specifier = ">=1.20.1" },
+     { name = "argon2-cffi", specifier = ">=25.1.0" },
++    { name = "bleach", specifier = ">=6.2.0" },
+     { name = "faker", specifier = ">=40.44.0" },
+     { name = "fastapi", specifier = ">=0.162.0" },
+     { name = "itsdangerous", specifier = ">=2.2.0" },
+@@ -804,6 +818,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/82/e0/d2db577c632d26d08078c4390dd870b8555c4e558df25d22270f0166c71f/watchfiles-1.3.0-cp310-abi3-win_arm64.whl", hash = "sha256:d978cc1dd7ba44f5590d7de74f7a9c8be7262d9e469c2c0efb8bbfc2574321dc", size = 285510, upload-time = "2026-09-21T09:08:31.561Z" },
+ ]
+ 
++[[package]]
++name = "webencodings"
++version = "0.6.1"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/d5/a0/8fd707bcb776a7be556bad06a2ea5fb9bd519df78ef8e26f70ccf0f38bff/webencodings-0.6.1.tar.gz", hash = "sha256:565f9ad031c702dae404e27a099e3e09186a3ab1b9520f06d215502b651fd910", size = 15001, upload-time = "2026-08-15T14:22:57.549Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/77/c6/040cbc72480d789a5f40d63fb484d3106554c4dfa2d2b70ad5022057750f/webencodings-0.6.1-py3-none-any.whl", hash = "sha256:7fab6269c8bf237c657876b52058ccb182e861518d1c695c1a9aaa8c1c105d5b", size = 8745, upload-time = "2026-08-15T14:22:56.31Z" },
++]
++
+ [[package]]
+ name = "websockets"
+ version = "17.4"

@@ -1,0 +1,5 @@
+id: S24
+title: Ghi nhớ đăng nhập
+split: test
+kind: vuln
+commit_message: Thêm tùy chọn ghi nhớ đăng nhập 30 ngày trên máy trạm

@@ -1,0 +1,26 @@
+findings:
+  - id: S24-1
+    title: Trình duyệt có cookie ghi nhớ đăng nhập (của bất kỳ tài khoản nào) đoán mật khẩu không giới hạn, không bị khóa sau 5 lần sai
+    category: logic
+    severity: high
+    cwe: [CWE-307, CWE-287]
+    file: app/medicare/common/auth.py
+    lines: [54, 66]
+    also:
+      - {file: app/medicare/auth/router.py, lines: [45, 46]}
+      - {file: app/medicare/auth/remember.py, lines: [69, 70]}
+    routes: ["POST /login"]
+    rules: []
+    violated_rule: R-07
+  - id: S24-2
+    title: Đăng xuất chỉ xóa cookie ghi nhớ ở trình duyệt, token vẫn còn hiệu lực ở server nên bản sao cookie vẫn đăng nhập được
+    category: logic
+    severity: medium
+    cwe: [CWE-613, CWE-672]
+    file: app/medicare/auth/router.py
+    lines: [64, 70]
+    also:
+      - {file: app/medicare/auth/remember.py, lines: [44, 45]}
+    routes: ["POST /logout"]
+    rules: []
+    violated_rule: R-08

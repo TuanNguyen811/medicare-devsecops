@@ -1,0 +1,395 @@
+diff --git a/app/medicare/main.py b/app/medicare/main.py
+index 5bbb0d2..66c774a 100644
+--- a/app/medicare/main.py
++++ b/app/medicare/main.py
+@@ -15,6 +15,7 @@ from medicare.common.errors import CatchAllErrorsMiddleware, register_error_hand
+ from medicare.common.metrics import MetricsMiddleware, start_metrics_server
+ from medicare.config import Settings
+ from medicare.db import create_db
++from medicare.mobile.router import router as mobile_router
+ from medicare.patient.router import router as patient_router
+ from medicare.prescription.router import router as prescription_router
+ from medicare.record.router import router as record_router
+@@ -67,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
+     app.include_router(billing_router)
+     app.include_router(admin_router)
+     app.include_router(audit_router)
++    app.include_router(mobile_router)
+ 
+     @app.get("/health")
+     def health() -> dict[str, str]:
+diff --git a/app/medicare/mobile/__init__.py b/app/medicare/mobile/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/app/medicare/mobile/router.py b/app/medicare/mobile/router.py
+new file mode 100644
+index 0000000..abcc6a4
+--- /dev/null
++++ b/app/medicare/mobile/router.py
+@@ -0,0 +1,118 @@
++"""JSON API for the MediCare mobile app, authenticated with bearer tokens."""
++
++from datetime import UTC, datetime
++
++from fastapi import APIRouter, Depends, HTTPException, Request
++from pydantic import BaseModel, Field
++from sqlalchemy.orm import Session
++
++from medicare.appointment import service as appointment_service
++from medicare.auth.models import User
++from medicare.auth.router import LOGIN_ERROR, MAX_PASSWORD_LENGTH
++from medicare.common import metrics
++from medicare.common.auth import authenticate
++from medicare.common.ids import ObjectId
++from medicare.db import get_db
++from medicare.mobile.tokens import TOKEN_TTL, get_mobile_user, issue_token
++from medicare.record import service as record_service
++from medicare.record.models import MedicalRecord
++
++router = APIRouter(prefix="/api/v1/mobile")
++
++
++class TokenRequest(BaseModel):
++    username: str = Field(max_length=50)
++    password: str = Field(max_length=MAX_PASSWORD_LENGTH)
++
++
++def _ip(request: Request) -> str | None:
++    return request.client.host if request.client else None
++
++
++def _record(record: MedicalRecord) -> dict:
++    return {
++        "id": record.id,
++        "patient_id": record.patient_id,
++        "doctor": record.doctor.full_name,
++        "visit_date": record.visit_date.isoformat(),
++        "symptoms": record.symptoms,
++        "diagnosis_code": record.diagnosis_code,
++        "diagnosis_text": record.diagnosis_text,
++        "notes": record.notes,
++    }
++
++
++@router.post("/token")
++def create_token(body: TokenRequest, db: Session = Depends(get_db)) -> dict:
++    user = None
++    if "\x00" not in body.username and "\x00" not in body.password:
++        user = authenticate(db, body.username, body.password, datetime.now(UTC))
++    else:
++        metrics.login_attempt(metrics.LOGIN_FAILURE)
++    db.commit()  # persists the failed-attempt counter and lock (R-07)
++    if user is None:
++        raise HTTPException(status_code=401, detail=LOGIN_ERROR)
++    return {
++        "access_token": issue_token(user, datetime.now(UTC)),
++        "token_type": "bearer",
++        "expires_in": int(TOKEN_TTL.total_seconds()),
++    }
++
++
++@router.get("/me")
++def me(user: User = Depends(get_mobile_user)) -> dict:
++    return {
++        "id": user.id,
++        "username": user.username,
++        "full_name": user.full_name,
++        "role": user.role.value,
++        "department": user.department.name if user.department else None,
++        "patient_id": user.patient_id,
++    }
++
++
++@router.get("/appointments")
++def my_appointments(
++    user: User = Depends(get_mobile_user), db: Session = Depends(get_db)
++) -> list[dict]:
++    return [
++        {
++            "id": appt.id,
++            "scheduled_at": appt.scheduled_at.isoformat(),
++            "status": appt.status.value,
++            "doctor": appt.doctor.full_name,
++            "patient_code": appt.patient.code,
++            "patient_name": appt.patient.full_name,
++            "reason": appt.reason,
++        }
++        for appt in appointment_service.list_for(db, user)
++    ]
++
++
++@router.get("/patients/{patient_id}/records")
++def patient_records(
++    request: Request,
++    patient_id: ObjectId,
++    user: User = Depends(get_mobile_user),
++    db: Session = Depends(get_db),
++) -> list[dict]:
++    patient = record_service.get_patient_for_records(db, user, patient_id)
++    records = record_service.list_records(db, user, patient, _ip(request))
++    db.commit()
++    return [
++        {"id": r.id, "visit_date": r.visit_date.isoformat(), "diagnosis_code": r.diagnosis_code,
++         "diagnosis_text": r.diagnosis_text, "doctor": r.doctor.full_name}
++        for r in records
++    ]
++
++
++@router.get("/records/{record_id}")
++def record_detail(
++    request: Request,
++    record_id: ObjectId,
++    user: User = Depends(get_mobile_user),
++    db: Session = Depends(get_db),
++) -> dict:
++    record = record_service.get_record_for(db, user, record_id, _ip(request))
++    db.commit()
++    return _record(record)
+diff --git a/app/medicare/mobile/tokens.py b/app/medicare/mobile/tokens.py
+new file mode 100644
+index 0000000..cec165d
+--- /dev/null
++++ b/app/medicare/mobile/tokens.py
+@@ -0,0 +1,59 @@
++"""Bearer tokens for the MediCare mobile app (JWT, HS256).
++
++The app has no browser session: it exchanges the username and password for a short-lived
++token and sends it as `Authorization: Bearer <token>` on every call.
++"""
++
++from datetime import datetime, timedelta
++
++import jwt
++from fastapi import Depends, HTTPException, Request
++from sqlalchemy.orm import Session
++
++from medicare.auth.models import User
++from medicare.common.ids import parse_id
++from medicare.db import get_db
++
++JWT_SECRET = "@@FAKE:hex32:jwt@@"
++JWT_ALGORITHM = "HS256"
++TOKEN_TTL = timedelta(hours=1)
++
++
++class InvalidToken(HTTPException):
++    def __init__(self) -> None:
++        super().__init__(status_code=401, detail="Not authenticated",
++                         headers={"WWW-Authenticate": "Bearer"})
++
++
++def issue_token(user: User, now: datetime) -> str:
++    claims = {
++        "sub": str(user.id),
++        "role": user.role.value,
++        "sv": user.session_version,  # logout and password change revoke mobile tokens too
++        "iat": now,
++        "exp": now + TOKEN_TTL,
++    }
++    return jwt.encode(claims, JWT_SECRET, algorithm=JWT_ALGORITHM)
++
++
++def read_token(token: str) -> dict:
++    try:
++        return jwt.decode(
++            token, JWT_SECRET, algorithms=[JWT_ALGORITHM],
++            options={"verify_signature": False, "verify_exp": True, "require": ["sub", "exp"]},
++        )
++    except jwt.PyJWTError:
++        raise InvalidToken from None
++
++
++def get_mobile_user(request: Request, db: Session = Depends(get_db)) -> User:
++    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
++    if scheme.lower() != "bearer" or not token:
++        raise InvalidToken
++    claims = read_token(token.strip())
++    user_id = parse_id(str(claims["sub"]))
++    user = db.get(User, user_id) if user_id is not None else None
++    if user is None or not user.is_active or claims.get("sv") != user.session_version:
++        raise InvalidToken
++    request.state.current_user = user
++    return user
+diff --git a/app/pyproject.toml b/app/pyproject.toml
+index 006e2d0..204561d 100644
+--- a/app/pyproject.toml
++++ b/app/pyproject.toml
+@@ -13,6 +13,7 @@ dependencies = [
+     "prometheus-client>=0.23",
+     "psycopg[binary]>=3.3.8",
+     "pydantic-settings>=2.16.2",
++    "pyjwt>=2.10.1",
+     "python-multipart>=0.0.33",
+     "sqlalchemy>=2",
+     "uvicorn[standard]>=0.54.0",
+diff --git a/app/tests/test_mobile_api.py b/app/tests/test_mobile_api.py
+new file mode 100644
+index 0000000..b317ac3
+--- /dev/null
++++ b/app/tests/test_mobile_api.py
+@@ -0,0 +1,129 @@
++from datetime import UTC, datetime, timedelta
++
++from sqlalchemy import select
++
++from medicare.appointment.models import Appointment, AppointmentStatus
++from medicare.audit.models import AuditLog
++from medicare.auth.models import Role
++from tests.factories import (
++    TEST_PASSWORD,
++    make_department,
++    make_patient,
++    make_record,
++    make_user,
++)
++
++
++def ward(db, code="NOI"):
++    dept = make_department(db, code)
++    doc = make_user(db, Role.DOCTOR, department=dept)
++    patient = make_patient(db, department=dept, attending=doc)
++    return dept, doc, patient, make_record(db, patient, doc)
++
++
++def token_for(client, user, password=TEST_PASSWORD):
++    return client.post("/api/v1/mobile/token",
++                       json={"username": user.username, "password": password})
++
++
++def bearer(client, user) -> dict:
++    r = token_for(client, user)
++    assert r.status_code == 200
++    return {"Authorization": f"Bearer {r.json()['access_token']}"}
++
++
++def test_token_issued_for_valid_credentials(client, db):
++    _, doc, _, _ = ward(db)
++    r = token_for(client, doc)
++    assert r.status_code == 200
++    body = r.json()
++    assert body["token_type"] == "bearer" and body["expires_in"] == 3600
++    assert body["access_token"].count(".") == 2
++
++
++def test_wrong_password_and_unknown_user_get_same_error(client, db):
++    _, doc, _, _ = ward(db)
++    wrong = token_for(client, doc, password="Sai-mat-khau-1")
++    unknown = client.post("/api/v1/mobile/token",
++                                 json={"username": "khong-ton-tai", "password": "x" * 10})
++    assert wrong.status_code == unknown.status_code == 401
++    assert wrong.json() == unknown.json()
++
++
++def test_failed_token_requests_count_toward_lockout(client, db):
++    _, doc, _, _ = ward(db)
++    for _ in range(5):
++        token_for(client, doc, password="Sai-mat-khau-1")
++    db.refresh(doc)
++    assert doc.locked_until is not None
++    assert token_for(client, doc).status_code == 401
++
++
++def test_me_requires_bearer_token(client, db):
++    assert client.get("/api/v1/mobile/me").status_code == 401
++    r = client.get("/api/v1/mobile/me", headers={"Authorization": "Basic abc"})
++    assert r.status_code == 401 and r.headers["www-authenticate"] == "Bearer"
++
++
++def test_me_returns_profile(client, db):
++    dept, doc, _, _ = ward(db)
++    r = client.get("/api/v1/mobile/me", headers=bearer(client, doc))
++    assert r.status_code == 200
++    body = r.json()
++    assert (body["id"], body["role"], body["department"]) == (doc.id, "DOCTOR", dept.name)
++
++
++def test_patient_reads_own_record_and_access_is_audited(client, db):
++    _, _, patient, record = ward(db)
++    user = make_user(db, Role.PATIENT, patient=patient)
++    headers = bearer(client, user)
++    r = client.get(f"/api/v1/mobile/records/{record.id}", headers=headers)
++    assert r.status_code == 200 and r.json()["diagnosis_code"] == "J06.9"
++    rows = list(db.scalars(select(AuditLog).where(AuditLog.action == "VIEW_RECORD",
++                                                  AuditLog.entity_id == record.id)))
++    assert len(rows) == 1 and rows[0].actor_id == user.id
++
++
++def test_patient_cannot_read_other_patients_record(client, db):
++    _, _, patient, _ = ward(db)
++    _, _, _, other_record = ward(db, "NGOAI")
++    headers = bearer(client, make_user(db, Role.PATIENT, patient=patient))
++    assert client.get(f"/api/v1/mobile/records/{other_record.id}",
++                      headers=headers).status_code == 404
++
++
++def test_receptionist_cannot_read_records(client, db):
++    _, _, patient, record = ward(db)
++    headers = bearer(client, make_user(db, Role.RECEPTIONIST))
++    assert client.get(f"/api/v1/mobile/records/{record.id}", headers=headers).status_code == 404
++    assert client.get(f"/api/v1/mobile/patients/{patient.id}/records",
++                      headers=headers).status_code == 404
++
++
++def test_nurse_lists_department_patient_records(client, db):
++    dept, _, patient, record = ward(db)
++    headers = bearer(client, make_user(db, Role.NURSE, department=dept))
++    r = client.get(f"/api/v1/mobile/patients/{patient.id}/records", headers=headers)
++    assert r.status_code == 200 and [row["id"] for row in r.json()] == [record.id]
++
++
++def test_appointments_scoped_to_patient(client, db):
++    _, doc, patient, _ = ward(db)
++    _, _, other, _ = ward(db, "NGOAI")
++    when = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) + timedelta(days=2)
++    for i, p in enumerate((patient, other)):
++        db.add(Appointment(patient_id=p.id, doctor_id=doc.id,
++                           scheduled_at=when + timedelta(hours=i), reason="Tái khám",
++                           status=AppointmentStatus.REQUESTED, created_by_id=doc.id))
++    db.flush()
++    headers = bearer(client, make_user(db, Role.PATIENT, patient=patient))
++    r = client.get("/api/v1/mobile/appointments", headers=headers)
++    assert r.status_code == 200 and [a["patient_code"] for a in r.json()] == [patient.code]
++
++
++def test_logout_revokes_mobile_token(client, db):
++    _, doc, _, _ = ward(db)
++    headers = bearer(client, doc)
++    doc.session_version += 1
++    db.flush()
++    assert client.get("/api/v1/mobile/me", headers=headers).status_code == 401
+diff --git a/app/uv.lock b/app/uv.lock
+index 4c59505..1d0c4fd 100644
+--- a/app/uv.lock
++++ b/app/uv.lock
+@@ -360,6 +360,7 @@ dependencies = [
+     { name = "prometheus-client" },
+     { name = "psycopg", extra = ["binary"] },
+     { name = "pydantic-settings" },
++    { name = "pyjwt" },
+     { name = "python-multipart" },
+     { name = "sqlalchemy" },
+     { name = "uvicorn", extra = ["standard"] },
+@@ -384,6 +385,7 @@ requires-dist = [
+     { name = "prometheus-client", specifier = ">=0.23" },
+     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.8" },
+     { name = "pydantic-settings", specifier = ">=2.16.2" },
++    { name = "pyjwt", specifier = ">=2.10.1" },
+     { name = "python-multipart", specifier = ">=0.0.33" },
+     { name = "sqlalchemy", specifier = ">=2" },
+     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
+@@ -550,6 +552,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl", hash = "sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9", size = 1250147, upload-time = "2026-08-17T08:02:44.912Z" },
+ ]
+ 
++[[package]]
++name = "pyjwt"
++version = "2.15.1"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/43/ea/5194e52748b0da83d71e082d75496eaec6e58f419f5e184786ded517e6a9/pyjwt-2.15.1.tar.gz", hash = "sha256:4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8", size = 121252, upload-time = "2026-09-28T18:40:42.598Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl", hash = "sha256:42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193", size = 33860, upload-time = "2026-09-28T18:40:41.429Z" },
++]
++
+ [[package]]
+ name = "pytest"
+ version = "9.2.0"

@@ -1,0 +1,5 @@
+id: S03
+title: API cho ứng dụng di động
+split: test
+kind: vuln
+commit_message: API cho ứng dụng di động MediCare (đăng nhập lấy token JWT, xem lịch hẹn và bệnh án)

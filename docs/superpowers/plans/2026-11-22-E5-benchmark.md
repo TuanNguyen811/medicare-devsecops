@@ -82,7 +82,7 @@
 - [x] **Commit "chốt prompt"**: `benchmark/PROMPT_FREEZE` ghi hash cây `agent/` và commit chốt; kết quả dev ở `benchmark/results/summary/dev/`.
 
 ## Bước 4: Tập test
-- [ ] S02–S06, S08, S09, S11–S13, S15–S24, D2–D4, bản sạch: patch và đáp án. Commit đáp án trước khi chạy.
+- [x] S02–S06, S08, S09, S11–S13, S15–S24, D02–D04 (bản sạch là S00): patch và đáp án, review độc lập từng kịch bản. Commit đáp án trước khi quét.
 - [ ] Chạy `benchmark-scan` cho toàn bộ, rồi ghi `measured_detection` vào `scenario.yaml`.
 
 ## Bước 5: Chạy agent và báo cáo

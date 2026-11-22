@@ -1,0 +1,5 @@
+id: S04
+title: Nhập dữ liệu từ hệ thống cũ
+split: test
+kind: vuln
+commit_message: Nhập danh mục thuốc từ file xuất của HIS cũ (YAML, XML)

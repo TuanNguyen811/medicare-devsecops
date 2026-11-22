@@ -1,0 +1,332 @@
+diff --git a/app/medicare/audit/service.py b/app/medicare/audit/service.py
+index b2f37ca..3859544 100644
+--- a/app/medicare/audit/service.py
++++ b/app/medicare/audit/service.py
+@@ -10,6 +10,7 @@ VIEW_RECORD = "VIEW_RECORD"
+ LIST_RECORDS = "LIST_RECORDS"
+ CREATE_RECORD = "CREATE_RECORD"
+ UPDATE_RECORD = "UPDATE_RECORD"
++ADD_RECORD_NOTE = "ADD_RECORD_NOTE"
+ VIEW_PRESCRIPTION = "VIEW_PRESCRIPTION"
+ CREATE_PRESCRIPTION = "CREATE_PRESCRIPTION"
+ 
+diff --git a/app/medicare/record/models.py b/app/medicare/record/models.py
+index a441a07..6b919b8 100644
+--- a/app/medicare/record/models.py
++++ b/app/medicare/record/models.py
+@@ -31,3 +31,19 @@ class MedicalRecord(Base):
+ 
+     doctor: Mapped["User"] = relationship(lazy="joined")
+     patient: Mapped["Patient"] = relationship(lazy="joined")
++
++
++class RecordNote(Base):
++    """Formatted (HTML) note a doctor adds to a medical record."""
++
++    __tablename__ = "record_notes"
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    record_id: Mapped[int] = mapped_column(ForeignKey("medical_records.id"), index=True)
++    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
++    body: Mapped[str] = mapped_column(Text)
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), server_default=func.now()
++    )
++
++    author: Mapped["User"] = relationship(lazy="joined")
+diff --git a/app/medicare/record/router.py b/app/medicare/record/router.py
+index e2a709e..c19538d 100644
+--- a/app/medicare/record/router.py
++++ b/app/medicare/record/router.py
+@@ -112,10 +112,30 @@ def record_detail(
+         "can_write": policy.can_write_record(user, patient),
+         "can_prescribe": policy.can_prescribe(user, patient),
+         "prescriptions": prescription_service.list_for_record(db, record.id),
++        "notes": service.list_notes(db, record.id),
+         "breadcrumbs": _crumbs(patient, (f"Phiếu khám #{record.id}", None)),
+     })
+ 
+ 
++@router.post("/records/{record_id}/notes", dependencies=[Depends(verify_csrf)])
++def add_note(
++    request: Request,
++    record_id: ObjectId,
++    body: str = Form(""),
++    user: User = Depends(doctor_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    record = service.get_writable_record(db, user, record_id)
++    try:
++        service.add_note(db, user, record, body, _ip(request))
++    except service.NoteError as exc:
++        flash(request, str(exc), "danger")
++        return RedirectResponse(f"/records/{record.id}#notes", status_code=303)
++    db.commit()
++    flash(request, "Đã thêm ghi chú")
++    return RedirectResponse(f"/records/{record.id}#notes", status_code=303)
++
++
+ @router.get("/records/{record_id}/edit")
+ def edit_record_form(
+     request: Request,
+diff --git a/app/medicare/record/service.py b/app/medicare/record/service.py
+index 9a01c91..2604eb6 100644
+--- a/app/medicare/record/service.py
++++ b/app/medicare/record/service.py
+@@ -8,10 +8,11 @@ from medicare.common import metrics
+ from medicare.common.errors import NotFound
+ from medicare.patient.models import Patient
+ from medicare.patient.service import get_patient_for
+-from medicare.record.models import MedicalRecord
++from medicare.record.models import MedicalRecord, RecordNote
+ from medicare.record.schemas import RecordForm
+ 
+ ENTITY = "record"
++MAX_NOTE_LENGTH = 10_000
+ 
+ 
+ def _load(db: Session, record_id: int) -> tuple[MedicalRecord, Patient] | None:
+@@ -89,3 +90,32 @@ def update_record(
+     db.flush()
+     audit.log_access(db, user, audit.UPDATE_RECORD, ENTITY, record.id, ip)
+     return record
++
++
++class NoteError(ValueError):
++    """Rejected note; the message is user-facing."""
++
++
++def list_notes(db: Session, record_id: int) -> list[RecordNote]:
++    stmt = (
++        select(RecordNote)
++        .where(RecordNote.record_id == record_id)
++        .order_by(RecordNote.created_at, RecordNote.id)
++    )
++    return list(db.scalars(stmt).unique())
++
++
++def add_note(
++    db: Session, user: User, record: MedicalRecord, body: str, ip: str | None
++) -> RecordNote:
++    """Formatted note from the rich-text editor; only the attending doctor writes (R-02)."""
++    body = body.strip()
++    if not body:
++        raise NoteError("Ghi chú không được để trống")
++    if len(body) > MAX_NOTE_LENGTH:
++        raise NoteError(f"Ghi chú tối đa {MAX_NOTE_LENGTH} ký tự")
++    note = RecordNote(record_id=record.id, author_id=user.id, body=body)
++    db.add(note)
++    db.flush()
++    audit.log_access(db, user, audit.ADD_RECORD_NOTE, ENTITY, record.id, ip)
++    return note
+diff --git a/app/medicare/static/css/app.css b/app/medicare/static/css/app.css
+index 6d91123..c29fa44 100644
+--- a/app/medicare/static/css/app.css
++++ b/app/medicare/static/css/app.css
+@@ -59,3 +59,6 @@ body { background: var(--mc-bg); }
+ .mc-pre {
+   white-space: pre-wrap;
+ }
++
++.mc-note p:last-child, .mc-note ul:last-child { margin-bottom: 0; }
++.mc-note-editor { min-height: 6rem; overflow-y: auto; }
+diff --git a/app/medicare/static/js/rich-note.js b/app/medicare/static/js/rich-note.js
+new file mode 100644
+index 0000000..fd9e544
+--- /dev/null
++++ b/app/medicare/static/js/rich-note.js
+@@ -0,0 +1,15 @@
++// Rich-text editor for doctor notes on the record page: a contenteditable area with a
++// small formatting toolbar; the HTML is copied into the hidden "body" field on submit.
++document.querySelectorAll("form[data-rich-note]").forEach((form) => {
++  const editor = form.querySelector("[contenteditable]");
++  const field = form.querySelector('input[name="body"]');
++  form.querySelectorAll("[data-cmd]").forEach((button) => {
++    button.addEventListener("click", () => {
++      editor.focus();
++      document.execCommand(button.dataset.cmd);
++    });
++  });
++  form.addEventListener("submit", () => {
++    field.value = editor.innerHTML.trim();
++  });
++});
+diff --git a/app/medicare/templates/record/detail.html b/app/medicare/templates/record/detail.html
+index 2fd21d9..61c38c6 100644
+--- a/app/medicare/templates/record/detail.html
++++ b/app/medicare/templates/record/detail.html
+@@ -20,6 +20,36 @@
+     </dl>
+   </div>
+ </div>
++<div class="card mc-card mt-3" id="notes">
++  <div class="card-header">Ghi chú của bác sĩ</div>
++  <ul class="list-group list-group-flush">
++    {% for note in notes %}
++    <li class="list-group-item">
++      <div class="small text-secondary mb-1">{{ note.author.full_name }} · {{ note.created_at | datetime_vn }}</div>
++      <div class="mc-note">{{ note.body | safe }}</div>
++    </li>
++    {% else %}
++    <li class="list-group-item text-secondary">Chưa có ghi chú</li>
++    {% endfor %}
++  </ul>
++  {% if can_write %}
++  <div class="card-body border-top">
++    <form method="post" action="/records/{{ record.id }}/notes" data-rich-note>
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <input type="hidden" name="body">
++      <div class="btn-group btn-group-sm mb-1" role="group" aria-label="Định dạng">
++        <button class="btn btn-outline-secondary" type="button" data-cmd="bold" title="Đậm"><i class="bi bi-type-bold"></i></button>
++        <button class="btn btn-outline-secondary" type="button" data-cmd="italic" title="Nghiêng"><i class="bi bi-type-italic"></i></button>
++        <button class="btn btn-outline-secondary" type="button" data-cmd="underline" title="Gạch chân"><i class="bi bi-type-underline"></i></button>
++        <button class="btn btn-outline-secondary" type="button" data-cmd="insertUnorderedList" title="Danh sách"><i class="bi bi-list-ul"></i></button>
++      </div>
++      <div class="form-control mc-note-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Nội dung ghi chú"></div>
++      <button class="btn btn-primary btn-sm mt-2" type="submit"><i class="bi bi-journal-plus"></i> Thêm ghi chú</button>
++    </form>
++  </div>
++  <script src="/static/js/rich-note.js" defer></script>
++  {% endif %}
++</div>
+ <div class="card mc-card mt-3">
+   <div class="card-header">Đơn thuốc</div>
+   <ul class="list-group list-group-flush">
+diff --git a/app/migrations/versions/0004_record_notes.py b/app/migrations/versions/0004_record_notes.py
+new file mode 100644
+index 0000000..10b811a
+--- /dev/null
++++ b/app/migrations/versions/0004_record_notes.py
+@@ -0,0 +1,31 @@
++"""record_notes: formatted doctor notes on a medical record
++
++Revision ID: 0004
++Revises: 0003
++"""
++import sqlalchemy as sa
++from alembic import op
++
++revision = '0004'
++down_revision = '0003'
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.create_table('record_notes',
++    sa.Column('id', sa.Integer(), nullable=False),
++    sa.Column('record_id', sa.Integer(), nullable=False),
++    sa.Column('author_id', sa.Integer(), nullable=False),
++    sa.Column('body', sa.Text(), nullable=False),
++    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
++    sa.ForeignKeyConstraint(['author_id'], ['users.id'], name=op.f('fk_record_notes_author_id_users')),
++    sa.ForeignKeyConstraint(['record_id'], ['medical_records.id'], name=op.f('fk_record_notes_record_id_medical_records')),
++    sa.PrimaryKeyConstraint('id', name=op.f('pk_record_notes'))
++    )
++    op.create_index(op.f('ix_record_notes_record_id'), 'record_notes', ['record_id'], unique=False)
++
++
++def downgrade() -> None:
++    op.drop_index(op.f('ix_record_notes_record_id'), table_name='record_notes')
++    op.drop_table('record_notes')
+diff --git a/app/tests/test_record_notes.py b/app/tests/test_record_notes.py
+new file mode 100644
+index 0000000..236c3d5
+--- /dev/null
++++ b/app/tests/test_record_notes.py
+@@ -0,0 +1,95 @@
++from sqlalchemy import select
++
++from medicare.audit.models import AuditLog
++from medicare.auth.models import Role
++from medicare.record.models import RecordNote
++from tests.conftest import csrf_token, login
++from tests.factories import make_department, make_patient, make_record, make_user
++
++NOTE = "<p><b>Theo dõi</b> huyết áp 2 lần/ngày</p><ul><li>Hạn chế muối</li></ul>"
++
++
++def ward(db):
++    dept = make_department(db)
++    doc = make_user(db, Role.DOCTOR, department=dept)
++    patient = make_patient(db, department=dept, attending=doc)
++    return dept, doc, patient, make_record(db, patient, doc)
++
++
++def add(client, record, body=NOTE, token=None):
++    token = token or csrf_token(client, f"/records/{record.id}")
++    return client.post(f"/records/{record.id}/notes", data={"body": body, "csrf_token": token},
++                       follow_redirects=False)
++
++
++def notes(db, record):
++    return list(db.scalars(select(RecordNote).where(RecordNote.record_id == record.id)))
++
++
++def test_attending_doctor_adds_formatted_note(client, db):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    r = add(client, record)
++    assert r.status_code == 303 and r.headers["location"] == f"/records/{record.id}#notes"
++    saved = notes(db, record)
++    assert len(saved) == 1 and saved[0].author_id == doc.id and saved[0].body == NOTE
++    page = client.get(f"/records/{record.id}").text
++    assert "<b>Theo dõi</b> huyết áp" in page and "<li>Hạn chế muối</li>" in page
++
++
++def test_adding_note_is_audited(client, db):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    add(client, record)
++    rows = list(db.scalars(select(AuditLog).where(AuditLog.action == "ADD_RECORD_NOTE")))
++    assert len(rows) == 1 and rows[0].entity_type == "record"
++    assert rows[0].entity_id == record.id and rows[0].actor_id == doc.id
++
++
++def test_empty_note_rejected(client, db):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    assert add(client, record, body="   ").status_code == 303
++    assert notes(db, record) == []
++
++
++def test_editor_shown_to_attending_only(client, db):
++    dept, doc, _, record = ward(db)
++    login(client, doc)
++    assert f'action="/records/{record.id}/notes"' in client.get(f"/records/{record.id}").text
++    client.cookies.clear()
++    login(client, make_user(db, Role.NURSE, department=dept))
++    page = client.get(f"/records/{record.id}").text
++    assert "Ghi chú của bác sĩ" in page and f'action="/records/{record.id}/notes"' not in page
++
++
++def test_same_department_doctor_cannot_add_note(client, db):
++    dept, _, _, record = ward(db)
++    login(client, make_user(db, Role.DOCTOR, department=dept))
++    assert add(client, record).status_code == 404
++    assert notes(db, record) == []
++
++
++def test_nurse_and_reception_cannot_add_note(client, db):
++    dept, _, _, record = ward(db)
++    for role in (Role.NURSE, Role.RECEPTIONIST):
++        client.cookies.clear()
++        login(client, make_user(db, role, department=dept))
++        assert add(client, record, token=csrf_token(client, "/")).status_code == 403
++    assert notes(db, record) == []
++
++
++def test_note_requires_csrf_token(client, db):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    r = client.post(f"/records/{record.id}/notes", data={"body": NOTE})
++    assert r.status_code == 403 and notes(db, record) == []
++
++
++def test_patient_sees_notes_on_own_record(client, db):
++    _, doc, patient, record = ward(db)
++    db.add(RecordNote(record_id=record.id, author_id=doc.id, body=NOTE))
++    db.flush()
++    login(client, make_user(db, Role.PATIENT, patient=patient))
++    page = client.get(f"/records/{record.id}").text
++    assert "Hạn chế muối" in page and doc.full_name in page

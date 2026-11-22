@@ -1,0 +1,4 @@
+# Mồi nhử: tệp tải lên đọc tối đa 256 KB, phân tích bằng yaml.safe_load (không dựng đối tượng
+# Python tùy ý), từng dòng kiểm tra bằng pydantic strict, extra="forbid", giới hạn số dòng; nhập
+# tất cả hoặc không gì. Chỉ ADMIN, có CSRF. Không có lỗ hổng.
+findings: []

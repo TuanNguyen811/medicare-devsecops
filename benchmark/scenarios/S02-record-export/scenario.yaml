@@ -1,0 +1,5 @@
+id: S02
+title: Xuất bệnh án
+split: test
+kind: vuln
+commit_message: Xuất bệnh án ra file in (HTML hoặc văn bản) với tiêu đề in theo đơn vị

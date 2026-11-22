@@ -1,0 +1,5 @@
+id: S20
+title: Hóa đơn nhiều dòng
+split: test
+kind: vuln
+commit_message: Hóa đơn nhiều dòng dịch vụ theo danh mục và chuyển trạng thái hóa đơn
