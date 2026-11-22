@@ -1,0 +1,74 @@
+# ZAP Automation Framework plan for MediCare HMS (spec addendum 5.1), one run per role.
+# Environment (set by run-dast.sh): TARGET, ZAP_COOKIE, ZAP_CSRF, ROLE.
+# The session cookie and CSRF header come from login.py and are forced onto every request.
+# Excluded: logout (would end the session), password change, login (an active scan there would
+# lock the scanning account, R-07) and static files.
+env:
+  contexts:
+    - name: medicare
+      urls:
+        - ${TARGET}/
+      includePaths:
+        - ${TARGET}/.*
+      excludePaths:
+        - ${TARGET}/logout.*
+        - ${TARGET}/account/password.*
+        - ${TARGET}/login.*
+        - ${TARGET}/static/.*
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: replacer
+    parameters:
+      deleteAllRules: true
+    rules:
+      - description: medicare session cookie
+        matchType: req_header
+        matchString: Cookie
+        matchRegex: false
+        replacementString: ${ZAP_COOKIE}
+      - description: medicare CSRF header
+        matchType: req_header
+        matchString: X-CSRF-Token
+        matchRegex: false
+        replacementString: ${ZAP_CSRF}
+
+  - type: openapi
+    parameters:
+      apiFile: /zap/wrk/openapi.json
+      targetUrl: ${TARGET}
+      context: medicare
+
+  - type: spider
+    parameters:
+      context: medicare
+      url: ${TARGET}/
+      maxDuration: 2
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 2
+
+  - type: activeScan
+    parameters:
+      context: medicare
+      maxScanDurationInMins: 5
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 2
+
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk/out
+      reportFile: zap-${ROLE}
+    # No informational alerts: they are dropped from the SARIF anyway, and some of them
+    # quote session cookies in their evidence.
+    risks:
+      - low
+      - medium
+      - high

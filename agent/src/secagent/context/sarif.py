@@ -24,6 +24,7 @@ _WORKSPACE_PREFIXES = ("/github/workspace/",)
 _CWE = re.compile(r"(?i)cwe[-_/ ]?0*(\d+)")
 DEFAULT_CWES = {"gitleaks": ("CWE-798",), "trivy": ("CWE-1395",)}
 COMMIT_SCOPED = frozenset({"gitleaks"})  # scans the PR's commits, not the tree diff
+RUNTIME_SCOPED = frozenset({"zap"})  # DAST: tests the PR's running build, no file to diff
 
 
 def _group(*numbers: int) -> frozenset[str]:
@@ -209,11 +210,12 @@ def _tf_dir(path: str) -> str | None:
 
 def filter_changed(findings: list[ScanFinding], changed: set[str]) -> list[ScanFinding]:
     """The findings the quality gate considers (port of gate.filter_changed): location-less,
-    commit-scoped (Gitleaks), any location in a changed file, or the same Terraform module."""
+    commit-scoped (Gitleaks), runtime (ZAP), any location in a changed file, or the same
+    Terraform module."""
     tf_dirs = {d for d in map(_tf_dir, changed) if d is not None}
 
     def keep(f: ScanFinding) -> bool:
-        if f.file == "" or f.tool in COMMIT_SCOPED:
+        if f.file == "" or f.tool in COMMIT_SCOPED or f.tool in RUNTIME_SCOPED:
             return True
         if f.file in changed or any(p in changed for p in f.related):
             return True
@@ -272,7 +274,7 @@ def group_keys(finding: ScanFinding) -> set[str]:
 
 def _in_diff(members: list[ScanFinding], diff: PrDiff) -> bool:
     for f in members:
-        if f.tool in COMMIT_SCOPED:
+        if f.tool in COMMIT_SCOPED or f.tool in RUNTIME_SCOPED:
             return True
         changed = diff.files.get(f.file)
         if changed is not None and (f.line <= 1 or f.line in changed.added):

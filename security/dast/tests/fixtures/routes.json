@@ -1,0 +1,5 @@
+[
+  {"method": "GET", "path": "/patients/{patient_id}", "function": "patient_detail", "file": "app/medicare/patient/router.py", "line": 40},
+  {"method": "GET", "path": "/patients", "function": "patient_list", "file": "app/medicare/patient/router.py", "line": 20},
+  {"method": "POST", "path": "/login", "function": "login", "file": "app/medicare/auth/router.py", "line": 31}
+]

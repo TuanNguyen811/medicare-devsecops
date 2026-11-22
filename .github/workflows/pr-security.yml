@@ -46,6 +46,9 @@ jobs:
         run: uv run ruff check
       - name: Quality gate tests
         run: uv run --no-project --python 3.12 --with pytest pytest security/gate/tests -q
+      - name: DAST tooling tests
+        working-directory: app
+        run: uv run pytest -q ../security/dast/tests
       - name: AI agent tests and lint
         working-directory: agent
         run: |
@@ -267,9 +270,121 @@ jobs:
           sarif_file: sarif/zizmor.sarif
           category: zizmor
 
+  # DAST (spec addendum 5): the PR's build runs on the runner, ZAP scans it once per role,
+  # logged in as that role's demo account. Like validate-patches, no secret is referenced: the
+  # database password, SECRET_KEY and DEMO_PASSWORD are generated here and never printed.
+  dast-zap:
+    name: dast-zap
+    runs-on: ubuntu-24.04
+    # Build ~3 min + one attempt ~12 min + one retry ~12 min.
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        role: [ADMIN, RECEPTIONIST, DOCTOR, NURSE, PATIENT]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Ephemeral secrets (generated here, never printed)
+        run: |
+          umask 077
+          rand() { openssl rand -hex "$1"; }
+          pg="$(rand 24)"
+          {
+            echo "ENV=development"
+            echo "SECRET_KEY=$(rand 48)"
+            echo "POSTGRES_USER=medicare"
+            echo "POSTGRES_DB=medicare"
+            echo "POSTGRES_PASSWORD=${pg}"
+            echo "DATABASE_URL=postgresql+psycopg://medicare:${pg}@db:5432/medicare"
+            echo "DEMO_PASSWORD=Demo-$(rand 12)"
+          } > app/.env
+      - name: Start the PR's app
+        run: docker compose -f infra/docker-compose.yml -p dast up -d --build --wait --wait-timeout 180
+      - name: Seed demo data and export the route map
+        run: |
+          compose="docker compose -f infra/docker-compose.yml -p dast"
+          $compose exec -T app python -m medicare.seed
+          mkdir -p dast-out
+          $compose exec -T app python - --stdout < security/dast/export_routes.py > dast-out/bundle.json
+          python3 security/dast/export_routes.py --split dast-out/bundle.json dast-out
+      - name: ZAP scan, authenticated as one role
+        env:
+          ROLE: ${{ matrix.role }}
+        run: |
+          DEMO_PASSWORD="$(sed -n 's/^DEMO_PASSWORD=//p' app/.env)"
+          echo "::add-mask::$DEMO_PASSWORD"
+          export DEMO_PASSWORD
+          bash security/dast/run-dast.sh --target http://app:8000 --network dast_default \
+            --work dast-out --roles "$ROLE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dast-raw-${{ matrix.role }}
+          path: |
+            dast-out/out/zap-${{ matrix.role }}.json
+            dast-out/routes.json
+          if-no-files-found: error
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f infra/docker-compose.yml -p dast down -v
+          rm -f app/.env
+
+  dast:
+    name: dast
+    needs: [dast-zap]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      # Fail-safe: a role that was not scanned never reads as "no findings".
+      - name: Every role must have been scanned
+        env:
+          RESULT: ${{ needs.dast-zap.result }}
+        run: |
+          if [ "$RESULT" != "success" ]; then
+            echo "::error::DAST did not complete for every role ($RESULT); failing safe."
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: dast-raw-*
+          path: dast-raw
+      - name: Merge the role reports into SARIF
+        run: |
+          mkdir -p sarif
+          reports=()
+          for role in ADMIN RECEPTIONIST DOCTOR NURSE PATIENT; do
+            reports+=("$role=dast-raw/dast-raw-$role/out/zap-$role.json")
+          done
+          # zap.sarif (dast: locations) is what the gate and the AI agent read; code scanning
+          # accepts file locations only, so it gets a copy located at the route handlers.
+          mkdir -p code-scanning
+          python3 security/dast/zap2sarif.py --routes dast-raw/dast-raw-ADMIN/routes.json \
+            --out sarif/zap.sarif --code-scanning-out code-scanning/zap.sarif "${reports[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sarif-zap
+          path: sarif/zap.sarif
+          if-no-files-found: error
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          sarif_file: code-scanning/zap.sarif
+          category: dast
+
   ai-agent:
     name: ai-security-agent
-    needs: [semgrep, bandit, codeql, trivy, gitleaks, iac]
+    needs: [semgrep, bandit, codeql, trivy, gitleaks, iac, dast]
     # Fork PRs get no secrets; the gate then stays on traditional mode.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
@@ -436,7 +551,7 @@ jobs:
 
   quality-gate:
     name: quality-gate
-    needs: [build-test, semgrep, bandit, codeql, trivy, gitleaks, iac, ai-agent]
+    needs: [build-test, semgrep, bandit, codeql, trivy, gitleaks, iac, dast, ai-agent]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -456,7 +571,7 @@ jobs:
           RESULTS: >-
             ${{ needs.build-test.result }} ${{ needs.semgrep.result }}
             ${{ needs.bandit.result }} ${{ needs.codeql.result }} ${{ needs.trivy.result }}
-            ${{ needs.gitleaks.result }} ${{ needs.iac.result }}
+            ${{ needs.gitleaks.result }} ${{ needs.iac.result }} ${{ needs.dast.result }}
         run: |
           for result in $RESULTS; do
             if [ "$result" != "success" ]; then

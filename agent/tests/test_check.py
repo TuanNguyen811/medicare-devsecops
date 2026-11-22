@@ -213,3 +213,19 @@ def test_fp_evidence_in_related_file_or_for_sca(tmp_path):
             "snippet": "return yaml.safe_load(text)"}]),
     ])
     assert [e.verdict for e in build_entries(ctx.clusters, out, ctx.fs)] == ["FP", "FP"]
+
+
+def test_zap_fp_anchored_by_route_handler():
+    """A DAST finding has no file; its route handler (relatedLocations) anchors an FP."""
+    from secagent.context.diff import PrDiff
+    from secagent.phases.check import fp_is_anchored
+
+    zap = ScanFinding("zap", "10038", "MEDIUM", "dast:GET /patients/{patient_id}", 0, 0, "CSP",
+                      ("CWE-693",), ("app/medicare/patient/router.py",))
+    (cluster,) = cluster_findings([zap], PrDiff({}))
+    at_handler = Evidence(file="app/medicare/patient/router.py", start_line=40, end_line=41,
+                          snippet="def patient_detail(patient_id: int):")
+    elsewhere = Evidence(file="app/medicare/billing/service.py", start_line=1, end_line=2,
+                         snippet="def compute_amounts(total, rate):")
+    assert fp_is_anchored([at_handler], cluster) is True
+    assert fp_is_anchored([elsewhere], cluster) is False

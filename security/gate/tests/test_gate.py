@@ -125,6 +125,13 @@ def test_filter_changed_keeps_commit_scoped_gitleaks_findings():
     assert filter_changed([leak, other], {"app/y.py"}) == [leak]
 
 
+def test_zap_findings_kept_regardless_of_diff():
+    """DAST scans the running build of the PR: its findings have no file to diff against."""
+    zap = f(tool="zap", rule="40018", file="dast:GET /patients/{patient_id}", line=0)
+    other = f(tool="semgrep", file="app/x.py")
+    assert filter_changed([zap, other], {"app/y.py"}) == [zap]
+
+
 def test_flow_through_a_changed_file_keeps_the_finding():
     """CodeQL reports a path-problem at the sink; the PR may only have added the source."""
     flow, related = load_sarif(FIX / "codeflow.sarif", "codeql", None)
@@ -387,3 +394,18 @@ def test_real_zizmor_template_injection_in_changed_workflow_blocks():
 def test_real_checkov_paths_are_repo_relative():
     files = {x.file for x in load_sarif(REAL / "checkov.sarif", "checkov", None)}
     assert files == {"infra/terraform/main.tf", "infra/k8s/deployment.yaml"}
+
+
+def test_cli_blocks_zap_high_whatever_the_diff(tmp_path):
+    """fixtures/zap.sarif comes from security/dast/zap2sarif.py: a DAST HIGH (SQL injection on
+    a route) blocks in traditional mode even when the PR changed no file it could be tied to."""
+    sarif = tmp_path / "sarif"
+    sarif.mkdir()
+    shutil.copy(FIX / "zap.sarif", sarif)
+    changed = tmp_path / "changed.txt"
+    changed.write_text("README.md\n")
+    summary = tmp_path / "summary.md"
+    r = _run("--sarif-dir", str(sarif), "--changed-files", str(changed), "--mode",
+             "traditional", "--summary", str(summary))
+    assert r.returncode == 1
+    assert "dast:GET /patients/{patient_id}" in summary.read_text("utf-8")

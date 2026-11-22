@@ -5,7 +5,12 @@ import pytest
 from fakes import REPO_ROOT
 
 from secagent.context.diff import FileDiff, PrDiff
-from secagent.context.sarif import ScanFinding, cluster_findings, load_findings
+from secagent.context.sarif import (
+    ScanFinding,
+    cluster_findings,
+    filter_changed,
+    load_findings,
+)
 
 GATE_DIR = REPO_ROOT / "security" / "gate"
 FIX = GATE_DIR / "tests" / "fixtures"
@@ -124,3 +129,13 @@ def test_in_diff_flag():
     flags = {c.findings[0].rule_id: c.in_diff for c in clusters}
     assert flags == {"a": True, "b": False, "generic-api-key": True, "CVE-2020-14343": True,
                      "B101": False}
+
+
+def test_zap_findings_kept_and_in_diff():
+    """DAST scans the PR's running build: always judged, never filtered by the tree diff."""
+    zap = ScanFinding("zap", "40018", "HIGH", "dast:GET /patients/{patient_id}", 0, 0, "SQLi",
+                      ("CWE-89",), ("app/medicare/patient/router.py",))
+    other = sf("bandit", "B101", 5, ["CWE-703"], file="app/untouched.py")
+    assert filter_changed([zap, other], {"app/svc.py"}) == [zap]
+    (cluster,) = cluster_findings([zap], PrDiff({}))
+    assert cluster.in_diff is True
