@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
@@ -149,4 +149,21 @@ def add_medicine(
         return _medicines_page(request, db, values=values, errors=[str(exc)], status_code=400)
     db.commit()
     flash(request, "Đã thêm thuốc vào danh mục")
+    return RedirectResponse("/admin/medicines", status_code=303)
+
+
+@router.post("/admin/medicines/import", dependencies=[Depends(verify_csrf)])
+def import_medicines(
+    request: Request,
+    file: UploadFile,
+    user: User = Depends(admin_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    content = file.file.read(service.IMPORT_MAX_BYTES + 1)
+    try:
+        added, updated = service.import_medicines(db, content)
+    except service.PrescriptionError as exc:
+        return _medicines_page(request, db, errors=[str(exc)], status_code=400)
+    db.commit()
+    flash(request, f"Đã nhập danh mục: thêm {added}, cập nhật {updated} thuốc")
     return RedirectResponse("/admin/medicines", status_code=303)
