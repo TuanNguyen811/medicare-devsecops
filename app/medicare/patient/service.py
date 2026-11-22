@@ -1,6 +1,6 @@
 import secrets
 
-from sqlalchemy import false, or_, select
+from sqlalchemy import false, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,8 @@ from medicare.patient.models import Patient
 from medicare.patient.schemas import PatientForm
 
 SEARCH_LIMIT = 50
+# Year filters offered on the patient list: form value -> column of the patients table.
+YEAR_FIELDS = {"dob": "date_of_birth", "admitted": "created_at"}
 
 
 class PatientDataError(ValueError):
@@ -44,7 +46,14 @@ def _scope_filter(user: User):
     return or_(*conditions) if conditions else false()
 
 
-def search_patients(db: Session, user: User, q: str | None) -> list[Patient]:
+def search_patients(
+    db: Session,
+    user: User,
+    q: str | None,
+    *,
+    year: int | None = None,
+    year_field: str = "dob",
+) -> list[Patient]:
     stmt = select(Patient).order_by(Patient.code).limit(SEARCH_LIMIT)
     scope = _scope_filter(user)
     if scope is not None:
@@ -56,6 +65,11 @@ def search_patients(db: Session, user: User, q: str | None) -> list[Patient]:
                 Patient.code.icontains(term, autoescape=True),
                 Patient.full_name.icontains(term, autoescape=True),
             )
+        )
+    if year is not None:
+        column = YEAR_FIELDS.get(year_field, YEAR_FIELDS["dob"])
+        stmt = stmt.where(
+            text(f"EXTRACT(YEAR FROM patients.{column}) = :year").bindparams(year=year)
         )
     return list(db.scalars(stmt).unique())
 

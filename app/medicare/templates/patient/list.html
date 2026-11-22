@@ -11,6 +11,15 @@
       <div class="col-sm-6 col-lg-4">
         <input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" maxlength="100" placeholder="Tìm theo mã hoặc họ tên">
       </div>
+      <div class="col-auto">
+        <select class="form-select form-select-sm" name="year_field" aria-label="Lọc theo năm">
+          <option value="dob"{% if year_field == "dob" %} selected{% endif %}>Năm sinh</option>
+          <option value="admitted"{% if year_field == "admitted" %} selected{% endif %}>Năm tiếp nhận</option>
+        </select>
+      </div>
+      <div class="col-auto" style="max-width: 110px;">
+        <input class="form-control form-control-sm" type="number" name="year" value="{{ year }}" min="1900" max="2100" placeholder="Năm">
+      </div>
       <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-search"></i> Tìm</button></div>
     </form>
   </div>
