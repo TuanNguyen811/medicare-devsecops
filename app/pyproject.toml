@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.20.1",
     "argon2-cffi>=25.1.0",
+    "bleach>=6.2.0",
     "faker>=40.44.0",
     "fastapi>=0.162.0",
     "itsdangerous>=2.2.0",
