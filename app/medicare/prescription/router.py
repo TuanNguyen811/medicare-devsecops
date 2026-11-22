@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,7 @@ from medicare.common.ids import ObjectId
 from medicare.common.templating import flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
-from medicare.prescription import service
+from medicare.prescription import price_list, service
 
 router = APIRouter()
 
@@ -149,4 +149,21 @@ def add_medicine(
         return _medicines_page(request, db, values=values, errors=[str(exc)], status_code=400)
     db.commit()
     flash(request, "Đã thêm thuốc vào danh mục")
+    return RedirectResponse("/admin/medicines", status_code=303)
+
+
+@router.post("/admin/medicines/import", dependencies=[Depends(verify_csrf)])
+def import_price_list(
+    request: Request,
+    file: UploadFile,
+    user: User = Depends(admin_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    content = file.file.read(price_list.MAX_FILE_BYTES + 1)
+    try:
+        added, updated = price_list.apply(db, price_list.parse(content))
+    except service.PrescriptionError as exc:
+        return _medicines_page(request, db, errors=[str(exc)], status_code=400)
+    db.commit()
+    flash(request, f"Đã nhập bảng giá: thêm {added} thuốc, cập nhật {updated} thuốc")
     return RedirectResponse("/admin/medicines", status_code=303)

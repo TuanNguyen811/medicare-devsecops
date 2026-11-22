@@ -162,3 +162,65 @@ def test_record_page_offers_prescribing_to_attending_only(client, db):
     client.cookies.clear()
     login(client, make_user(db, Role.NURSE, department=dept))
     assert f"/records/{record.id}/prescriptions/new" not in client.get(f"/records/{record.id}").text
+
+
+PRICE_LIST = """\
+nha_cung_cap: Công ty CP Dược phẩm Trung ương 1
+ngay_hieu_luc: 2026-12-01
+thuoc:
+  - ma: PARA500
+    ten: Paracetamol 500mg
+    don_vi: viên
+    don_gia: 1600
+  - ma: amox500
+    ten: Amoxicillin 500mg
+    don_vi: viên
+    don_gia: 2500
+"""
+
+
+def import_prices(client, content: str):
+    return client.post(
+        "/admin/medicines/import",
+        data={"csrf_token": csrf_token(client, "/admin/medicines")},
+        files={"file": ("bang-gia.yaml", content.encode(), "application/x-yaml")},
+        follow_redirects=False,
+    )
+
+
+def test_admin_imports_supplier_price_list(client, db):
+    db.add(Medicine(code="PARA500", name="Paracetamol", unit="viên", unit_price=Decimal(1500)))
+    db.flush()
+    login(client, make_user(db, Role.ADMIN))
+    assert "/admin/medicines/import" in client.get("/admin/medicines").text
+    r = import_prices(client, PRICE_LIST)
+    assert r.status_code == 303
+    para = db.scalar(select(Medicine).where(Medicine.code == "PARA500"))
+    amox = db.scalar(select(Medicine).where(Medicine.code == "AMOX500"))
+    assert (para.name, para.unit_price) == ("Paracetamol 500mg", Decimal(1600))
+    assert amox is not None and amox.unit_price == Decimal(2500) and amox.is_active
+    assert "thêm 1 thuốc, cập nhật 1 thuốc" in client.get("/admin/medicines").text
+
+
+def test_price_list_with_invalid_price_changes_nothing(client, db):
+    login(client, make_user(db, Role.ADMIN))
+    bad = PRICE_LIST.replace("don_gia: 2500", "don_gia: hai nghìn")
+    r = import_prices(client, bad)
+    assert r.status_code == 400 and "Dòng 2" in r.text
+    assert db.scalar(select(Medicine).where(Medicine.code == "PARA500")) is None
+
+
+def test_price_list_without_medicines_rejected(client, db):
+    login(client, make_user(db, Role.ADMIN))
+    assert import_prices(client, "nha_cung_cap: ABC\n").status_code == 400
+
+
+def test_only_admin_imports_price_list(client, db):
+    login(client, make_user(db, Role.RECEPTIONIST))
+    r = client.post(
+        "/admin/medicines/import",
+        data={"csrf_token": csrf_token(client, "/")},
+        files={"file": ("bang-gia.yaml", PRICE_LIST.encode(), "application/x-yaml")},
+    )
+    assert r.status_code == 403
+    assert db.scalar(select(Medicine).where(Medicine.code == "AMOX500")) is None

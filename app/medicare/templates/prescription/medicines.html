@@ -20,6 +20,17 @@
     </form>
   </div>
 </div>
+<div class="card mc-card mb-3">
+  <div class="card-header">Nhập bảng giá từ nhà cung cấp</div>
+  <div class="card-body">
+    <form class="row g-2 align-items-end" method="post" action="/admin/medicines/import" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-md-6"><label class="form-label" for="price-file">File bảng giá (.yaml)</label><input class="form-control form-control-sm" id="price-file" name="file" type="file" accept=".yaml,.yml" required></div>
+      <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100" type="submit"><i class="bi bi-upload"></i> Nhập</button></div>
+    </form>
+    <div class="form-text">Thuốc đã có trong danh mục (cùng mã) được cập nhật tên, đơn vị và đơn giá; thuốc mới được thêm vào.</div>
+  </div>
+</div>
 <div class="card mc-card">
   <div class="table-responsive">
     <table class="table table-sm table-hover align-middle mb-0">
