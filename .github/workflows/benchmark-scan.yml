@@ -92,7 +92,7 @@ jobs:
               - app/medicare
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
-          category: benchmark
+          category: codeql # same as pr-security.yml
           output: codeql-results
           upload: never
           checkout_path: ${{ github.workspace }}/scn
@@ -133,6 +133,8 @@ jobs:
   dast:
     name: dast ${{ matrix.id }} ${{ matrix.role }}
     needs: plan
+    # An empty matrix is an error on GitHub: skip when no selected scenario changes what runs.
+    if: needs.plan.outputs.dast != '[]'
     runs-on: ubuntu-24.04
     # Build ~3 min + one attempt ~12 min + one retry ~12 min (as in pr-security.yml).
     timeout-minutes: 35

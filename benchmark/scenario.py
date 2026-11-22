@@ -11,9 +11,11 @@ A scenario lives in benchmark/scenarios/<ID>-<slug>/:
   ground_truth.yaml the expected vulnerabilities (read by evaluate.py, never by the agent)
 
 materialize is deterministic: the same scenario gives the same commit SHAs on any machine
-(fixed author, committer and dates), so SARIF from GitHub Actions and the local agent run refer
-to the same commits. The base commit is BASE_COMMIT minus SANITIZED paths: the design documents
-describe the planted bugs, and the agent's own code is not part of the application under review.
+(fixed author, committer and dates; patches go to git as bytes; no hooks), so SARIF from GitHub
+Actions and the local agent run refer to the same commits. The base commit is BASE_COMMIT made
+neutral: whatever documents the experiment (design documents describe the planted bugs, the
+baseline scan report labels the clean tree's findings) is removed or rewritten, and the agent's
+own code is not part of the application under review.
 Fake secrets are written as @@FAKE:<kind>:<label>@@ in patches and expanded here, so no
 secret-looking string is ever committed to this repository.
 
@@ -37,7 +39,45 @@ import yaml
 HERE = Path(__file__).resolve().parent
 SCENARIOS = HERE / "scenarios"
 BASE_FILE = HERE / "BASE_COMMIT"
-SANITIZED = ("docs/superpowers", "agent", "benchmark")
+SANITIZED = ("docs/superpowers", "agent", "benchmark", "docs/baseline-scan.md", "docs/pipeline.md",
+             "infra/README.md", "deploy/README.md")
+# Exact edits of the base tree; a missing `old` text is an error, so nothing slips through when
+# the baseline changes.
+REWRITES = {
+    "docs/security-requirements.md": [
+        ("Có ba nhóm sử dụng:", "Có hai nhóm sử dụng:"),
+        (("- **Bộ benchmark:** mỗi lỗ hổng logic trong `benchmark/ground_truth.yaml` được gắn với "
+         "quy tắc bị vi phạm (`violated_rule: R-xx`).\n"), ""),
+    ],
+    "app/README.md": [
+        (", và **không bao giờ** triển khai các nhánh kịch bản lỗ hổng lên môi trường public.",
+         "."),
+    ],
+    ".gitignore": [
+        (("# Benchmark outputs (raw runs; summaries are committed explicitly)\n"
+         "benchmark/results/raw/\n\n"), ""),
+    ],
+    # Comments only: the scanners' behaviour is unchanged.
+    "security/tool-versions.env": [
+        ("(CI workflows, local scans, benchmark).", "(CI workflows, local scans)."),
+        ("so CI, local scans and the benchmark get one tree.", "so CI and local scans get one tree."),
+    ],
+    "security/dast/run-dast.sh": [
+        ("# Used by the PR pipeline, the local deploy (phase 3) and the benchmark (phase 5).",
+         "# Used by the PR pipeline and the local deploy."),
+    ],
+}
+NEUTRAL_README = """# MediCare HMS
+
+Hệ thống quản lý bệnh viện (FastAPI, SQLAlchemy, PostgreSQL), kèm pipeline DevSecOps.
+
+- `app/`: ứng dụng; chạy và test: [`app/README.md`](app/README.md)
+- `.github/workflows/`: pipeline CI/CD bảo mật
+- `security/`: cấu hình các công cụ quét
+- `infra/`, `deploy/`: hạ tầng và triển khai
+- `docs/security-requirements.md`: quy tắc bảo mật nghiệp vụ R-01…R-19
+"""
+DAST_TRIGGERS = ("app/", "infra/docker-compose.yml")
 ROLES = ("ADMIN", "RECEPTIONIST", "DOCTOR", "NURSE", "PATIENT")
 BASELINE = "S00"
 KINDS = {"vuln", "decoy", "robustness", "baseline"}
@@ -76,10 +116,13 @@ class Scenario:
         return expand_fakes(self.patch.read_text(encoding="utf-8"), self.id)
 
     def touched(self) -> list[str]:
-        return sorted(set(re.findall(r"^\+\+\+ b/(\S+)", self.patch_text(), re.MULTILINE)))
+        """Files the patch creates, edits or deletes."""
+        found = re.findall(r"^(?:\+\+\+ b|--- a)/(\S+)", self.patch_text(), re.MULTILINE)
+        return sorted(set(found))
 
     def touches_app(self) -> bool:
-        return any(p.startswith("app/") for p in self.touched())
+        """Changes what runs (app code, or how compose starts it): needs its own DAST."""
+        return any(p.startswith(DAST_TRIGGERS) for p in self.touched())
 
 
 def _fake(kind: str, seed: bytes) -> str:
@@ -132,7 +175,7 @@ def select(spec: str) -> list[Scenario]:
         return scenarios
     if spec.strip() in SPLITS:
         return [s for s in scenarios if s.split == spec.strip() or s.id == BASELINE]
-    wanted = [x.strip() for x in spec.split(",") if x.strip()]
+    wanted = list(dict.fromkeys(x.strip() for x in spec.split(",") if x.strip()))
     by_id = {s.id: s for s in scenarios}
     unknown = [x for x in wanted if x not in by_id]
     if unknown:
@@ -147,16 +190,44 @@ def base_commit() -> str:
     return sha
 
 
+GIT_CONFIG = ("-c", "commit.gpgsign=false", "-c", "core.autocrlf=false",
+              "-c", "i18n.commitEncoding=UTF-8", "-c", "core.hooksPath=.benchmark-no-hooks")
+
+
 def _git(args: list[str], cwd: Path, *, date: str | None = None, stdin: str | None = None) -> str:
+    """Run git; input goes as UTF-8 bytes (text mode would turn \\n into \\r\\n on Windows)."""
     env = {**os.environ, **IDENTITY}
     if date:
         env.update(GIT_AUTHOR_DATE=date, GIT_COMMITTER_DATE=date)
-    done = subprocess.run(["git", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false",
-                           *args], check=False, cwd=cwd, env=env, input=stdin,
-                          capture_output=True, text=True, encoding="utf-8")
+    done = subprocess.run(["git", *GIT_CONFIG, *args], check=False, cwd=cwd, env=env,
+                          input=None if stdin is None else stdin.encode("utf-8"),
+                          capture_output=True)
     if done.returncode:
-        raise ScenarioError(f"git {' '.join(args[:2])}: {done.stderr.strip()[:500]}")
-    return done.stdout.strip()
+        err = done.stderr.decode("utf-8", errors="replace").strip()
+        raise ScenarioError(f"git {' '.join(args[:2])}: {err[:500]}")
+    return done.stdout.decode("utf-8", errors="replace").strip()
+
+
+def _commit(dest: Path, message: str, date: str) -> str:
+    _git(["commit", "-q", "--allow-empty", "--no-verify", "--cleanup=strip", "-m", message],
+         dest, date=date)
+    return _git(["rev-parse", "HEAD"], dest)
+
+
+def _neutralize(dest: Path) -> None:
+    present = [p for p in SANITIZED if (dest / p).exists()]
+    if present:
+        _git(["rm", "-r", "-q", "--", *present], dest)
+    for rel, edits in REWRITES.items():
+        path = dest / rel
+        text = path.read_bytes().decode("utf-8")
+        for old, new in edits:
+            if old not in text:
+                raise ScenarioError(f"{rel}: expected text not found: {old[:60]!r}")
+            text = text.replace(old, new)
+        path.write_bytes(text.encode("utf-8"))
+    (dest / "README.md").write_bytes(NEUTRAL_README.encode("utf-8"))
+    _git(["add", "-A", "--", "README.md", *REWRITES], dest)
 
 
 def materialize(scenario: Scenario, dest: Path, repo: Path) -> dict[str, str]:
@@ -164,16 +235,17 @@ def materialize(scenario: Scenario, dest: Path, repo: Path) -> dict[str, str]:
     if dest.exists():
         raise ScenarioError(f"{dest} already exists")
     _git(["worktree", "add", "--detach", "--quiet", str(dest), base_commit()], repo)
-    present = [p for p in SANITIZED if (dest / p).exists()]
-    if present:
-        _git(["rm", "-r", "-q", "--", *present], dest)
-    _git(["commit", "-q", "--allow-empty", "-m", "Phiên bản đang chạy"], dest, date=BASE_DATE)
-    base = _git(["rev-parse", "HEAD"], dest)
-    text = scenario.patch_text()
-    if text:
-        _git(["apply", "--index", "--whitespace=nowarn", "-"], dest, stdin=text)
-    _git(["commit", "-q", "--allow-empty", "-m", scenario.commit_message], dest, date=HEAD_DATE)
-    return {"id": scenario.id, "base": base, "head": _git(["rev-parse", "HEAD"], dest)}
+    try:
+        _neutralize(dest)
+        base = _commit(dest, "Phiên bản đang chạy", BASE_DATE)
+        text = scenario.patch_text()
+        if text:
+            _git(["apply", "--index", "--whitespace=nowarn", "-"], dest, stdin=text)
+        head = _commit(dest, scenario.commit_message, HEAD_DATE)
+    except ScenarioError:
+        _git(["worktree", "remove", "--force", str(dest)], repo)
+        raise
+    return {"id": scenario.id, "base": base, "head": head}
 
 
 def matrix(scenarios: list[Scenario]) -> dict[str, list]:
