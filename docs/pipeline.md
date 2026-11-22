@@ -35,7 +35,7 @@ pull_request → main
 
 **AI Security Agent** (kế hoạch C, chi tiết ở [`agent/README.md`](../agent/README.md)):
 - Chạy sau khi mọi job quét xong, kể cả khi chúng không có phát hiện, vì lỗi logic chỉ Agent tìm được. PR từ fork bị bỏ qua vì không có secret.
-- Nhà cung cấp LLM chọn bằng biến repo `LLM_PROVIDER`: `deepseek` mặc định, `openai`, `gemini`, `anthropic`, `openai-compatible`. Key là secret `LLM_API_KEY`.
+- Nhà cung cấp LLM chọn bằng biến repo `LLM_PROVIDER`: `anthropic` (mặc định), `openai`, `gemini`. Key là secret `LLM_API_KEY`. Chế độ `claude-mcp` (tài khoản Claude Code trên máy, không cần key) chỉ chạy trên máy, dùng cho benchmark.
 - Khi chưa có key, Agent thoát với mã 2, không comment gì, và gate dùng chế độ `traditional`.
 - Agent lỗi không làm đỏ pipeline: job quality-gate chỉ bắt buộc build-test và 6 job quét thành công. Thiếu `report.json` hoặc mã thoát khác 0 thì gate quay về `traditional`.
 

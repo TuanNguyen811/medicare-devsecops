@@ -16,7 +16,7 @@
 
 **Tech Stack:** cosign v3.1.4, Kyverno v1.20.0 (`ImageValidatingPolicy`, `policies.kyverno.io/v1`, vì bản 1.20 chặn tạo policy kiểu cũ), kustomize (`kubectl -k`), Docker Desktop Kubernetes (kind, 1 node).
 
-**Spec:** `docs/superpowers/specs/2026-11-21-ops-dast-engine-design.md` mục 6.
+**Spec:** `docs/superpowers/specs/2026-11-21-ops-dast-benchmark-design.md` mục 6.
 
 ## Global Constraints
 
