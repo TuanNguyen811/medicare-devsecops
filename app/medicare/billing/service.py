@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from medicare import policy
 from medicare.auth.models import Role, User
 from medicare.billing.models import Invoice, InvoiceStatus
+from medicare.common import metrics
 from medicare.common.errors import Conflict, NotFound
 from medicare.patient.models import Patient
 from medicare.prescription.service import list_for_record, prescription_total
@@ -83,7 +84,10 @@ def pending_records(db: Session) -> list[MedicalRecord]:
 
 def get_invoice_for(db: Session, user: User, invoice_id: int) -> Invoice:
     invoice = db.get(Invoice, invoice_id)
-    if invoice is None or not policy.can_view_invoice(user, invoice.patient):
+    if invoice is None:
+        raise NotFound
+    if not policy.can_view_invoice(user, invoice.patient):
+        metrics.authz_denied("invoice")
         raise NotFound
     return invoice
 

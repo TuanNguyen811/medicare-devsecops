@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from medicare.auth.models import Role, User
+from medicare.common import metrics
 from medicare.common.csrf import rotate_csrf_token
 from medicare.common.passwords import hash_password, verify_password
 from medicare.db import get_db
@@ -35,20 +36,28 @@ def authenticate(db: Session, username: str, password: str, now: datetime) -> Us
     )
     if user is None:
         verify_password(_DUMMY_HASH, password)
+        metrics.login_attempt(metrics.LOGIN_FAILURE)
         return None
     password_ok = verify_password(user.password_hash, password)
-    if not user.is_active or (user.locked_until is not None and user.locked_until > now):
+    if not user.is_active:
+        metrics.login_attempt(metrics.LOGIN_FAILURE)
+        return None
+    if user.locked_until is not None and user.locked_until > now:
+        metrics.login_attempt(metrics.LOGIN_LOCKED)
         return None
     if not password_ok:
+        metrics.login_attempt(metrics.LOGIN_FAILURE)
         user.failed_login_count += 1
         if user.failed_login_count >= MAX_FAILED_LOGINS:
             user.locked_until = now + LOCK_DURATION
             user.failed_login_count = 0
+            metrics.account_locked()
         db.flush()
         return None
     user.failed_login_count = 0
     user.locked_until = None
     db.flush()
+    metrics.login_attempt(metrics.LOGIN_SUCCESS)
     return user
 
 
@@ -91,6 +100,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
 def require_roles(*roles: Role) -> Callable[..., User]:
     def dependency(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:
+            metrics.authz_denied("role")
             raise HTTPException(status_code=403, detail="Forbidden")
         return user
 

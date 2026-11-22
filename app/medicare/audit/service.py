@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from medicare.audit.models import AuditLog
 from medicare.auth.models import User
+from medicare.common import metrics
 
 VIEW_RECORD = "VIEW_RECORD"
 LIST_RECORDS = "LIST_RECORDS"
@@ -22,3 +23,4 @@ def log_access(
                  entity_id=entity_id, ip=ip)
     )
     db.flush()
+    metrics.record_access(actor, action)

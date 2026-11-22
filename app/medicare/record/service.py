@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from medicare import policy
 from medicare.audit import service as audit
 from medicare.auth.models import User
+from medicare.common import metrics
 from medicare.common.errors import NotFound
 from medicare.patient.models import Patient
 from medicare.patient.service import get_patient_for
@@ -23,7 +24,10 @@ def _load(db: Session, record_id: int) -> tuple[MedicalRecord, Patient] | None:
 def get_record_for(db: Session, user: User, record_id: int, ip: str | None) -> MedicalRecord:
     """Load a record the user may read and audit the access (R-02, R-05, R-12, R-15)."""
     loaded = _load(db, record_id)
-    if loaded is None or not policy.can_view_record(user, loaded[1]):
+    if loaded is None:
+        raise NotFound
+    if not policy.can_view_record(user, loaded[1]):
+        metrics.authz_denied("record")
         raise NotFound
     audit.log_access(db, user, audit.VIEW_RECORD, ENTITY, record_id, ip)
     return loaded[0]
@@ -32,7 +36,10 @@ def get_record_for(db: Session, user: User, record_id: int, ip: str | None) -> M
 def get_writable_record(db: Session, user: User, record_id: int) -> MedicalRecord:
     """Only the attending doctor may edit (R-02); anyone else gets NotFound."""
     loaded = _load(db, record_id)
-    if loaded is None or not policy.can_write_record(user, loaded[1]):
+    if loaded is None:
+        raise NotFound
+    if not policy.can_write_record(user, loaded[1]):
+        metrics.authz_denied("record")
         raise NotFound
     return loaded[0]
 
@@ -40,6 +47,7 @@ def get_writable_record(db: Session, user: User, record_id: int) -> MedicalRecor
 def get_patient_for_records(db: Session, user: User, patient_id: int) -> Patient:
     patient = get_patient_for(db, user, patient_id)
     if not policy.can_view_record(user, patient):
+        metrics.authz_denied("record")
         raise NotFound
     return patient
 
@@ -47,6 +55,7 @@ def get_patient_for_records(db: Session, user: User, patient_id: int) -> Patient
 def get_patient_for_new_record(db: Session, user: User, patient_id: int) -> Patient:
     patient = get_patient_for(db, user, patient_id)
     if not policy.can_write_record(user, patient):
+        metrics.authz_denied("record")
         raise NotFound
     return patient
 

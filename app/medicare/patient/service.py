@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from medicare import policy
 from medicare.auth.models import Role, User
+from medicare.common import metrics
 from medicare.common.errors import NotFound
 from medicare.department.models import Department
 from medicare.patient.models import Patient
@@ -21,7 +22,10 @@ class PatientDataError(ValueError):
 def get_patient_for(db: Session, user: User, patient_id: int) -> Patient:
     """Load a patient the user may see; missing and forbidden both raise NotFound (R-15)."""
     patient = db.get(Patient, patient_id)
-    if patient is None or not policy.can_view_patient(user, patient):
+    if patient is None:
+        raise NotFound
+    if not policy.can_view_patient(user, patient):
+        metrics.authz_denied("patient")
         raise NotFound
     return patient
 
