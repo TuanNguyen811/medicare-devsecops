@@ -4,6 +4,11 @@
 
 Prints exactly two lines: ZAP_COOKIE=medicare_session=<...> and ZAP_CSRF=<token>. The password
 is read from the environment and never printed. Exit 1 if the login fails.
+
+    ZAP_COOKIE=medicare_session=... python3 login.py --check http://app:8000
+
+After a scan: exit 0 only if the session still opens the home page (200). A scan whose session
+was revoked midway (303 to /login) has silently scanned the anonymous surface and must fail.
 Standard library only: runs inside the ZAP container (python3).
 """
 
@@ -82,7 +87,24 @@ def login(base: str, username: str, password: str) -> tuple[str, str]:
     return cookie, token
 
 
+def still_logged_in(base: str, cookie_header: str) -> bool:
+    name, _, value = cookie_header.partition("=")
+    if name != COOKIE or not value:
+        return False
+    status, _, _ = _request(f"{base.rstrip('/')}/", value)
+    return status == 200
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) == 2 and argv[0] == "--check":
+        try:
+            ok = still_logged_in(argv[1], os.environ.get("ZAP_COOKIE", ""))
+        except OSError as exc:
+            print(f"login.py --check: {exc}", file=sys.stderr)
+            return 1
+        if not ok:
+            print("login.py --check: the scan session is no longer logged in", file=sys.stderr)
+        return 0 if ok else 1
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
         return 2

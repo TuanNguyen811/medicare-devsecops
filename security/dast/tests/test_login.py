@@ -29,3 +29,10 @@ def test_main_requires_password(monkeypatch, capsys):
     monkeypatch.delenv("DEMO_PASSWORD", raising=False)
     assert login.main(["http://127.0.0.1:1", "bacsi1"]) == 1
     assert "DEMO_PASSWORD" in capsys.readouterr().err
+
+
+def test_check_rejects_missing_or_foreign_cookie(monkeypatch):
+    monkeypatch.delenv("ZAP_COOKIE", raising=False)
+    assert login.main(["--check", "http://127.0.0.1:1"]) == 1
+    assert login.still_logged_in("http://127.0.0.1:1", "other=abc") is False
+    assert login.still_logged_in("http://127.0.0.1:1", "medicare_session=") is False

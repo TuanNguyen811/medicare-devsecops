@@ -66,8 +66,9 @@ jobs:
       template: traditional-json
       reportDir: /zap/wrk/out
       reportFile: zap-${ROLE}
+    # No informational alerts: they are dropped from the SARIF anyway, and some of them
+    # quote session cookies in their evidence.
     risks:
-      - info
       - low
       - medium
       - high

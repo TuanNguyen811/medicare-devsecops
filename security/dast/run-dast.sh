@@ -7,7 +7,9 @@
 # <work> must already hold openapi.json and routes.json (export_routes.py). The ZAP container
 # joins the Docker network of the app, logs in with login.py, then runs zap-plan.yaml.
 # Output: <work>/out/zap-<ROLE>.json for each role and <work>/zap.sarif (zap2sarif.py).
-# Each role gets one retry; the script exits non-zero if any role still has no report.
+# Each role gets one retry; the script exits non-zero if any role still has no report, or if
+# its session was no longer logged in at the end of the scan (it would have scanned as a guest).
+# ADMIN always runs last: its active scan can deactivate accounts the other roles log in with.
 # Used by the PR pipeline, the local deploy (phase 3) and the benchmark (phase 5).
 set -euo pipefail
 
@@ -49,6 +51,12 @@ user_of() {
   esac
 }
 
+# ADMIN last, whatever the order given.
+ordered=""
+for role in $roles; do [ "$role" = ADMIN ] || ordered="$ordered $role"; done
+case " $roles " in *" ADMIN "*) ordered="$ordered ADMIN" ;; esac
+roles="$ordered"
+
 mkdir -p "$work/out"
 cp "$here/login.py" "$here/zap-plan.yaml" "$work/"
 # The ZAP image runs as its own user: it must be able to write the reports.
@@ -69,6 +77,10 @@ scan_role() {
   fi
   cookie="$(printf '%s\n' "$creds" | sed -n 's/^ZAP_COOKIE=//p')"
   csrf="$(printf '%s\n' "$creds" | sed -n 's/^ZAP_CSRF=//p')"
+  if [ -n "${GITHUB_ACTIONS:-}" ]; then
+    echo "::add-mask::$cookie"
+    echo "::add-mask::$csrf"
+  fi
   set +e
   ZAP_COOKIE="$cookie" ZAP_CSRF="$csrf" TARGET="$target" ROLE="$role" \
     zap -e ZAP_COOKIE -e ZAP_CSRF -e TARGET -e ROLE "$ZAP_IMAGE" \
@@ -80,7 +92,12 @@ scan_role() {
     echo "run-dast.sh: ZAP exited $code for $role" >&2
     return 1
   fi
-  [ -s "$work/out/zap-$role.json" ]
+  [ -s "$work/out/zap-$role.json" ] || { echo "run-dast.sh: no report for $role" >&2; return 1; }
+  if ! ZAP_COOKIE="$cookie" zap -e ZAP_COOKIE "$ZAP_IMAGE" \
+      python3 /zap/wrk/login.py --check "$target"; then
+    echo "run-dast.sh: $role was logged out during the scan; its report is not trusted" >&2
+    return 1
+  fi
 }
 
 failed=0

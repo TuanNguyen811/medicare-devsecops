@@ -276,7 +276,8 @@ jobs:
   dast-zap:
     name: dast-zap
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # Build ~3 min + one attempt ~12 min + one retry ~12 min.
+    timeout-minutes: 35
     permissions:
       contents: read
     strategy:
@@ -315,6 +316,7 @@ jobs:
           ROLE: ${{ matrix.role }}
         run: |
           DEMO_PASSWORD="$(sed -n 's/^DEMO_PASSWORD=//p' app/.env)"
+          echo "::add-mask::$DEMO_PASSWORD"
           export DEMO_PASSWORD
           bash security/dast/run-dast.sh --target http://app:8000 --network dast_default \
             --work dast-out --roles "$ROLE"
