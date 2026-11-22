@@ -1,0 +1,109 @@
+# PostgreSQL for the local deployment. Credentials come from the Secret "medicare-db", created
+# by deploy/pull-deploy.sh (generated locally, never committed), mounted as files.
+apiVersion: v1
+kind: Service
+metadata:
+  name: medicare-db
+  namespace: medicare
+spec:
+  type: ClusterIP
+  selector:
+    app: medicare-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: medicare-db
+  namespace: medicare
+  labels:
+    app: medicare-db
+spec:
+  serviceName: medicare-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: medicare-db
+  template:
+    metadata:
+      labels:
+        app: medicare-db
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10070
+        runAsGroup: 10070
+        fsGroup: 10070
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_USER_FILE
+              value: /run/secrets/medicare-db/user
+            - name: POSTGRES_DB_FILE
+              value: /run/secrets/medicare-db/db
+            - name: POSTGRES_PASSWORD_FILE
+              value: /run/secrets/medicare-db/password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$(cat /run/secrets/medicare-db/user)\""]
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$(cat /run/secrets/medicare-db/user)\""]
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: secrets
+              mountPath: /run/secrets/medicare-db
+              readOnly: true
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: secrets
+          secret:
+            secretName: medicare-db
+            defaultMode: 0440
+        - name: run
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

@@ -1,0 +1,73 @@
+# Admission control for the local cluster (spec addendum 6.2). In namespace medicare:
+#   - allowlist: every image of a pod (containers, init and ephemeral containers) is either a
+#     MediCare image referenced by digest, or exactly the pinned PostgreSQL image. Anything else
+#     is denied, including alternate spellings of the registry (ghcr.io:443/..., upper case);
+#   - every MediCare image must be signed keyless by main-ci.yml on main of this repository and
+#     carry a CycloneDX SBOM attestation from that same identity.
+# This holds even for pods applied by hand with kubectl, or added with kubectl debug.
+# Fail closed: if Kyverno cannot decide (down, Rekor or GHCR unreachable), pods in medicare
+# cannot be (re)created at all, PostgreSQL included.
+# Kyverno 1.20 blocks creating the legacy ClusterPolicy API, hence ImageValidatingPolicy.
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: medicare-signed-images
+spec:
+  validationActions: [Deny]
+  failurePolicy: Fail
+  # Verification fetches the signatures from GHCR and checks them against the Sigstore
+  # transparency log: the 10 s default is too short from inside the local cluster.
+  webhookConfiguration:
+    timeoutSeconds: 30
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: medicare
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods", "pods/ephemeralcontainers"]
+  matchImageReferences:
+    - glob: "ghcr.io/tuannguyen811/medicare-hms@sha256:*"
+  validationConfigurations:
+    verifyDigest: true
+    required: true
+  attestors:
+    - name: mainci
+      cosign:
+        keyless:
+          identities:
+            - subject: "https://github.com/TuanNguyen811/medicare-devsecops/.github/workflows/main-ci.yml@refs/heads/main"
+              issuer: "https://token.actions.githubusercontent.com"
+        ctlog:
+          url: "https://rekor.sigstore.dev"
+  attestations:
+    - name: sbom
+      intoto:
+        type: "https://cyclonedx.org/bom"
+  variables:
+    - name: allImages
+      expression: >-
+        object.spec.containers.map(c, c.image)
+        + (has(object.spec.initContainers) ? object.spec.initContainers.map(c, c.image) : [])
+        + (has(object.spec.ephemeralContainers)
+           ? object.spec.ephemeralContainers.map(c, c.image) : [])
+    - name: medicareImages
+      expression: >-
+        variables.allImages.filter(i, i.startsWith('ghcr.io/tuannguyen811/medicare-hms@sha256:'))
+  validations:
+    - expression: >-
+        variables.allImages.all(i,
+          i.startsWith('ghcr.io/tuannguyen811/medicare-hms@sha256:')
+          || i == 'postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d')
+      message: >-
+        Only MediCare images referenced by digest (ghcr.io/tuannguyen811/medicare-hms@sha256:...)
+        and the pinned PostgreSQL image may run in namespace medicare.
+    - expression: >-
+        variables.medicareImages.map(i, verifyImageSignatures(i, [attestors.mainci])).all(e, e > 0)
+      message: "MediCare image is not signed by main-ci.yml on main of this repository."
+    - expression: >-
+        variables.medicareImages
+        .map(i, verifyAttestationSignatures(i, attestations.sbom, [attestors.mainci])).all(e, e > 0)
+      message: "MediCare image has no CycloneDX SBOM attestation from main-ci.yml on main."

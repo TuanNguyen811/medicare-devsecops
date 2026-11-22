@@ -25,5 +25,9 @@ fetch "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSIO
 fetch "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
   "$ACTIONLINT_SHA256" actionlint.tar.gz
 
-install -m 0755 "$work/trivy" "$work/gitleaks" "$work/actionlint" "$dest/"
-echo "installed: trivy ${TRIVY_VERSION}, gitleaks ${GITLEAKS_VERSION}, actionlint ${ACTIONLINT_VERSION} -> $dest"
+curl -fsSL --retry 3 -o "$work/cosign" \
+  "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64"
+echo "${COSIGN_SHA256}  $work/cosign" | sha256sum -c --quiet -
+
+install -m 0755 "$work/trivy" "$work/gitleaks" "$work/actionlint" "$work/cosign" "$dest/"
+echo "installed: trivy ${TRIVY_VERSION}, gitleaks ${GITLEAKS_VERSION}, actionlint ${ACTIONLINT_VERSION}, cosign ${COSIGN_VERSION} -> $dest"
