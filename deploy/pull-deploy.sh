@@ -14,7 +14,9 @@
 #   5. render deploy/local with that digest, apply, wait for the rollout, seed (idempotent);
 #   6. smoke tests on the new pod through kubectl port-forward on 127.0.0.1; on failure, roll
 #      back if this run changed the running version;
-#   7. with --dast only: ZAP scans the deployed version with every role (~25 min; every PR
+#   7. monitoring (deploy/monitoring): Prometheus, Alertmanager, Grafana; checks that
+#      Prometheus scrapes the new pod;
+#   8. with --dast only: ZAP scans the deployed version with every role (~25 min; every PR
 #      was already scanned by the PR pipeline before merge).
 # There is deliberately no option to skip the signature checks.
 set -euo pipefail
@@ -205,7 +207,33 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$base$1"; }
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $ref deployed" >> "$here/.history"
 say "Deployed $ref"
 
-# --- 7. DAST on the deployed version --------------------------------------------------------------
+# --- 7. monitoring --------------------------------------------------------------------------------
+# A failure here leaves the app deployed (it passed its smoke tests) but fails the run.
+say "Monitoring: Prometheus, Alertmanager, Grafana (namespace monitoring)"
+kubectl apply -f "$here/monitoring/namespace.yaml" >/dev/null
+if ! kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1; then
+  grafana_pw="$(rand 16)"
+  ( umask 077; printf '%s' "$grafana_pw" > "$tmp/grafana-password" )
+  kubectl -n monitoring create secret generic grafana-admin     --from-file=password="$tmp/grafana-password" >/dev/null
+  rm -f "$tmp/grafana-password"
+  echo "Grafana admin password (user admin, shown once): $grafana_pw" >&2
+fi
+kubectl apply -k "$here/monitoring" >/dev/null
+for d in prometheus alertmanager grafana; do
+  kubectl -n monitoring rollout status "deploy/$d" --timeout=300s >/dev/null     || fail "monitoring: $d did not become ready"
+done
+scraped=""
+for _ in $(seq 1 24); do  # DNS refresh + scrape interval are 15 s each
+  scraped="$(kubectl -n monitoring exec deploy/prometheus --     wget -qO- 'http://127.0.0.1:9090/api/v1/query?query=sum(up%7Bjob%3D%22medicare%22%7D)'     2>/dev/null | "$py" -c 'import json, sys
+r = json.load(sys.stdin)["data"]["result"]
+print(r[0]["value"][1] if r else "0")' 2>/dev/null || true)"
+  [ "$scraped" = "1" ] && break
+  sleep 5
+done
+[ "$scraped" = "1" ] || fail "monitoring: Prometheus does not scrape the MediCare pod"
+echo "Prometheus scrapes $pod. Grafana: kubectl -n monitoring port-forward --address 127.0.0.1 svc/grafana 13000:3000" >&2
+
+# --- 8. DAST on the deployed version --------------------------------------------------------------
 if [ "$dast" != 1 ]; then
   exit 0
 fi

@@ -1,0 +1,37 @@
+# Prometheus scrapes the app's metrics port (9000, separate from the HTTP port 8000).
+# Headless: the DNS name resolves to the pod IPs, so Prometheus needs no Kubernetes API access.
+apiVersion: v1
+kind: Service
+metadata:
+  name: medicare-metrics
+  namespace: medicare
+spec:
+  clusterIP: None
+  selector:
+    app: medicare
+  ports:
+    - name: metrics
+      port: 9000
+      targetPort: metrics
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics-from-prometheus
+  namespace: medicare
+spec:
+  podSelector:
+    matchLabels:
+      app: medicare
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 9000
+          protocol: TCP
