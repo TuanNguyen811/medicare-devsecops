@@ -371,6 +371,22 @@ Chạy `--jobs 3`. `run.py` chạy tiếp được từ chỗ dừng và tự ch
 
 **Chấm DAST:** finding `zap` khớp đáp án nếu cùng `route` (method + đường dẫn mẫu) và cùng nhóm CWE. Các luật chấm khác giữ như spec gốc mục 5.3.
 
+**Quy ước chấm (`benchmark/evaluate.py`, quyết định khi làm bước 2b):**
+- **Đơn vị dự đoán:**
+  - **C1, C1+DAST:** mỗi cụm phát hiện của công cụ quét mà quality gate xét (cùng cách gộp cụm của agent: cùng file, ±3 dòng, cùng nhóm CWE).
+  - **C2–C5:** mỗi mục `TP` trong `report.json`, gồm cả cụm được thẩm định lẫn phát hiện agent tự tìm. `NEEDS_REVIEW` tính là dương tính ở cách chấm chặt và bị bỏ qua ở cách chấm lỏng.
+- **Khớp đáp án:**
+  - cùng file, dòng nằm trong vùng lỗi ±3, và cùng nhóm CWE (theo `CWE_GROUPS` của agent);
+  - với phát hiện không có CWE (Checkov), khớp khi tên rule nằm trong `rules` của đáp án.
+- **Phát hiện DAST có sẵn trên bản gốc S00** (cùng route, cùng nhóm CWE, ví dụ thiếu header CSP) xuất hiện ở mọi kịch bản, vì ZAP quét cả app. Đây là vấn đề có thật nhưng không do PR gây ra. Chúng không tính TP hay FP, được đếm riêng. Benchmark đo những gì mỗi PR đưa vào.
+- **Cấp PR:** quyết định của quality gate:
+  - chế độ `traditional` cho C1 và C1+DAST;
+  - chế độ `ai-assisted` với `report.json` của agent cho C2–C5.
+
+  PR có lỗ hổng (`vuln`, `robustness`) phải bị chặn; mồi nhử và bản gốc phải được qua.
+- **SARIF gốc không commit**, vì quá lớn: riêng `semgrep.sarif` khoảng 1,2 MB mỗi kịch bản. Lần chạy workflow giữ SARIF 90 ngày. `run.py fetch` ghi những gì cần để chấm lại (`clusters.json`, `gate.json`, `gate_findings.json`, `changed.json`, `scenario.json`), và các file này được commit.
+- `fetch` dựng lại commit kịch bản trên máy và dừng nếu SHA khác commit CI đã quét.
+
 ## 9. Thứ tự làm và ranh giới PR
 
 | Giai đoạn | PR | Cần label `security-reviewed` |
