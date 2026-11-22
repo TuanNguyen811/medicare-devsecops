@@ -177,3 +177,80 @@ def test_nurse_list_scoped_to_department(client, db):
     login(client, make_user(db, Role.NURSE, department=noi))
     html = client.get("/appointments").text
     assert p_noi.code in html and p_ngoai.code not in html
+
+
+def reschedule(client, appt, when):
+    token = csrf_token(client, "/appointments")
+    return client.post(f"/appointments/{appt.id}/reschedule",
+                       data={"scheduled_at": when, "csrf_token": token},
+                       follow_redirects=False)
+
+
+def test_patient_reschedules_own_requested_appointment(client, db):
+    doc = setup_doctor(db)
+    me = make_patient(db)
+    appt = make_appt(db, me, doc)
+    login(client, make_user(db, Role.PATIENT, patient=me))
+    assert f'href="/appointments/{appt.id}/reschedule"' in client.get("/appointments").text
+    assert client.get(f"/appointments/{appt.id}/reschedule").status_code == 200
+    assert reschedule(client, appt, slot(days=2, hour=14, minute=30)).status_code == 303
+    db.refresh(appt)
+    assert appt.scheduled_at == slot_dt(2, 14, 30)
+    assert appt.status == AppointmentStatus.REQUESTED
+
+
+def test_patient_cannot_reschedule_confirmed_appointment(client, db):
+    doc = setup_doctor(db)
+    me = make_patient(db)
+    appt = make_appt(db, me, doc, status=AppointmentStatus.CONFIRMED)
+    login(client, make_user(db, Role.PATIENT, patient=me))
+    assert reschedule(client, appt, slot(days=2)).status_code == 404
+    db.refresh(appt)
+    assert appt.scheduled_at == slot_dt()
+
+
+def test_receptionist_reschedules_confirmed_appointment(client, db):
+    doc = setup_doctor(db)
+    appt = make_appt(db, make_patient(db), doc, status=AppointmentStatus.CONFIRMED)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    assert reschedule(client, appt, slot(days=3, hour=8)).status_code == 303
+    db.refresh(appt)
+    assert appt.scheduled_at == slot_dt(3, 8) and appt.status == AppointmentStatus.CONFIRMED
+
+
+def test_reschedule_into_past_or_off_slot_rejected_400(client, db):
+    doc = setup_doctor(db)
+    me = make_patient(db)
+    appt = make_appt(db, me, doc)
+    login(client, make_user(db, Role.PATIENT, patient=me))
+    assert reschedule(client, appt, slot(days=-1)).status_code == 400
+    assert reschedule(client, appt, slot(days=2, minute=15)).status_code == 400
+    db.refresh(appt)
+    assert appt.scheduled_at == slot_dt()
+
+
+def test_reschedule_onto_taken_slot_rejected_409(client, db):
+    doc = setup_doctor(db)
+    me = make_patient(db)
+    appt = make_appt(db, me, doc, hour=9)
+    make_appt(db, make_patient(db), doc, hour=10)
+    login(client, make_user(db, Role.PATIENT, patient=me))
+    assert reschedule(client, appt, slot(hour=10)).status_code == 409
+    db.refresh(appt)
+    assert appt.scheduled_at == slot_dt(hour=9)
+
+
+def test_doctor_cannot_reschedule(client, db):
+    doc = setup_doctor(db)
+    appt = make_appt(db, make_patient(db), doc)
+    login(client, doc)
+    assert reschedule(client, appt, slot(days=2)).status_code == 403
+
+
+def test_reschedule_requires_csrf(client, db):
+    doc = setup_doctor(db)
+    me = make_patient(db)
+    appt = make_appt(db, me, doc)
+    login(client, make_user(db, Role.PATIENT, patient=me))
+    r = client.post(f"/appointments/{appt.id}/reschedule", data={"scheduled_at": slot(days=2)})
+    assert r.status_code == 403

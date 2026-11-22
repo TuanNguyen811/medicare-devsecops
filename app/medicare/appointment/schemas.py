@@ -13,18 +13,10 @@ FIELD_LABELS = {
 }
 
 
-class AppointmentForm(BaseModel):
+class SlotForm(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    patient_id: FormId | None = None
-    doctor_id: FormId
     scheduled_at: datetime
-    reason: str = Field(min_length=1, max_length=500)
-
-    @field_validator("patient_id", mode="before")
-    @classmethod
-    def _blank_is_none(cls, v):
-        return None if isinstance(v, str) and not v.strip() else v
 
     @field_validator("scheduled_at")
     @classmethod
@@ -37,3 +29,14 @@ class AppointmentForm(BaseModel):
         if v.tzinfo is not None:
             raise ValueError("thời gian hẹn không được kèm múi giờ")
         return v.replace(tzinfo=VN_TZ)
+
+
+class AppointmentForm(SlotForm):
+    patient_id: FormId | None = None
+    doctor_id: FormId
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("patient_id", mode="before")
+    @classmethod
+    def _blank_is_none(cls, v):
+        return None if isinstance(v, str) and not v.strip() else v

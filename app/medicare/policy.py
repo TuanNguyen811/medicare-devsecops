@@ -110,3 +110,12 @@ def can_cancel_appointment(user: User, appt: Appointment) -> bool:
             and appt.status == AppointmentStatus.REQUESTED
         )
     return False
+
+
+def can_reschedule_appointment(user: User, appt: Appointment) -> bool:
+    """R-13: reception moves any active appointment; a patient moves a REQUESTED one."""
+    if user.role == Role.RECEPTIONIST:
+        return appt.status in _ACTIVE_APPOINTMENT
+    if user.role == Role.PATIENT:
+        return user.patient_id is not None and appt.status == AppointmentStatus.REQUESTED
+    return False
