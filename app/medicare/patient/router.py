@@ -11,7 +11,7 @@ from medicare.common.errors import NotFound
 from medicare.common.ids import ObjectId
 from medicare.common.templating import flash, render
 from medicare.db import get_db
-from medicare.patient import service
+from medicare.patient import insurance_check, service
 from medicare.patient.models import Patient
 from medicare.patient.schemas import FIELD_LABELS, PatientForm, form_errors
 from medicare.validators import mask
@@ -177,6 +177,34 @@ def update_patient(
         return _form_page(request, db, errors=[str(exc)], status_code=400, **page)
     db.commit()
     flash(request, "Đã cập nhật hồ sơ bệnh nhân")
+    return RedirectResponse(f"/patients/{patient.id}", status_code=303)
+
+
+@router.post("/patients/{patient_id}/insurance-check", dependencies=[Depends(verify_csrf)])
+def check_insurance(
+    request: Request,
+    patient_id: ObjectId,
+    user: User = Depends(editor_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    patient = service.get_patient_for(db, user, patient_id)
+    if not patient.insurance_number:
+        flash(request, "Bệnh nhân chưa có thẻ BHYT", "warning")
+        return RedirectResponse(f"/patients/{patient.id}", status_code=303)
+    try:
+        result = insurance_check.check_card(
+            request.app.state.settings.bhyt_cli,
+            patient.insurance_number,
+            patient.full_name,
+            patient.date_of_birth,
+        )
+    except insurance_check.InsuranceCheckError as exc:
+        flash(request, str(exc), "danger")
+    else:
+        message = result.message
+        if result.valid_until:
+            message += f" (hạn đến {result.valid_until})"
+        flash(request, message, "success" if result.valid else "warning")
     return RedirectResponse(f"/patients/{patient.id}", status_code=303)
 
 

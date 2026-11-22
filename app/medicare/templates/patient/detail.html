@@ -5,6 +5,12 @@
   <h1 class="h5 mb-0">Hồ sơ bệnh nhân <span class="text-secondary">{{ patient.code }}</span></h1>
   <div class="d-flex gap-2">
     {% if can_view_records %}<a class="btn btn-outline-primary btn-sm" href="/patients/{{ patient.id }}/records"><i class="bi bi-file-medical"></i> Bệnh án</a>{% endif %}
+    {% if can_edit and patient.insurance_number %}
+    <form method="post" action="/patients/{{ patient.id }}/insurance-check">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-shield-check"></i> Kiểm tra thẻ BHYT</button>
+    </form>
+    {% endif %}
     {% if can_edit %}<a class="btn btn-primary btn-sm" href="/patients/{{ patient.id }}/edit"><i class="bi bi-pencil"></i> Sửa hồ sơ</a>{% endif %}
   </div>
 </div>
