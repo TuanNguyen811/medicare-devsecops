@@ -1,0 +1,5 @@
+id: D06
+title: Ngừng sử dụng thuốc trong danh mục
+split: test
+kind: decoy
+commit_message: Quản trị viên ngừng sử dụng hoặc dùng lại thuốc trong danh mục thuốc

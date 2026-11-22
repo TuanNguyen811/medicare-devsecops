@@ -1,0 +1,6 @@
+# PR tính năng thông thường, không có mồi nhử. Hai route POST chỉ cho ADMIN (require_roles), có
+# CSRF (verify_csrf), id thuốc qua ObjectId, thuốc không tồn tại trả 404; chỉ đổi is_active và
+# discontinued_at do server tự đặt, không nhận trường nào khác từ client. Kê đơn vẫn chỉ nhận thuốc
+# đang dùng (kiểm tra ở service). Migration chỉ thêm một cột nullable; template autoescape.
+# Không có lỗ hổng.
+findings: []

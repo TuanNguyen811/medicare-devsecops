@@ -1,0 +1,8 @@
+# PR tính năng thông thường, không có mồi nhử. Mọi route chỉ dành cho ADMIN (require_roles), hai
+# route POST có verify_csrf; mã khoa trong đường dẫn là ObjectId, khoa không tồn tại trả 404. Chỉ
+# nhận đúng các trường code/name/description (sửa thì chỉ tên và mô tả, mã khoa giữ nguyên), độ dài
+# được kiểm tra, mã khoa theo regex ASCII, tên khoa không trùng (so sánh bằng biểu thức SQLAlchemy
+# func.lower, có tham số). Template autoescape, không có |safe; không log, không secret. Ứng dụng
+# chưa ghi audit log cho thao tác quản trị (tạo tài khoản cũng không ghi) nên PR không thêm.
+# Không có lỗ hổng.
+findings: []

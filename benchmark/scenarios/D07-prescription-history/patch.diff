@@ -1,0 +1,249 @@
+diff --git a/app/medicare/audit/service.py b/app/medicare/audit/service.py
+index b2f37ca..7e7ca94 100644
+--- a/app/medicare/audit/service.py
++++ b/app/medicare/audit/service.py
+@@ -11,6 +11,7 @@ LIST_RECORDS = "LIST_RECORDS"
+ CREATE_RECORD = "CREATE_RECORD"
+ UPDATE_RECORD = "UPDATE_RECORD"
+ VIEW_PRESCRIPTION = "VIEW_PRESCRIPTION"
++LIST_PRESCRIPTIONS = "LIST_PRESCRIPTIONS"
+ CREATE_PRESCRIPTION = "CREATE_PRESCRIPTION"
+ 
+ 
+diff --git a/app/medicare/prescription/router.py b/app/medicare/prescription/router.py
+index 8090af7..cfa4da2 100644
+--- a/app/medicare/prescription/router.py
++++ b/app/medicare/prescription/router.py
+@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
+ from medicare.auth.models import Role, User
+ from medicare.common.auth import get_current_user, require_roles
+ from medicare.common.csrf import verify_csrf
+-from medicare.common.ids import ObjectId
++from medicare.common.ids import ObjectId, parse_id
+ from medicare.common.templating import flash, render
+ from medicare.db import get_db
+ from medicare.patient.models import Patient
+ from medicare.prescription import service
++from medicare.record.service import get_patient_for_records
+ 
+ router = APIRouter()
+ 
+@@ -93,6 +94,28 @@ def create_prescription(
+     return RedirectResponse(f"/prescriptions/{prescription.id}", status_code=303)
+ 
+ 
++@router.get("/patients/{patient_id}/prescriptions")
++def prescription_history(
++    request: Request,
++    patient_id: ObjectId,
++    page: str = "1",
++    user: User = Depends(get_current_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    patient = get_patient_for_records(db, user, patient_id)
++    result = service.history_for_patient(db, user, patient, parse_id(page) or 1, _ip(request))
++    db.commit()
++    base_url = f"/patients/{patient.id}/prescriptions"
++    return render(request, "prescription/history.html", {
++        "patient": patient,
++        "result": result,
++        "prev_page_url": f"{base_url}?page={result.page - 1}",
++        "next_page_url": f"{base_url}?page={result.page + 1}",
++        "breadcrumbs": [("Trang chủ", "/"), ("Bệnh nhân", "/patients"),
++                        (patient.code, f"/patients/{patient.id}"), ("Đơn thuốc", None)],
++    })
++
++
+ @router.get("/prescriptions/{prescription_id}")
+ def prescription_detail(
+     request: Request,
+diff --git a/app/medicare/prescription/service.py b/app/medicare/prescription/service.py
+index 9037824..60c376f 100644
+--- a/app/medicare/prescription/service.py
++++ b/app/medicare/prescription/service.py
+@@ -1,6 +1,7 @@
++from dataclasses import dataclass
+ from decimal import Decimal
+ 
+-from sqlalchemy import select
++from sqlalchemy import func, select
+ from sqlalchemy.orm import Session
+ 
+ from medicare import policy
+@@ -14,6 +15,7 @@ from medicare.record.models import MedicalRecord
+ 
+ ENTITY = "prescription"
+ MAX_ITEMS = 20
++HISTORY_PAGE_SIZE = 20
+ 
+ 
+ class PrescriptionError(ValueError):
+@@ -91,6 +93,36 @@ def list_for_record(db: Session, record_id: int) -> list[Prescription]:
+     return list(db.scalars(stmt).unique())
+ 
+ 
++@dataclass
++class PrescriptionPage:
++    items: list[Prescription]
++    total: int
++    page: int
++    pages: int
++
++
++def history_for_patient(
++    db: Session, user: User, patient: Patient, page: int, ip: str | None
++) -> PrescriptionPage:
++    """A patient's prescriptions, newest first, one page at a time.
++
++    The caller has already checked policy.can_view_record for this patient; the listing
++    itself is audited like the record list (R-05).
++    """
++    audit.log_access(db, user, audit.LIST_PRESCRIPTIONS, "patient", patient.id, ip)
++    stmt = select(Prescription).where(Prescription.patient_id == patient.id)
++    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
++    pages = max(1, -(-total // HISTORY_PAGE_SIZE))
++    page = min(max(page, 1), pages)
++    stmt = (
++        stmt.order_by(Prescription.created_at.desc(), Prescription.id.desc())
++        .limit(HISTORY_PAGE_SIZE)
++        .offset((page - 1) * HISTORY_PAGE_SIZE)
++    )
++    return PrescriptionPage(items=list(db.scalars(stmt).unique()), total=total, page=page,
++                            pages=pages)
++
++
+ def list_medicines(db: Session, *, active_only: bool) -> list[Medicine]:
+     stmt = select(Medicine).order_by(Medicine.name)
+     if active_only:
+diff --git a/app/medicare/templates/patient/detail.html b/app/medicare/templates/patient/detail.html
+index da4065c..b179592 100644
+--- a/app/medicare/templates/patient/detail.html
++++ b/app/medicare/templates/patient/detail.html
+@@ -4,7 +4,8 @@
+ <div class="d-flex justify-content-between align-items-center mb-3">
+   <h1 class="h5 mb-0">Hồ sơ bệnh nhân <span class="text-secondary">{{ patient.code }}</span></h1>
+   <div class="d-flex gap-2">
+-    {% if can_view_records %}<a class="btn btn-outline-primary btn-sm" href="/patients/{{ patient.id }}/records"><i class="bi bi-file-medical"></i> Bệnh án</a>{% endif %}
++    {% if can_view_records %}<a class="btn btn-outline-primary btn-sm" href="/patients/{{ patient.id }}/records"><i class="bi bi-file-medical"></i> Bệnh án</a>
++    <a class="btn btn-outline-primary btn-sm" href="/patients/{{ patient.id }}/prescriptions"><i class="bi bi-capsule"></i> Đơn thuốc</a>{% endif %}
+     {% if can_edit %}<a class="btn btn-primary btn-sm" href="/patients/{{ patient.id }}/edit"><i class="bi bi-pencil"></i> Sửa hồ sơ</a>{% endif %}
+   </div>
+ </div>
+diff --git a/app/medicare/templates/prescription/history.html b/app/medicare/templates/prescription/history.html
+new file mode 100644
+index 0000000..bd2e3e5
+--- /dev/null
++++ b/app/medicare/templates/prescription/history.html
+@@ -0,0 +1,39 @@
++{% extends "base.html" %}
++{% block title %}Đơn thuốc {{ patient.code }}{% endblock %}
++{% block content %}
++<h1 class="h5 mb-3">Lịch sử đơn thuốc: {{ patient.full_name }} <span class="text-secondary">{{ patient.code }}</span></h1>
++<div class="card mc-card">
++  <div class="table-responsive">
++    <table class="table table-sm table-hover align-middle mb-0">
++      <thead>
++        <tr><th>Ngày kê</th><th>Phiếu khám</th><th>Bác sĩ kê đơn</th><th>Thuốc</th><th></th></tr>
++      </thead>
++      <tbody>
++        {% for p in result.items %}
++        <tr>
++          <td class="text-nowrap">{{ p.created_at | datetime_vn }}</td>
++          <td><a href="/records/{{ p.record_id }}">#{{ p.record_id }}</a></td>
++          <td>{{ p.doctor.full_name }}</td>
++          <td>{% for item in p.items %}{{ item.medicine.name }} ({{ item.quantity }} {{ item.medicine.unit }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
++          <td class="text-end"><a class="btn btn-outline-primary btn-sm" href="/prescriptions/{{ p.id }}">Xem</a></td>
++        </tr>
++        {% else %}
++        <tr><td colspan="5" class="text-center text-secondary py-3">Chưa có đơn thuốc</td></tr>
++        {% endfor %}
++      </tbody>
++    </table>
++  </div>
++  <div class="card-footer d-flex justify-content-between align-items-center small">
++    <span class="text-secondary">{{ result.total }} đơn thuốc</span>
++    {% if result.pages > 1 %}
++    <nav aria-label="Phân trang">
++      <ul class="pagination pagination-sm mb-0">
++        <li class="page-item{% if result.page == 1 %} disabled{% endif %}"><a class="page-link" href="{{ prev_page_url }}">Trang trước</a></li>
++        <li class="page-item disabled"><span class="page-link">Trang {{ result.page }}/{{ result.pages }}</span></li>
++        <li class="page-item{% if result.page == result.pages %} disabled{% endif %}"><a class="page-link" href="{{ next_page_url }}">Trang sau</a></li>
++      </ul>
++    </nav>
++    {% endif %}
++  </div>
++</div>
++{% endblock %}
+diff --git a/app/tests/test_prescription.py b/app/tests/test_prescription.py
+index 6d6c421..31a8f0d 100644
+--- a/app/tests/test_prescription.py
++++ b/app/tests/test_prescription.py
+@@ -1,3 +1,4 @@
++from datetime import timedelta
+ from decimal import Decimal
+ 
+ from sqlalchemy import select
+@@ -162,3 +163,63 @@ def test_record_page_offers_prescribing_to_attending_only(client, db):
+     client.cookies.clear()
+     login(client, make_user(db, Role.NURSE, department=dept))
+     assert f"/records/{record.id}/prescriptions/new" not in client.get(f"/records/{record.id}").text
++
++
++def history(client, patient, **params):
++    return client.get(f"/patients/{patient.id}/prescriptions", params=params)
++
++
++def test_history_newest_first_and_audited(client, db):
++    dept, doc, patient, record = ward(db)
++    older = make_prescription(db, record, doc, [(make_medicine(db), 1)])
++    newer = make_prescription(db, record, doc, [(make_medicine(db), 2)])
++    older.created_at = newer.created_at - timedelta(days=3)
++    db.flush()
++    login(client, make_user(db, Role.NURSE, department=dept))
++    r = history(client, patient)
++    assert r.status_code == 200
++    assert r.text.index(f"/prescriptions/{newer.id}") < r.text.index(f"/prescriptions/{older.id}")
++    rows = db.scalars(select(AuditLog).where(AuditLog.action == "LIST_PRESCRIPTIONS")).all()
++    assert [(a.entity_type, a.entity_id) for a in rows] == [("patient", patient.id)]
++
++
++def test_history_paginates(client, db):
++    _, doc, patient, record = ward(db)
++    med = make_medicine(db)
++    for _ in range(23):
++        make_prescription(db, record, doc, [(med, 1)])
++    login(client, doc)
++    first, second = history(client, patient).text, history(client, patient, page="2").text
++    assert first.count(f"{med.name} (1 viên)") == 20 and "Trang 1/2" in first
++    assert second.count(f"{med.name} (1 viên)") == 3 and "Trang 2/2" in second
++    assert "Trang 2/2" in history(client, patient, page="999").text
++    assert "Trang 1/2" in history(client, patient, page="abc").text
++
++
++def test_history_linked_from_patient_page(client, db):
++    _, doc, patient, _ = ward(db)
++    login(client, doc)
++    assert f'href="/patients/{patient.id}/prescriptions"' in client.get(f"/patients/{patient.id}").text
++    client.cookies.clear()
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert "/prescriptions" not in client.get(f"/patients/{patient.id}").text
++
++
++def test_history_hidden_outside_clinical_scope(client, db):
++    _, doc, patient, record = ward(db)
++    make_prescription(db, record, doc, [(make_medicine(db), 1)])
++    other_dept = make_department(db, "NGOAI")
++    for user in (make_user(db, Role.RECEPTIONIST), make_user(db, Role.ADMIN),
++                 make_user(db, Role.NURSE, department=other_dept),
++                 make_user(db, Role.DOCTOR, department=other_dept),
++                 make_user(db, Role.PATIENT, patient=make_patient(db))):
++        client.cookies.clear()
++        login(client, user)
++        assert history(client, patient).status_code == 404
++
++
++def test_patient_sees_own_history(client, db):
++    _, doc, patient, record = ward(db)
++    p = make_prescription(db, record, doc, [(make_medicine(db), 1)])
++    login(client, make_user(db, Role.PATIENT, patient=patient))
++    assert f"/prescriptions/{p.id}" in history(client, patient).text
