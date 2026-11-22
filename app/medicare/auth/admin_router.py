@@ -22,6 +22,7 @@ router = APIRouter()
 admin_user = require_roles(Role.ADMIN)
 
 _USERNAME = re.compile(r"[a-z0-9_.]{3,50}")
+_EMAIL = re.compile(r"[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,185}\.[a-z]{2,}")
 MIN_PASSWORD_LENGTH = 10
 MAX_PASSWORD_LENGTH = 128
 
@@ -32,12 +33,14 @@ class AccountError(ValueError):
 
 
 def _new_account(db: Session, username, full_name, role, department_id, patient_id,
-                 password) -> User:
-    username, full_name = username.strip(), full_name.strip()
+                 password, email="") -> User:
+    username, full_name, email = username.strip(), full_name.strip(), email.strip().lower()
     if not (_USERNAME.fullmatch(username) and username.isascii()):
         raise AccountError("Tên đăng nhập: 3-50 ký tự a-z, 0-9, dấu chấm hoặc gạch dưới")
     if not 1 <= len(full_name) <= 100:
         raise AccountError("Họ tên: bắt buộc, tối đa 100 ký tự")
+    if email and not (_EMAIL.fullmatch(email) and email.isascii()):
+        raise AccountError("Email: không đúng định dạng")
     if role not in Role.__members__:
         raise AccountError("Vai trò: giá trị không hợp lệ")
     role = Role(role)
@@ -45,6 +48,8 @@ def _new_account(db: Session, username, full_name, role, department_id, patient_
         raise AccountError(f"Mật khẩu: từ {MIN_PASSWORD_LENGTH} đến {MAX_PASSWORD_LENGTH} ký tự")
     if db.scalar(select(User.id).where(User.username == username)) is not None:
         raise AccountError("Tên đăng nhập đã tồn tại")
+    if email and db.scalar(select(User.id).where(User.email == email)) is not None:
+        raise AccountError("Email đã được dùng cho tài khoản khác")
     dept_id = pat_id = None
     if role in (Role.DOCTOR, Role.NURSE):
         dept_id = parse_id(department_id)
@@ -57,13 +62,13 @@ def _new_account(db: Session, username, full_name, role, department_id, patient_
         if db.scalar(select(User.id).where(User.patient_id == pat_id)) is not None:
             raise AccountError("Hồ sơ bệnh nhân này đã có tài khoản")
     user = User(username=username, full_name=full_name, role=role, department_id=dept_id,
-                patient_id=pat_id, password_hash=hash_password(password))
+                patient_id=pat_id, email=email or None, password_hash=hash_password(password))
     try:
         with db.begin_nested():
             db.add(user)
             db.flush()
     except IntegrityError as exc:  # concurrent creation of the same username / link
-        raise AccountError("Tên đăng nhập hoặc hồ sơ bệnh nhân đã được dùng") from exc
+        raise AccountError("Tên đăng nhập, email hoặc hồ sơ bệnh nhân đã được dùng") from exc
     return user
 
 
@@ -97,15 +102,16 @@ def create_user(
     department_id: str = Form(""),
     patient_id: str = Form(""),
     password: str = Form(""),
+    email: str = Form(""),
     user: User = Depends(admin_user),
     db: Session = Depends(get_db),
 ) -> Response:
     try:
         created = _new_account(db, username, full_name, role, department_id, patient_id,
-                               password)
+                               password, email)
     except AccountError as exc:
         values = {"username": username, "full_name": full_name, "role": role,
-                  "department_id": department_id, "patient_id": patient_id}
+                  "department_id": department_id, "patient_id": patient_id, "email": email}
         return _users_page(request, db, values=values, errors=[str(exc)], status_code=400)
     db.commit()
     flash(request, f"Đã tạo tài khoản {created.username}")
