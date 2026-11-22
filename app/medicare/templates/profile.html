@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Thông tin cá nhân{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Thông tin cá nhân</h1>
+<div class="card mc-card" style="max-width: 480px;">
+  <div class="card-body">
+    <dl class="row small mb-3">
+      <dt class="col-sm-5">Tên đăng nhập</dt><dd class="col-sm-7 font-monospace">{{ current_user.username }}</dd>
+      <dt class="col-sm-5">Vai trò</dt><dd class="col-sm-7">{{ role_labels[current_user.role] }}</dd>
+      {% if current_user.department %}
+      <dt class="col-sm-5">Khoa</dt><dd class="col-sm-7">{{ current_user.department.name }}</dd>
+      {% endif %}
+    </dl>
+    <form method="post" action="/account/profile">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="mb-3">
+        <label class="form-label" for="full_name">Họ tên hiển thị</label>
+        <input class="form-control" id="full_name" name="full_name" value="{{ values.full_name }}" maxlength="100" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="phone">Số điện thoại liên hệ</label>
+        <input class="form-control" id="phone" name="phone" type="tel" value="{{ values.phone }}" pattern="0[0-9]{9,10}" maxlength="11">
+        <div class="form-text">Không bắt buộc. 10 hoặc 11 chữ số, bắt đầu bằng 0.</div>
+      </div>
+      <button class="btn btn-primary" type="submit">Lưu thay đổi</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
