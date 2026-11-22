@@ -31,3 +31,15 @@ class MedicalRecord(Base):
 
     doctor: Mapped["User"] = relationship(lazy="joined")
     patient: Mapped["Patient"] = relationship(lazy="joined")
+
+
+class SlipTemplate(Base):
+    """A doctor's own layout for the printed examination slip (Jinja/HTML)."""
+
+    __tablename__ = "slip_templates"
+
+    doctor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    body: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

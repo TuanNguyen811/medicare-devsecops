@@ -15,7 +15,7 @@ from medicare.common.templating import flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
 from medicare.prescription import service as prescription_service
-from medicare.record import service
+from medicare.record import printing, service
 from medicare.record.schemas import FIELD_LABELS, RecordForm, form_errors
 
 router = APIRouter()
@@ -114,6 +114,57 @@ def record_detail(
         "prescriptions": prescription_service.list_for_record(db, record.id),
         "breadcrumbs": _crumbs(patient, (f"Phiếu khám #{record.id}", None)),
     })
+
+
+@router.get("/records/{record_id}/print")
+def print_slip(
+    request: Request,
+    record_id: ObjectId,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    record = service.get_record_for(db, user, record_id, _ip(request))
+    db.commit()
+    patient = db.get(Patient, record.patient_id)
+    slip = printing.render_slip(db, user, record, patient)
+    return render(request, "record/slip.html", {"record": record, "slip": slip})
+
+
+def _slip_template_page(request, *, body, is_custom, errors=None, status_code=200):
+    return render(request, "record/slip_template.html", {
+        "body": body, "is_custom": is_custom, "errors": errors or [],
+        "variables": printing.VARIABLES, "max_length": printing.MAX_TEMPLATE_LENGTH,
+        "breadcrumbs": [("Trang chủ", "/"), ("Mẫu in phiếu khám", None)],
+    }, status_code=status_code)
+
+
+@router.get("/account/print-template")
+def slip_template_form(
+    request: Request,
+    user: User = Depends(doctor_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    custom = printing.get_custom(db, user)
+    body = custom.body if custom is not None else printing.DEFAULT_TEMPLATE
+    return _slip_template_page(request, body=body, is_custom=custom is not None)
+
+
+@router.post("/account/print-template", dependencies=[Depends(verify_csrf)])
+def save_slip_template(
+    request: Request,
+    body: str = Form(""),
+    user: User = Depends(doctor_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        printing.validate(body)
+    except printing.SlipTemplateError as exc:
+        return _slip_template_page(request, body=body, is_custom=True, errors=[str(exc)],
+                                   status_code=400)
+    printing.save_custom(db, user, body)
+    db.commit()
+    flash(request, "Đã lưu mẫu in phiếu khám" if body.strip() else "Đã dùng lại mẫu in mặc định")
+    return RedirectResponse("/account/print-template", status_code=303)
 
 
 @router.get("/records/{record_id}/edit")
