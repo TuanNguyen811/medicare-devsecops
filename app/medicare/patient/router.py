@@ -23,6 +23,7 @@ EDITORS = (Role.RECEPTIONIST, Role.ADMIN)
 staff_user = require_roles(*STAFF)
 editor_user = require_roles(*EDITORS)
 patient_user = require_roles(Role.PATIENT)
+doctor_user = require_roles(Role.DOCTOR)
 _FORM_FIELDS = tuple(FIELD_LABELS)
 
 
@@ -42,6 +43,7 @@ def _detail_ctx(user: User, patient: Patient, crumbs: list) -> dict:
         "ids": _identifiers(user, patient),
         "can_edit": policy.can_edit_patient(user),
         "can_view_records": policy.can_view_record(user, patient),
+        "can_claim": user.role == Role.DOCTOR and patient.attending_doctor_id != user.id,
         "breadcrumbs": crumbs,
     }
 
@@ -177,6 +179,23 @@ def update_patient(
         return _form_page(request, db, errors=[str(exc)], status_code=400, **page)
     db.commit()
     flash(request, "Đã cập nhật hồ sơ bệnh nhân")
+    return RedirectResponse(f"/patients/{patient.id}", status_code=303)
+
+
+@router.post("/patients/{patient_id}/claim", dependencies=[Depends(verify_csrf)])
+def claim_patient(
+    request: Request,
+    patient_id: ObjectId,
+    user: User = Depends(doctor_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        patient = service.claim_patient(db, user, patient_id)
+    except service.PatientDataError as exc:
+        flash(request, str(exc), "warning")
+        return RedirectResponse(f"/patients/{patient_id}", status_code=303)
+    db.commit()
+    flash(request, f"Bạn đã nhận phụ trách bệnh nhân {patient.code}")
     return RedirectResponse(f"/patients/{patient.id}", status_code=303)
 
 

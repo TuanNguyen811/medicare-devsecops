@@ -122,3 +122,17 @@ def update_patient(db: Session, patient: Patient, data: PatientForm) -> Patient:
         setattr(patient, field, value)
     _flush_unique(db)
     return patient
+
+
+def claim_patient(db: Session, doctor: User, patient_id: int) -> Patient:
+    """The doctor on duty takes over a patient (shift handover, admission from the ER)."""
+    patient = db.get(Patient, patient_id)
+    if patient is None:
+        raise NotFound
+    if patient.attending_doctor_id == doctor.id:
+        raise PatientDataError("Bạn đang là bác sĩ phụ trách bệnh nhân này")
+    patient.attending_doctor_id = doctor.id
+    if patient.department_id is None:
+        patient.department_id = doctor.department_id
+    db.flush()
+    return patient
