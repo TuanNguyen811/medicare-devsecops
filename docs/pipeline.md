@@ -33,7 +33,12 @@ pull_request → main
 
 **AI Security Agent** (kế hoạch C, chi tiết ở [`agent/README.md`](../agent/README.md)):
 - Chạy sau khi mọi job quét xong, kể cả khi chúng không có phát hiện, vì lỗi logic chỉ Agent tìm được. PR từ fork bị bỏ qua vì không có secret.
-- Nhà cung cấp LLM chọn bằng biến repo `LLM_PROVIDER`: `anthropic` (mặc định), `openai`, `gemini`. Key là secret `LLM_API_KEY`. Chế độ `claude-mcp` (tài khoản Claude Code trên máy, không cần key) chỉ chạy trên máy, dùng cho benchmark.
+- Nhà cung cấp LLM chọn bằng biến repo `LLM_PROVIDER`: `anthropic` (mặc định), `openai`, `gemini`. Key là secret `LLM_API_KEY`.
+- `LLM_PROVIDER=claude-mcp` (tài khoản Claude Code, không cần key): Claude Code không bao giờ chạy trên CI. Pipeline vẫn chạy đủ các job, nhưng phần gọi LLM diễn ra trên máy người review:
+  1. Người review chạy `uv run --project agent python security/handoff/local_review.py --pr <số PR>`. Script chờ các job quét xong, tải SARIF của chính lượt chạy đó, checkout commit HEAD của PR vào thư mục tạm, chạy `secagent` bằng `claude-mcp`, rồi đăng report (nén, trong một khối thu gọn) thành comment trên PR.
+  2. Job `ai-security-agent` chờ tối đa 15 phút cho comment đó. Nó chỉ nhận comment do tài khoản trong biến repo `AGENT_REPORT_AUTHOR` viết, ghi đúng commit HEAD của PR, và có `report.json` hợp lệ. Bộ kiểm tra là `security/handoff/handoff.py` lấy từ nhánh gốc, không phải từ PR.
+  3. Sau đó `agent-comment` và `quality-gate` chạy như khi có key. Không có report hợp lệ thì job thoát với mã 2 và gate dùng chế độ `traditional`.
+  - Trong chế độ này, gate tin vào máy của người review: người chạy script chịu trách nhiệm về kết quả. Người mở PR không gửi thay được, vì comment của tài khoản khác bị bỏ qua.
 - Khi chưa có key, Agent thoát với mã 2, không comment gì, và gate dùng chế độ `traditional`.
 - Agent lỗi không làm đỏ pipeline: job quality-gate chỉ bắt buộc build-test và 6 job quét thành công. Thiếu `report.json` hoặc mã thoát khác 0 thì gate quay về `traditional`.
 
@@ -96,6 +101,7 @@ Bảng tóm tắt gate ghi vào job summary của Actions. Bảng này **không 
 - Với sự kiện `pull_request`, GitHub chạy **workflow và `gate.py` của chính PR**. Người có quyền push nhánh có thể sửa workflow để bỏ qua gate. Chính sách cấu hình nhạy cảm chỉ làm việc này lộ ra (PR bị chặn cho tới khi có label `security-reviewed`), không ngăn được hoàn toàn. Muốn chặn hẳn cần review bắt buộc kèm CODEOWNERS cho `.github/` và `security/`, việc sẽ bật khi nhóm có thêm người review (hiện một người làm nên chưa thể tự duyệt PR của mình).
 - Bộ rule `p/python` và `p/owasp-top-ten` của Semgrep lấy từ registry, không có phiên bản. Kết quả Semgrep có thể đổi theo ngày, nên benchmark lưu lại SARIF của từng lần chạy.
 - Checkov bỏ qua (không báo lỗi) file Terraform có lỗi cú pháp.
+- Ở chế độ `claude-mcp`, kết luận của AI đến từ máy của người trong `AGENT_REPORT_AUTHOR`; pipeline kiểm tra người gửi và commit, không kiểm tra được máy đó đã chạy đúng `secagent` hay chưa.
 - Bước có `LLM_API_KEY` chạy code Agent lấy từ chính PR. Người có quyền push vốn đã có thể sửa workflow để đọc secret, nên đây không phải bề mặt tấn công mới; PR sửa `agent/**` bị chặn cho tới khi có label `security-reviewed`.
 
 ## Main CI/CD (`main-ci.yml`)

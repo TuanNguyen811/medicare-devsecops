@@ -46,7 +46,7 @@ jobs:
         working-directory: app
         run: uv run ruff check
       - name: Quality gate tests
-        run: uv run --no-project --python 3.12 --with pytest pytest security/gate/tests -q
+        run: uv run --no-project --python 3.12 --with pytest pytest security/gate/tests security/handoff/tests -q
       - name: DAST tooling tests
         working-directory: app
         run: uv run pytest -q ../security/dast/tests
@@ -391,10 +391,12 @@ jobs:
     # Fork PRs get no secrets; the gate then stays on traditional mode.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    # claude-mcp waits up to 15 minutes for the reviewer's report (security/handoff/).
+    timeout-minutes: 22
     permissions:
       contents: read
       security-events: write
+      pull-requests: read  # claude-mcp: read the reviewer's handoff comment
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -418,15 +420,31 @@ jobs:
           LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
           LLM_MODEL: ${{ vars.LLM_MODEL }}
           LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+          AGENT_REPORT_AUTHOR: ${{ vars.AGENT_REPORT_AUTHOR }}
+          HANDOFF_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           # The checkout is the PR's code: an out/ committed in the PR (e.g. out/agent-exit=0
           # with an all-FP report.json) must never be mistaken for this job's results.
           rm -rf out
           mkdir out
           set +e
-          uv run --project agent --locked secagent --mode ci --repo . \
-            --base "$BASE_SHA" --head "$HEAD_SHA" --sarif-dir sarif \
-            --requirements docs/security-requirements.md --out out
+          if [ "$LLM_PROVIDER" = "claude-mcp" ]; then
+            # Claude Code never runs on CI: the reviewer runs secagent on this run's SARIF on
+            # their machine (security/handoff/local_review.py) and posts the report on the PR.
+            # Only AGENT_REPORT_AUTHOR's comment for this head commit is accepted, checked by
+            # the base branch's handoff.py (the PR cannot change the check it is judged by).
+            git show "$BASE_SHA:security/handoff/handoff.py" > "$RUNNER_TEMP/handoff.py" &&
+              GH_TOKEN="$HANDOFF_TOKEN" python3 "$RUNNER_TEMP/handoff.py" wait --repo "$REPO" \
+                --pr "$PR_NUMBER" --sha "$HEAD_SHA" --author "$AGENT_REPORT_AUTHOR" \
+                --out out --timeout 900
+          else
+            unset HANDOFF_TOKEN  # the PR's agent code gets no GitHub token
+            uv run --project agent --locked secagent --mode ci --repo . \
+              --base "$BASE_SHA" --head "$HEAD_SHA" --sarif-dir sarif \
+              --requirements docs/security-requirements.md --out out
+          fi
           echo "$?" > out/agent-exit
           echo "secagent exit code: $(cat out/agent-exit) (2 = agent unavailable, gate falls back)"
       # Uploaded before any application or test code of the PR runs anywhere: the quality
