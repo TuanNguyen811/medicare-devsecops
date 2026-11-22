@@ -1,7 +1,9 @@
 from datetime import date, datetime, timedelta
 
+import pytest
 from sqlalchemy import select
 
+from medicare.appointment import sms
 from medicare.appointment.models import Appointment, AppointmentStatus
 from medicare.auth.models import Role
 from medicare.common.templating import VN_TZ
@@ -177,3 +179,67 @@ def test_nurse_list_scoped_to_department(client, db):
     login(client, make_user(db, Role.NURSE, department=noi))
     html = client.get("/appointments").text
     assert p_noi.code in html and p_ngoai.code not in html
+
+
+@pytest.fixture
+def sent(monkeypatch):
+    """Capture outgoing SMS instead of calling the gateway."""
+    messages = []
+
+    def fake_send(phone, text):
+        messages.append((phone, text))
+        return "1"
+
+    monkeypatch.setattr(sms, "send_sms", fake_send)
+    return messages
+
+
+def remind(client, appt):
+    return client.post(f"/appointments/{appt.id}/remind",
+                       data={"csrf_token": csrf_token(client, "/appointments")},
+                       follow_redirects=False)
+
+
+def test_receptionist_sends_sms_reminder(client, db, sent):
+    patient = make_patient(db)
+    appt = make_appt(db, patient, setup_doctor(db), status=AppointmentStatus.CONFIRMED,
+                     days=2, hour=14)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    assert "/remind" in client.get("/appointments").text
+    r = remind(client, appt)
+    assert r.status_code == 303 and r.headers["location"] == "/appointments"
+    assert len(sent) == 1
+    phone, text = sent[0]
+    assert phone == patient.phone
+    assert f"14:00 ngay {slot_dt(2, 14):%d/%m/%Y}" in text and len(text) <= 160
+    assert "Đã gửi SMS nhắc lịch" in client.get("/appointments").text
+
+
+def test_reminder_only_for_confirmed_appointments(client, db, sent):
+    appt = make_appt(db, make_patient(db), setup_doctor(db))
+    login(client, make_user(db, Role.RECEPTIONIST))
+    assert remind(client, appt).status_code == 409
+    assert sent == []
+
+
+def test_reminder_gateway_error_is_reported(client, db, monkeypatch):
+    def failing(phone, text):
+        raise sms.SmsError("Tổng đài SMS từ chối tin nhắn")
+
+    monkeypatch.setattr(sms, "send_sms", failing)
+    appt = make_appt(db, make_patient(db), setup_doctor(db), status=AppointmentStatus.CONFIRMED)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    assert remind(client, appt).status_code == 303
+    assert "Tổng đài SMS từ chối tin nhắn" in client.get("/appointments").text
+
+
+def test_patient_and_doctor_cannot_send_reminders(client, db, sent):
+    doc = setup_doctor(db)
+    me = make_patient(db)
+    appt = make_appt(db, me, doc, status=AppointmentStatus.CONFIRMED)
+    login(client, make_user(db, Role.PATIENT, patient=me))
+    assert remind(client, appt).status_code == 403
+    client.cookies.clear()
+    login(client, doc)
+    assert remind(client, appt).status_code == 403
+    assert sent == []

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from medicare import policy
-from medicare.appointment import service
+from medicare.appointment import service, sms
 from medicare.appointment.schemas import FIELD_LABELS, AppointmentForm
 from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
@@ -118,6 +118,24 @@ def confirm_appointment(
     service.confirm(appt)
     db.commit()
     flash(request, "Đã xác nhận lịch hẹn")
+    return RedirectResponse("/appointments", status_code=303)
+
+
+@router.post("/appointments/{appointment_id}/remind", dependencies=[Depends(verify_csrf)])
+def remind_appointment(
+    request: Request,
+    appointment_id: ObjectId,
+    user: User = Depends(receptionist_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    appt = service.get_appointment_for(db, user, appointment_id)
+    service.check_remindable(appt, datetime.now(UTC))
+    try:
+        sms.send_sms(appt.patient.phone, sms.reminder_text(appt))
+    except sms.SmsError as exc:
+        flash(request, str(exc), "danger")
+        return RedirectResponse("/appointments", status_code=303)
+    flash(request, f"Đã gửi SMS nhắc lịch hẹn cho bệnh nhân {appt.patient.code}")
     return RedirectResponse("/appointments", status_code=303)
 
 

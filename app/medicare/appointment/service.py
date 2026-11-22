@@ -113,6 +113,14 @@ def confirm(appt: Appointment) -> None:
     appt.status = AppointmentStatus.CONFIRMED
 
 
+def check_remindable(appt: Appointment, now: datetime) -> None:
+    """Only confirmed, upcoming appointments get an SMS reminder."""
+    if appt.status != AppointmentStatus.CONFIRMED:
+        raise Conflict("Chỉ nhắc lịch hẹn đã xác nhận")
+    if appt.scheduled_at <= now:
+        raise Conflict("Lịch hẹn đã qua")
+
+
 def cancel(user: User, appt: Appointment) -> bool:
     """Cancel if allowed (R-13); returns False when the user may not cancel it."""
     if not policy.can_cancel_appointment(user, appt):
