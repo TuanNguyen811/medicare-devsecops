@@ -1,0 +1,21 @@
+# Local deployment of MediCare HMS on Docker Desktop Kubernetes (spec addendum 6.3).
+# Base: the sample manifests in infra/k8s, unchanged (they are also the IaC scan target).
+# Render with: kubectl kustomize --load-restrictor LoadRestrictionsNone deploy/local
+# deploy/pull-deploy.sh replaces the all-zero image digest with the verified one before apply.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../infra/k8s/namespace.yaml
+  - ../../infra/k8s/deployment.yaml
+  - ../../infra/k8s/service.yaml
+  - ../../infra/k8s/networkpolicy.yaml
+  - postgres.yaml
+  - networkpolicy.yaml
+patches:
+  - target:
+      kind: Deployment
+      name: medicare-app
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1

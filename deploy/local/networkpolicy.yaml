@@ -1,0 +1,58 @@
+# Allowances on top of the default-deny of infra/k8s/networkpolicy.yaml (local deployment).
+# DNS for every pod; app to PostgreSQL only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: medicare
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: app-to-db
+  namespace: medicare
+spec:
+  podSelector:
+    matchLabels:
+      app: medicare
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: medicare-db
+      ports:
+        - port: 5432
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-from-app
+  namespace: medicare
+spec:
+  podSelector:
+    matchLabels:
+      app: medicare-db
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: medicare
+      ports:
+        - port: 5432
+          protocol: TCP
