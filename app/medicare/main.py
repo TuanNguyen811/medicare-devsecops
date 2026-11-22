@@ -12,6 +12,7 @@ from medicare.auth.admin_router import router as admin_router
 from medicare.auth.router import router as auth_router
 from medicare.billing.router import router as billing_router
 from medicare.common.errors import CatchAllErrorsMiddleware, register_error_handlers
+from medicare.common.logs import configure_logging
 from medicare.common.metrics import MetricsMiddleware, start_metrics_server
 from medicare.config import Settings
 from medicare.db import create_db
@@ -40,6 +41,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is None:
         settings = Settings()
+    configure_logging(settings.log_level)
     app = FastAPI(
         title="MediCare HMS", docs_url=None, redoc_url=None, openapi_url=None,
         lifespan=_lifespan,
