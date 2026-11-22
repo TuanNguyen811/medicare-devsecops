@@ -1,8 +1,10 @@
 """Hospital fees and BHYT coverage, computed server-side only (R-04)."""
 
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,7 @@ from medicare.auth.models import Role, User
 from medicare.billing.models import Invoice, InvoiceStatus
 from medicare.common import metrics
 from medicare.common.errors import Conflict, NotFound
+from medicare.common.templating import VN_TZ
 from medicare.patient.models import Patient
 from medicare.prescription.service import list_for_record, prescription_total
 from medicare.record.models import MedicalRecord
@@ -19,6 +22,7 @@ from medicare.validators import coverage_rate
 EXAM_FEE = Decimal(150000)
 ALREADY_INVOICED = "Phiếu khám này đã có hóa đơn"
 PENDING_LIMIT = 50
+UNPAID_LIMIT = 200
 
 
 def compute_amounts(total: Decimal, rate: Decimal) -> tuple[Decimal, Decimal]:
@@ -68,6 +72,40 @@ def list_invoices(db: Session, user: User) -> list[Invoice]:
     elif user.role not in (Role.ADMIN, Role.RECEPTIONIST):
         return []
     return list(db.scalars(stmt).unique())
+
+
+@dataclass
+class UnpaidReport:
+    invoices: list[Invoice]
+    count: int
+    total_due: Decimal
+
+
+def unpaid_between(db: Session, first_day: date, last_day: date) -> UnpaidReport:
+    """Unpaid invoices issued from `first_day` to `last_day` inclusive (Vietnam time).
+
+    The count and the amount due cover the whole range; only the oldest UNPAID_LIMIT
+    invoices are listed.
+    """
+    start = datetime.combine(first_day, time.min, tzinfo=VN_TZ)
+    end = datetime.combine(last_day, time.min, tzinfo=VN_TZ) + timedelta(days=1)
+    conditions = (
+        Invoice.status == InvoiceStatus.UNPAID,
+        Invoice.created_at >= start,
+        Invoice.created_at < end,
+    )
+    count, total_due = db.execute(
+        select(func.count(Invoice.id), func.coalesce(func.sum(Invoice.patient_amount), 0))
+        .where(*conditions)
+    ).one()
+    stmt = (
+        select(Invoice)
+        .where(*conditions)
+        .order_by(Invoice.created_at, Invoice.id)
+        .limit(UNPAID_LIMIT)
+    )
+    return UnpaidReport(invoices=list(db.scalars(stmt).unique()), count=count,
+                        total_due=Decimal(total_due))
 
 
 def pending_records(db: Session) -> list[MedicalRecord]:
