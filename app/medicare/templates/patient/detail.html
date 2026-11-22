@@ -6,6 +6,12 @@
   <div class="d-flex gap-2">
     {% if can_view_records %}<a class="btn btn-outline-primary btn-sm" href="/patients/{{ patient.id }}/records"><i class="bi bi-file-medical"></i> Bệnh án</a>{% endif %}
     {% if can_edit %}<a class="btn btn-primary btn-sm" href="/patients/{{ patient.id }}/edit"><i class="bi bi-pencil"></i> Sửa hồ sơ</a>{% endif %}
+    {% if can_claim %}
+    <form method="post" action="/patients/{{ patient.id }}/claim">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-outline-success btn-sm" type="submit"><i class="bi bi-person-check"></i> Nhận phụ trách</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 <div class="card mc-card">

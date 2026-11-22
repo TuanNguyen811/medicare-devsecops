@@ -195,3 +195,59 @@ def test_me_shows_own_profile(client, db):
     login(client, make_user(db, Role.PATIENT, patient=me))
     r = client.get("/me")
     assert r.status_code == 200 and me.code in r.text and me.national_id in r.text
+
+
+def claim(client, patient):
+    token = csrf_token(client, f"/patients/{patient.id}")
+    return client.post(f"/patients/{patient.id}/claim", data={"csrf_token": token},
+                       follow_redirects=False)
+
+
+def test_doctor_takes_over_patient_of_department(client, db):
+    dept = make_department(db)
+    previous = make_user(db, Role.DOCTOR, department=dept)
+    p = make_patient(db, department=dept, attending=previous)
+    doc = make_user(db, Role.DOCTOR, department=dept)
+    login(client, doc)
+    assert "Nhận phụ trách" in client.get(f"/patients/{p.id}").text
+    r = claim(client, p)
+    assert r.status_code == 303 and r.headers["location"] == f"/patients/{p.id}"
+    db.refresh(p)
+    assert p.attending_doctor_id == doc.id
+    assert client.get(f"/patients/{p.id}/records/new").status_code == 200
+
+
+def test_claim_button_hidden_for_attending_doctor(client, db):
+    dept = make_department(db)
+    doc = make_user(db, Role.DOCTOR, department=dept)
+    p = make_patient(db, department=dept, attending=doc)
+    login(client, doc)
+    assert "Nhận phụ trách" not in client.get(f"/patients/{p.id}").text
+    assert claim(client, p).status_code == 303
+    db.refresh(p)
+    assert p.attending_doctor_id == doc.id
+
+
+def test_nurse_and_receptionist_cannot_claim(client, db):
+    dept = make_department(db)
+    p = make_patient(db, department=dept)
+    login(client, make_user(db, Role.NURSE, department=dept))
+    assert claim(client, p).status_code == 403
+    client.cookies.clear()
+    login(client, make_user(db, Role.RECEPTIONIST))
+    assert claim(client, p).status_code == 403
+    db.refresh(p)
+    assert p.attending_doctor_id is None
+
+
+def test_claim_without_csrf_is_403(client, db):
+    dept = make_department(db)
+    p = make_patient(db, department=dept)
+    login(client, make_user(db, Role.DOCTOR, department=dept))
+    assert client.post(f"/patients/{p.id}/claim").status_code == 403
+
+
+def test_claim_missing_patient_is_404(client, db):
+    login(client, make_user(db, Role.DOCTOR, department=make_department(db)))
+    r = client.post("/patients/999999/claim", data={"csrf_token": csrf_token(client, "/")})
+    assert r.status_code == 404
