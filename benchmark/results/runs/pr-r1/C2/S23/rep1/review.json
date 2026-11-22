@@ -1,0 +1,13 @@
+{
+  "commit_id": "bd83b16d76b1d1dd528b3b35bc6a08e1f93e2d0e",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/patient/service.py",
+      "line": 127,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — claim_patient cho phép bác sĩ bất kỳ tự nhận phụ trách bệnh nhân của khoa khác (bỏ qua policy)\nCWE-639 · vi phạm R-02\n\nservice.claim_patient chỉ kiểm tra bệnh nhân tồn tại rồi gán attending_doctor_id = doctor.id, không qua hàm policy.can_*. Mọi bác sĩ có thể nhận bất kỳ bệnh nhân nào (khác khoa, hoặc đang do bác sĩ khác phụ trách). Vì can_write_record/can_prescribe/can_view_record dựa trên attending, bác sĩ tự cấp cho mình quyền xem, ghi bệnh án và kê đơn (R-02, R-03, R-12). Việc đổi bác sĩ phụ trách cũng không được ghi audit log.\n\n**Đề xuất sửa:** Thêm hàm policy.can_claim_patient(user, patient) trong app/medicare/policy.py (ghi rõ R-02/R-03), chỉ cho DOCTOR cùng khoa (_same_department) và theo luồng bàn giao được duyệt. Gọi hàm này trong service.claim_patient và dùng cho cờ can_claim trong _detail_ctx thay cho biểu thức tự viết. Nếu không đủ quyền thì raise NotFound để trả 404 giống bệnh nhân không tồn tại (R-15). Ghi audit log cho việc đổi bác sĩ phụ trách."
+    }
+  ],
+  "body": "<!-- secagent-review:bd83b16d76b1d1dd528b3b35bc6a08e1f93e2d0e -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

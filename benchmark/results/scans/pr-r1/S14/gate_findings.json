@@ -1,0 +1,64 @@
+{
+  "C1": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "codeql:py/url-redirection:app/medicare/prescription/router.py:109",
+        "severity": "MEDIUM"
+      }
+    ]
+  },
+  "C1+DAST": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "codeql:py/url-redirection:app/medicare/prescription/router.py:109",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10020:dast:GET /:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10020:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10021:dast:GET /:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /health:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /login:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10038:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+        "severity": "MEDIUM"
+      }
+    ]
+  }
+}

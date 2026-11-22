@@ -1,0 +1,304 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T16:32:21+00:00",
+    "duration_s": 36.92,
+    "llm_calls": 16,
+    "tool_calls": 15,
+    "tokens_in": 82109,
+    "tokens_out": 5568,
+    "cost_usd": 0.140067,
+    "step_limit": 46,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "trivy:CVE-2020-14343:app/uv.lock:1",
+      "finding_ids": [
+        "trivy:CVE-2020-14343:app/uv.lock:1"
+      ],
+      "source": "trivy",
+      "title": "CVE-2020-14343 (trivy)",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "CRITICAL",
+      "tool_severity": "CRITICAL",
+      "cwe": "CWE-502",
+      "owasp": "A03",
+      "violated_rule": null,
+      "reasoning": "PR hạ cấp pyyaml xuống 5.3.1 (dính CVE-2020-14343) và price_list.parse gọi yaml.full_load trên nội dung file do người dùng tải lên. Với 5.3.1, full_load cho phép tạo đối tượng Python tùy ý và thực thi mã (RCE). Hàm dễ bị tấn công được gọi trực tiếp từ route /admin/medicines/import. Comment trong pyproject.toml (\"Same PyYAML as the pharmacy stock system\") không phải lý do bảo mật chính đáng.",
+      "evidence": [
+        {
+          "file": "app/medicare/prescription/price_list.py",
+          "start_line": 41,
+          "end_line": 41,
+          "snippet": "        doc = yaml.full_load(content)"
+        }
+      ],
+      "exploit_scenario": "Kẻ tấn công kiểm soát tài khoản ADMIN (hoặc dùng CSRF/file bảng giá giả mạo từ nhà cung cấp) tải lên file YAML chứa tag python/object/new để chạy lệnh tùy ý trên server, đọc toàn bộ dữ liệu bệnh nhân.",
+      "fix": {
+        "description": "Trong app/pyproject.toml đặt lại pyyaml>=6.0.3 (hoặc ít nhất >=5.4) và cập nhật uv.lock, bỏ build-constraint setuptools<81. Trong price_list.parse thay yaml.full_load bằng yaml.safe_load. Có thể kiểm tra thêm schema."
+      },
+      "file": "app/uv.lock",
+      "line": 1
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm trong mã nguồn không thấy X-Frame-Options, Content-Security-Policy hay nosniff được đặt ở đâu, khớp với kết quả ZAP.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt header bảo mật cho mọi response: X-Frame-Options DENY (hoặc CSP frame-ancestors 'none'), X-Content-Type-Options nosniff, Content-Security-Policy."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking trong toàn ứng dụng (search_code không thấy).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt X-Frame-Options DENY / CSP frame-ancestors 'none' cho mọi response."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong mã nguồn.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt chẽ qua middleware chung cho mọi response."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong mã nguồn.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt chẽ qua middleware chung cho mọi response."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong mã nguồn.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt chẽ qua middleware chung cho mọi response."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong mã nguồn.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt chẽ qua middleware chung cho mọi response."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong mã nguồn.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt chẽ qua middleware chung cho mọi response."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "semgrep:package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown:app/pyproject.toml:43",
+      "finding_ids": [
+        "semgrep:package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown:app/pyproject.toml:43"
+      ],
+      "source": "semgrep",
+      "title": "package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown (semgrep)",
+      "verdict": "TP",
+      "confidence": 0.5,
+      "severity": "LOW",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-829",
+      "owasp": "A03",
+      "violated_rule": null,
+      "reasoning": "Phần [tool.uv] mới được thêm nhưng chưa đặt exclude-newer (cooldown), nên gói mới phát hành có thể bị kéo vào ngay. Đây là khuyến nghị hardening chuỗi cung ứng, rủi ro thấp.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Trong khối [tool.uv] của app/pyproject.toml thêm exclude-newer với khoảng cooldown (ví dụ 7 ngày)."
+      },
+      "file": "app/pyproject.toml",
+      "line": 43
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header X-Content-Type-Options trong mã nguồn.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt X-Content-Type-Options: nosniff cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header X-Content-Type-Options trong mã nguồn.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt X-Content-Type-Options: nosniff cho mọi response."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header X-Content-Type-Options trong mã nguồn.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt X-Content-Type-Options: nosniff cho mọi response."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

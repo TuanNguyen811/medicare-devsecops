@@ -1,0 +1,319 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T16:59:40+00:00",
+    "duration_s": 50.98,
+    "llm_calls": 31,
+    "tool_calls": 19,
+    "tokens_in": 128099,
+    "tokens_out": 8334,
+    "cost_usd": 0.187649,
+    "step_limit": 43,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "quick_prescribe cho phép y tá và bác sĩ không phụ trách kê đơn (bỏ qua policy.can_prescribe)",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "tool_severity": null,
+      "cwe": "CWE-862",
+      "owasp": "A01",
+      "violated_rule": "R-03",
+      "reasoning": "Route mới dùng ward_staff (DOCTOR, NURSE) và service.quick_prescribe chỉ kiểm tra policy.can_view_record, không gọi policy.can_prescribe (chỉ bác sĩ phụ trách). Do đó y tá cùng khoa và bác sĩ cùng khoa không phụ trách đều tạo được đơn thuốc, vi phạm R-03. Luồng cũ qua get_record_for_prescribing có kiểm tra này nhưng bị bỏ qua.",
+      "evidence": [
+        {
+          "file": "app/medicare/prescription/service.py",
+          "start_line": 71,
+          "end_line": 71,
+          "snippet": "    if not policy.can_view_record(user, db.get(Patient, record.patient_id)):"
+        },
+        {
+          "file": "app/medicare/prescription/router.py",
+          "start_line": 19,
+          "end_line": 19,
+          "snippet": "ward_staff = require_roles(Role.DOCTOR, Role.NURSE)"
+        }
+      ],
+      "exploit_scenario": "Y tá cùng khoa mở phiếu khám, chọn đơn mẫu và gửi POST /records/{id}/prescriptions/quick. Đơn thuốc được tạo cho bệnh nhân không do mình phụ trách.",
+      "fix": {
+        "description": "Trong service.quick_prescribe, dùng get_record_for_prescribing (hoặc policy.can_prescribe(user, patient)) thay cho can_view_record và trả NotFound nếu không đạt. Đổi route sang doctor_user thay vì ward_staff, và đặt can_quick_prescribe trong record/router.py bằng policy.can_prescribe(user, patient). Thêm test cho y tá và bác sĩ không phụ trách."
+      },
+      "file": "app/medicare/prescription/service.py",
+      "line": 71
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không tìm thấy mã nào đặt X-Frame-Options hay frame-ancestors trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt X-Frame-Options: DENY (hoặc CSP frame-ancestors 'none') cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt header chống clickjacking; trang /login có thể bị nhúng iframe.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware chung đặt X-Frame-Options: DENY hoặc CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware chung đặt Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none')."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware chung đặt Content-Security-Policy chặt."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware chung đặt Content-Security-Policy chặt."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware chung đặt Content-Security-Policy chặt."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware chung đặt Content-Security-Policy chặt."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware chung đặt X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware chung đặt X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt X-Content-Type-Options: nosniff cho mọi response."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "codeql:py/url-redirection:app/medicare/prescription/router.py:109",
+      "finding_ids": [
+        "codeql:py/url-redirection:app/medicare/prescription/router.py:109"
+      ],
+      "source": "codeql",
+      "title": "py/url-redirection (codeql)",
+      "verdict": "FP",
+      "confidence": 0.95,
+      "severity": "LOW",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-601",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "record_id có kiểu ObjectId = Annotated[int, Path(ge=1, le=INT4_MAX)], là số nguyên, nên URL chuyển hướng luôn là đường dẫn nội bộ cố định /records/<int>. Không thể chèn host ngoài.",
+      "evidence": [
+        {
+          "file": "app/medicare/prescription/router.py",
+          "start_line": 109,
+          "end_line": 109,
+          "snippet": "return RedirectResponse(f\"/records/{record_id}\", status_code=303)"
+        },
+        {
+          "file": "app/medicare/common/ids.py",
+          "start_line": 14,
+          "end_line": 14,
+          "snippet": "ObjectId = Annotated[int, Path(ge=1, le=INT4_MAX)]"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/medicare/prescription/router.py",
+      "line": 109
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+[
+  "app/medicare/prescription/models.py",
+  "app/medicare/prescription/router.py",
+  "app/medicare/prescription/service.py",
+  "app/medicare/templates/prescription/detail.html",
+  "app/medicare/templates/prescription/medicines.html",
+  "app/migrations/versions/0004_medicine_discontinued_at.py",
+  "app/tests/test_prescription.py"
+]

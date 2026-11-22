@@ -1,0 +1,76 @@
+{
+  "C1": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "bandit:B608:app/medicare/report/service.py:41",
+        "severity": "LOW"
+      },
+      {
+        "id": "codeql:py/sql-injection:app/medicare/report/service.py:61",
+        "severity": "HIGH"
+      },
+      {
+        "id": "semgrep:python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text:app/medicare/report/service.py:61",
+        "severity": "HIGH"
+      }
+    ]
+  },
+  "C1+DAST": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "bandit:B608:app/medicare/report/service.py:41",
+        "severity": "LOW"
+      },
+      {
+        "id": "codeql:py/sql-injection:app/medicare/report/service.py:61",
+        "severity": "HIGH"
+      },
+      {
+        "id": "semgrep:python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text:app/medicare/report/service.py:61",
+        "severity": "HIGH"
+      },
+      {
+        "id": "zap:10020:dast:GET /:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10020:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10021:dast:GET /:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /health:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /login:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10038:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+        "severity": "MEDIUM"
+      }
+    ]
+  }
+}

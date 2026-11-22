@@ -1,0 +1,8 @@
+[
+  "app/medicare/audit/service.py",
+  "app/medicare/prescription/router.py",
+  "app/medicare/prescription/service.py",
+  "app/medicare/templates/patient/detail.html",
+  "app/medicare/templates/prescription/history.html",
+  "app/tests/test_prescription.py"
+]

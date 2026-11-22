@@ -1,0 +1,19 @@
+{
+  "commit_id": "36f21158b6bd526c9e7b5a34a44f2765435fedac",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/auth/reset.py",
+      "line": 47,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Token đặt lại mật khẩu không hết hạn sau 15 phút và không dùng một lần\nCWE-640 · vi phạm R-18\n\nRESET_TOKEN_TTL được khai báo nhưng user_for_token không so sánh created_at với TTL; reset_password không xóa/đánh dấu token đã dùng. Token vì vậy có hiệu lực vô thời hạn và dùng được nhiều lần, vi phạm R-18.\n\n**Đề xuất sửa:** Trong reset.user_for_token, từ chối token có created_at cũ hơn RESET_TOKEN_TTL (so sánh với thời gian hiện tại). Trong reset.reset_password (hoặc router.reset_password) xóa token đã dùng và xóa mọi token khác của user đó trong cùng giao dịch trước khi commit. Cân nhắc dọn token hết hạn khi tạo token mới."
+    },
+    {
+      "path": "app/medicare/auth/router.py",
+      "line": 122,
+      "side": "RIGHT",
+      "body": "**secagent · TP · MEDIUM** — Liệt kê tài khoản qua phản hồi /forgot-password khác nhau\nCWE-204 · vi phạm R-18\n\nKhi email không tồn tại, server trả lỗi \"Không tìm thấy tài khoản nào đăng ký với email này\"; khi tồn tại thì chuyển hướng 303 kèm flash. R-18 và R-07 yêu cầu phản hồi giống hệt. Không có rate limit nên có thể dò email hàng loạt của nhân viên/bệnh nhân.\n\n**Đề xuất sửa:** Trong router.forgot_password luôn trả cùng một phản hồi (flash chung + redirect 303 /login) bất kể request_reset trả True hay False; không phản chiếu lỗi 'không tìm thấy'. Thời gian xử lý cũng nên tương đương (ví dụ gửi mail bất đồng bộ) và nên thêm giới hạn tần suất theo IP/email."
+    }
+  ],
+  "body": "<!-- secagent-review:36f21158b6bd526c9e7b5a34a44f2765435fedac -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

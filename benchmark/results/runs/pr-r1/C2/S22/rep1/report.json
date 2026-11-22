@@ -1,0 +1,290 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T16:48:01+00:00",
+    "duration_s": 41.48,
+    "llm_calls": 18,
+    "tool_calls": 17,
+    "tokens_in": 119160,
+    "tokens_out": 5902,
+    "cost_usd": 0.138581,
+    "step_limit": 37,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:2",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Export CSV mở cho DOCTOR/NURSE và lộ CCCD, BHYT không che",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "tool_severity": null,
+      "cwe": "CWE-639",
+      "owasp": "A01",
+      "violated_rule": "R-11",
+      "reasoning": "Route /patients/export dùng staff_user (gồm DOCTOR, NURSE) trong khi ma trận phân quyền chỉ cho ADMIN và RECEPTIONIST xuất danh sách. Hơn nữa national_id và insurance_number được xuất thô, không che, vi phạm R-11 và R-19. Bác sĩ/y tá chỉ thấy CCCD bị che trên giao diện, nhưng qua CSV lấy được đầy đủ.",
+      "evidence": [
+        {
+          "file": "app/medicare/patient/router.py",
+          "start_line": 102,
+          "end_line": 102,
+          "snippet": "user: User = Depends(staff_user),"
+        },
+        {
+          "file": "app/medicare/patient/router.py",
+          "start_line": 112,
+          "end_line": 112,
+          "snippet": "\"Nam\" if p.gender == \"M\" else \"Nữ\", p.national_id, p.insurance_number, p.phone,"
+        }
+      ],
+      "exploit_scenario": "Y tá đăng nhập, gọi GET /patients/export và nhận CCCD, mã BHYT đầy đủ của mọi bệnh nhân cùng khoa.",
+      "fix": {
+        "description": "Đổi dependency của export_patients sang editor_user (require_roles(*EDITORS) = RECEPTIONIST, ADMIN). Ngoài ra dùng cơ chế che định danh hiện có của R-11 (hàm _identifiers/mask) khi dựng rows để CCCD và BHYT chỉ đầy đủ với vai trò được phép."
+      },
+      "file": "app/medicare/patient/router.py",
+      "line": 102
+    },
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Export CSV không trung hòa ô công thức (CSV injection)",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "MEDIUM",
+      "tool_severity": null,
+      "cwe": "CWE-1236",
+      "owasp": "A05",
+      "violated_rule": "R-19",
+      "reasoning": "csv_response ghi trực tiếp str(value) vào csv.writer mà không xử lý ô bắt đầu bằng =, +, -, @, tab hoặc xuống dòng. Các trường như full_name, address do lễ tân nhập có thể chứa công thức.",
+      "evidence": [
+        {
+          "file": "app/medicare/common/csv_export.py",
+          "start_line": 15,
+          "end_line": 15,
+          "snippet": "writer.writerow([\"\" if value is None else str(value) for value in row])"
+        }
+      ],
+      "exploit_scenario": "Người tạo hồ sơ nhập họ tên '=HYPERLINK(...)' hoặc '=cmd|...'; khi admin mở file CSV bằng Excel, công thức được thực thi, có thể làm lộ dữ liệu hoặc chạy lệnh.",
+      "fix": {
+        "description": "Trong app/medicare/common/csv_export.py, thêm hàm trung hòa ô: nếu chuỗi bắt đầu bằng '=', '+', '-', '@', tab hoặc '\\r'/'\\n' thì thêm tiền tố dấu nháy đơn ('). Áp dụng cho mọi ô (kể cả header) trước khi writerow trong csv_response."
+      },
+      "file": "app/medicare/common/csv_export.py",
+      "line": 15
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm trong repo không có chỗ nào đặt X-Frame-Options hoặc frame-ancestors, nên ứng dụng thật sự thiếu header chống clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware toàn cục trong app factory để đặt X-Frame-Options: DENY và CSP có frame-ancestors 'none' cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking nào trong repo; trang /login có thể bị nhúng iframe.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng cùng middleware security headers toàn cục: X-Frame-Options DENY và CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Trong middleware security headers toàn cục, đặt X-Content-Type-Options: nosniff cho mọi response."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP chặt (default-src 'self', frame-ancestors 'none') trong middleware security headers toàn cục."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers toàn cục."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers toàn cục."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers toàn cục."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt X-Content-Type-Options: nosniff trong middleware toàn cục."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options, kể cả với /health.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt X-Content-Type-Options: nosniff trong middleware toàn cục."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    }
+  ]
+}

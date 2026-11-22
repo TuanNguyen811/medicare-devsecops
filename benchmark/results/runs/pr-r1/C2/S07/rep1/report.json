@@ -1,0 +1,349 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T16:57:11+00:00",
+    "duration_s": 58.41,
+    "llm_calls": 26,
+    "tool_calls": 15,
+    "tokens_in": 116870,
+    "tokens_out": 10045,
+    "cost_usd": 0.201461,
+    "step_limit": 40,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Client gửi tỷ lệ BHYT lên, vi phạm R-04/R-17 (tính ở server)",
+      "verdict": "TP",
+      "confidence": 0.85,
+      "severity": "HIGH",
+      "tool_severity": null,
+      "cwe": "CWE-639",
+      "owasp": "A06",
+      "violated_rule": "R-04",
+      "reasoning": "Route POST /invoices/{invoice_id}/coverage nhận coverage_rate từ form do client gửi và ghi trực tiếp vào invoice.coverage_rate cùng số tiền BHYT/bệnh nhân. Chỉ kiểm tra khoảng 0..1, không đối chiếu mã thẻ BHYT. Lễ tân (hoặc phiên bị chiếm/CSRF-bypass) có thể đặt 100% cho bệnh nhân không có thẻ, gây gian lận/thất thoát viện phí. Không có audit log cho thay đổi này.",
+      "evidence": [
+        {
+          "file": "app/medicare/billing/router.py",
+          "start_line": 109,
+          "end_line": 116,
+          "snippet": "        rate = Decimal(coverage_rate).quantize(Decimal(\"0.01\"))"
+        }
+      ],
+      "exploit_scenario": "Lễ tân gửi POST /invoices/123/coverage với coverage_rate=1.00 cho bệnh nhân không có thẻ BHYT; patient_amount về 0 và hóa đơn được thu với số tiền sai.",
+      "fix": {
+        "description": "Bỏ tham số coverage_rate do client gửi trong adjust_coverage (app/medicare/billing/router.py). Tính lại tỷ lệ ở server từ mã thẻ BHYT hiện tại của bệnh nhân bằng hàm tính tỷ lệ trong billing/service.py rồi gọi service.compute_amounts. Nếu cần ngoại lệ (chuyển tuyến), chỉ cho chọn từ allowlist có kiểm tra phía server, yêu cầu quyền bổ sung và ghi audit log; bỏ form chọn mức trong detail.html."
+      },
+      "file": "app/medicare/billing/router.py",
+      "line": 109
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "create_app chỉ thêm CatchAllErrorsMiddleware, SessionMiddleware, MetricsMiddleware; không có middleware nào đặt X-Frame-Options hoặc frame-ancestors.",
+      "evidence": [
+        {
+          "file": "app/medicare/main.py",
+          "start_line": 59,
+          "end_line": 59,
+          "snippet": "app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware security headers trong create_app (app/medicare/main.py) đặt X-Frame-Options: DENY (hoặc CSP frame-ancestors 'none'), X-Content-Type-Options: nosniff và Content-Security-Policy cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân F1: thiếu header chống clickjacking trên /login.",
+      "evidence": [
+        {
+          "file": "app/medicare/main.py",
+          "start_line": 59,
+          "end_line": 59,
+          "snippet": "app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware security headers toàn cục trong create_app với X-Frame-Options: DENY."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong ứng dụng.",
+      "evidence": [
+        {
+          "file": "app/medicare/main.py",
+          "start_line": 59,
+          "end_line": 59,
+          "snippet": "app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy (default-src 'self', frame-ancestors 'none') trong middleware security headers ở create_app."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP, cùng nguyên nhân F6.",
+      "evidence": [
+        {
+          "file": "app/medicare/main.py",
+          "start_line": 59,
+          "end_line": 59,
+          "snippet": "app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP toàn cục qua middleware ở create_app."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP, cùng nguyên nhân F6.",
+      "evidence": [
+        {
+          "file": "app/medicare/main.py",
+          "start_line": 59,
+          "end_line": 59,
+          "snippet": "app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP toàn cục qua middleware ở create_app."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP, cùng nguyên nhân F6.",
+      "evidence": [
+        {
+          "file": "app/medicare/main.py",
+          "start_line": 59,
+          "end_line": 59,
+          "snippet": "app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP toàn cục qua middleware ở create_app."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP, cùng nguyên nhân F6.",
+      "evidence": [
+        {
+          "file": "app/medicare/main.py",
+          "start_line": 59,
+          "end_line": 59,
+          "snippet": "app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP toàn cục qua middleware ở create_app."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options, cùng nguyên nhân F5.",
+      "evidence": [
+        {
+          "file": "app/medicare/main.py",
+          "start_line": 59,
+          "end_line": 59,
+          "snippet": "app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở create_app."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options trên /health, cùng nguyên nhân; sửa toàn cục.",
+      "evidence": [
+        {
+          "file": "app/medicare/main.py",
+          "start_line": 59,
+          "end_line": 59,
+          "snippet": "app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở create_app."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có middleware đặt X-Content-Type-Options: nosniff.",
+      "evidence": [
+        {
+          "file": "app/medicare/main.py",
+          "start_line": 59,
+          "end_line": 59,
+          "snippet": "app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở create_app."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

@@ -1,0 +1,297 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T16:31:08+00:00",
+    "duration_s": 58.45,
+    "llm_calls": 29,
+    "tool_calls": 16,
+    "tokens_in": 124238,
+    "tokens_out": 9762,
+    "cost_usd": 0.218349,
+    "step_limit": 46,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "codeql:py/full-ssrf:app/medicare/record/lab.py:37",
+      "finding_ids": [
+        "codeql:py/full-ssrf:app/medicare/record/lab.py:37"
+      ],
+      "source": "codeql",
+      "title": "py/full-ssrf (codeql)",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "tool_severity": "CRITICAL",
+      "cwe": "CWE-918",
+      "owasp": "A01",
+      "violated_rule": "R-14",
+      "reasoning": "download() chỉ kiểm tra scheme http/https và có hostname, rồi gọi urllib.request.urlopen với URL do bác sĩ nhập. Không có allowlist host (vi phạm R-14), không chặn IP loopback/private/link-local (169.254.169.254, mạng nội bộ), và urlopen tự theo redirect nên có thể bị chuyển hướng tới địa chỉ nội bộ. Dù có lọc content-type, request vẫn được gửi (blind SSRF, dò cổng/dịch vụ nội bộ qua thông báo lỗi khác nhau); nếu dịch vụ nội bộ trả PDF/ảnh thì nội dung được lưu và đọc lại qua /lab-results/{id}.",
+      "evidence": [],
+      "exploit_scenario": "Bác sĩ phụ trách (hoặc tài khoản bị chiếm) gửi url=http://10.0.0.5:8080/x hoặc URL của kẻ tấn công trả redirect 302 tới dịch vụ nội bộ/metadata cloud; server gửi request từ mạng nội bộ. Thông báo lỗi \"Không tải được\" so với \"Kết quả phải là file PDF\" cho phép dò dịch vụ nội bộ.",
+      "fix": {
+        "description": "Trong app/medicare/record/lab.py::download, đối chiếu host của URL với allowlist host LIS lấy từ cấu hình (biến môi trường, ví dụ lis.medicare.local) và chỉ cho phép https. Phân giải DNS và từ chối IP loopback/private/link-local. Tắt theo redirect (opener tùy biến với redirect handler từ chối) hoặc kiểm tra lại allowlist ở mỗi redirect. Dùng thông báo lỗi chung để không lộ trạng thái dịch vụ nội bộ."
+      },
+      "file": "app/medicare/record/lab.py",
+      "line": 37
+    },
+    {
+      "finding_id": "bandit:B310:app/medicare/record/lab.py:39",
+      "finding_ids": [
+        "bandit:B310:app/medicare/record/lab.py:39"
+      ],
+      "source": "bandit",
+      "title": "B310 (bandit)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "LOW",
+      "cwe": "CWE-918",
+      "owasp": "A01",
+      "violated_rule": "R-14",
+      "reasoning": "Scheme đã giới hạn http/https nên file:// không khả thi (CWE-22 không áp dụng), nhưng urlopen vẫn nhận URL người dùng không có allowlist host; cùng gốc rễ với F1 (SSRF, R-14).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Sửa cùng F1: allowlist host LIS, chặn IP nội bộ và redirect trong lab.download."
+      },
+      "file": "app/medicare/record/lab.py",
+      "line": 39
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm trong code không có X-Frame-Options hay CSP frame-ancestors; chỉ có nosniff ở endpoint tải lab. Ứng dụng không đặt header bảo mật toàn cục.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware toàn cục (trong app factory) đặt X-Frame-Options: DENY hoặc CSP frame-ancestors 'none', X-Content-Type-Options: nosniff và Content-Security-Policy cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking toàn cục trong code (search không thấy X-Frame-Options/CSP).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware toàn cục đặt X-Frame-Options/frame-ancestors như F3."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "nosniff chỉ đặt thủ công ở download_lab_result; các trang khác thiếu header.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt X-Content-Type-Options: nosniff trong middleware toàn cục."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy ở bất kỳ đâu trong code.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware toàn cục (default-src 'self', frame-ancestors 'none')."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP toàn cục.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware toàn cục."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP toàn cục.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware toàn cục."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP toàn cục.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware toàn cục."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP toàn cục.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware toàn cục."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu nosniff toàn cục.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt nosniff trong middleware toàn cục."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu nosniff toàn cục (kể cả /health).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt nosniff trong middleware toàn cục."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    }
+  ]
+}

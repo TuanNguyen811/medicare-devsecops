@@ -1,0 +1,25 @@
+{
+  "commit_id": "c52e3a98b8d4623d08bb860c1be5e4eabfe62e27",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — B506 (bandit)\nCWE-502\n\nCùng vị trí với F2: yaml.load với yaml.Loader trên dữ liệu upload cho phép khởi tạo đối tượng tùy ý dẫn tới RCE. Bandit chấm LOW nhưng thực tế mức HIGH.\n\n**Đề xuất sửa:** Dùng yaml.safe_load trong legacy_import._parse_yaml."
+    },
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — python.lang.security.deserialization.avoid-pyyaml-load.avoid-pyyaml-load (semgrep)\nCWE-502\n\n_parse_yaml dùng yaml.load với yaml.Loader trên nội dung file do người dùng upload. Loader này cho phép tag python/object/apply nên có thể thực thi mã tùy ý (RCE). Chỉ ADMIN truy cập được, nhưng tài khoản admin bị chiếm hoặc bị lừa upload vẫn dẫn tới RCE trên server.\n\n**Đề xuất sửa:** Trong legacy_import._parse_yaml, thay yaml.load(..., Loader=yaml.Loader) bằng yaml.safe_load (hoặc Loader=yaml.SafeLoader). Giữ nguyên bước kiểm tra kiểu dữ liệu phía sau."
+    },
+    {
+      "path": "app/medicare/prescription/legacy_import.py",
+      "line": 49,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — XXE: lxml XMLParser bật resolve_entities khi parse file upload\nCWE-611 · vi phạm R-14\n\n_parse_xml dùng etree.XMLParser(resolve_entities=True) trên XML do người dùng upload, không tắt network. Kẻ tấn công có thể khai báo external entity (file:///etc/passwd, SSRF) hoặc billion laughs; nội dung entity được đọc vào ten_thuoc/don_vi và hiện lại qua danh mục thuốc hoặc thông báo lỗi.\n\n**Đề xuất sửa:** Trong legacy_import._parse_xml, tạo XMLParser với resolve_entities=False, no_network=True, load_dtd=False, huge_tree=False (hoặc dùng defusedxml.lxml). Từ chối tài liệu có DOCTYPE; nếu cần ký tự có dấu thì dùng mã hóa UTF-8 thay vì entity."
+    }
+  ],
+  "body": "<!-- secagent-review:c52e3a98b8d4623d08bb860c1be5e4eabfe62e27 -->\nAI Security Agent nêu 3 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

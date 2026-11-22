@@ -1,0 +1,26 @@
+{
+  "pr": 49,
+  "run": 45042225994,
+  "run_attempt": 1,
+  "agent_exit": 0,
+  "quality_gate": "success",
+  "blocked": false,
+  "jobs": {
+    "sast-bandit": "success",
+    "sast-codeql": "success",
+    "sca-trivy": "success",
+    "build-test": "success",
+    "iac-checkov": "success",
+    "secret-gitleaks": "success",
+    "sast-semgrep": "success",
+    "dast-zap (DOCTOR)": "success",
+    "dast-zap (NURSE)": "success",
+    "dast-zap (PATIENT)": "success",
+    "dast-zap (RECEPTIONIST)": "success",
+    "dast-zap (ADMIN)": "success",
+    "dast": "success",
+    "ai-security-agent": "success",
+    "agent-comment": "success",
+    "quality-gate": "success"
+  }
+}

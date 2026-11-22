@@ -1,0 +1,302 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T16:41:59+00:00",
+    "duration_s": 57.42,
+    "llm_calls": 30,
+    "tool_calls": 18,
+    "tokens_in": 185088,
+    "tokens_out": 9116,
+    "cost_usd": 0.229452,
+    "step_limit": 43,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Race condition: đặt lịch trùng giờ do bỏ unique index và chỉ kiểm tra overlap ở tầng ứng dụng",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "tool_severity": null,
+      "cwe": "CWE-362",
+      "owasp": "A06",
+      "violated_rule": "R-13",
+      "reasoning": "PR bỏ unique index uq_doctor_slot_active, vốn là ràng buộc DB chống trùng giờ. Thay vào đó, book() chỉ SELECT _active_around rồi INSERT, không có khóa hay ràng buộc. Hai request đồng thời cho cùng bác sĩ và cùng giờ đều thấy không có xung đột và đều insert thành công. Điều này vi phạm R-13 (một bác sĩ không có hai lịch hẹn còn hiệu lực trùng giờ).",
+      "evidence": [
+        {
+          "file": "app/medicare/appointment/service.py",
+          "start_line": 133,
+          "end_line": 146,
+          "snippet": "    end = scheduled_at + timedelta(minutes=minutes)\n    if _active_around(db, doctor.id, scheduled_at, end):\n        raise Conflict(DOUBLE_BOOKED)\n    appt = Appointment("
+        }
+      ],
+      "exploit_scenario": "Hai request POST /appointments/quick (hoặc /appointments) gửi cùng lúc cho cùng bác sĩ và cùng khung giờ. Cả hai cùng vượt qua bước kiểm tra, nên bác sĩ bị đặt trùng giờ.",
+      "fix": {
+        "description": "Trong service.book(), khóa hàng bác sĩ bằng SELECT ... FOR UPDATE (db.get(User, doctor_id, with_for_update=True)) trước khi gọi _active_around, để các lần đặt lịch cho cùng bác sĩ được tuần tự hóa. Cách khác là thêm exclusion constraint của PostgreSQL (btree_gist) trên doctor_id và tstzrange(scheduled_at, scheduled_at + duration) với điều kiện status <> 'CANCELLED', trong migration 0004. Bắt lỗi vi phạm constraint và chuyển thành Conflict."
+      },
+      "file": "app/medicare/appointment/service.py",
+      "line": 133
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.85,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "create_app trong app/medicare/main.py chỉ thêm CatchAllErrors, Session, Metrics middleware. Toàn repo không có X-Frame-Options, CSP hay frame-ancestors, nên trang HTML có thể bị nhúng vào iframe (clickjacking).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm một middleware security headers trong create_app (app/medicare/main.py) để đặt X-Frame-Options: DENY (hoặc CSP frame-ancestors 'none') cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.85,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Trang /login không có header chống clickjacking vì app không có middleware đặt header bảo mật (app/medicare/main.py).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng chung security headers middleware ở create_app, đặt X-Frame-Options: DENY."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "App không đặt Content-Security-Policy ở bất kỳ đâu (không có kết quả khi tìm trong repo).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm header Content-Security-Policy (default-src 'self', frame-ancestors 'none') trong security headers middleware ở main.py."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/quick:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/quick:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP trên /appointments/quick, cùng nguyên nhân với F6.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong security headers middleware chung."
+      },
+      "file": "dast:POST /appointments/quick",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP, cùng nguyên nhân với F6.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong security headers middleware chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP, cùng nguyên nhân với F6.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong security headers middleware chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP, cùng nguyên nhân với F6.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong security headers middleware chung."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP, cùng nguyên nhân với F6.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong security headers middleware chung."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options, cùng nguyên nhân gốc với F5.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt X-Content-Type-Options: nosniff trong security headers middleware chung."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options trên /health, cùng nguyên nhân gốc với F5.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt X-Content-Type-Options: nosniff trong security headers middleware chung."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có middleware nào đặt X-Content-Type-Options: nosniff (tìm toàn repo không thấy). Mức thực tế thấp.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Trong security headers middleware ở main.py, đặt X-Content-Type-Options: nosniff cho mọi response."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

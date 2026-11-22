@@ -1,0 +1,13 @@
+{
+  "commit_id": "749e4581adc11a7188925fe56a98934e88185b72",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/billing/router.py",
+      "line": 109,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Client gửi tỷ lệ BHYT lên, vi phạm R-04/R-17 (tính ở server)\nCWE-639 · vi phạm R-04\n\nRoute POST /invoices/{invoice_id}/coverage nhận coverage_rate từ form do client gửi và ghi trực tiếp vào invoice.coverage_rate cùng số tiền BHYT/bệnh nhân. Chỉ kiểm tra khoảng 0..1, không đối chiếu mã thẻ BHYT. Lễ tân (hoặc phiên bị chiếm/CSRF-bypass) có thể đặt 100% cho bệnh nhân không có thẻ, gây gian lận/thất thoát viện phí. Không có audit log cho thay đổi này.\n\n**Đề xuất sửa:** Bỏ tham số coverage_rate do client gửi trong adjust_coverage (app/medicare/billing/router.py). Tính lại tỷ lệ ở server từ mã thẻ BHYT hiện tại của bệnh nhân bằng hàm tính tỷ lệ trong billing/service.py rồi gọi service.compute_amounts. Nếu cần ngoại lệ (chuyển tuyến), chỉ cho chọn từ allowlist có kiểm tra phía server, yêu cầu quyền bổ sung và ghi audit log; bỏ form chọn mức trong detail.html."
+    }
+  ],
+  "body": "<!-- secagent-review:749e4581adc11a7188925fe56a98934e88185b72 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

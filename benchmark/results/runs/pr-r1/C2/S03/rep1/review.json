@@ -1,0 +1,25 @@
+{
+  "commit_id": "00ff7d93a5f9974b7526dbb18a043a62d1606b80",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/mobile/tokens.py",
+      "line": 43,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — python.jwt.security.unverified-jwt-decode.unverified-jwt-decode (semgrep)\nCWE-347 · vi phạm R-01\n\nread_token giải mã với \"verify_signature\": False nên chữ ký không được kiểm tra. Kẻ tấn công không cần biết secret, chỉ cần tạo JWT tùy ý (sub = id nạn nhân, sv = session_version đoán được, exp tương lai) là xác thực thành công: bypass xác thực hoàn toàn, truy cập bệnh án (R-01, R-02).\n\n**Đề xuất sửa:** Trong read_token (tokens.py) bỏ \"verify_signature\": False; để PyJWT xác thực chữ ký với khóa từ env và algorithms=[\"HS256\"], giữ verify_exp và require. Thêm test token giả mạo/sai chữ ký trả 401."
+    },
+    {
+      "path": "app/medicare/mobile/tokens.py",
+      "line": 17,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — generic-api-key (gitleaks)\nCWE-798 · vi phạm R-09\n\nJWT_SECRET bị hard-code trong tokens.py:17 (Gitleaks bắt), vi phạm R-09: secret chỉ đọc từ biến môi trường. Ai đọc được mã nguồn đều có thể ký token hợp lệ cho bất kỳ user nào.\n\n**Đề xuất sửa:** Xóa secret khỏi tokens.py; đọc khóa JWT từ biến môi trường qua Settings trong medicare/config.py (riêng khỏi SECRET_KEY, ít nhất 256 bit), ứng dụng không khởi động nếu thiếu. Xoay (rotate) secret đã lộ trong git history."
+    },
+    {
+      "path": "app/medicare/mobile/tokens.py",
+      "line": 36,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — python.jwt.security.jwt-hardcode.jwt-python-hardcoded-secret (semgrep)\nCWE-522 · vi phạm R-09\n\njwt.encode dùng JWT_SECRET hard-code (cùng gốc với F2), vi phạm R-09.\n\n**Đề xuất sửa:** Nạp JWT_SECRET từ biến môi trường qua Settings, không hard-code; dùng trong issue_token và read_token."
+    }
+  ],
+  "body": "<!-- secagent-review:00ff7d93a5f9974b7526dbb18a043a62d1606b80 -->\nAI Security Agent nêu 3 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

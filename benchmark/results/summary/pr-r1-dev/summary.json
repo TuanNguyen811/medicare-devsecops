@@ -1,0 +1,245 @@
+{
+  "C1": {
+    "reps": 1,
+    "per_rep": [
+      {
+        "rep": 1,
+        "view": "strict",
+        "tp": 3,
+        "fp": 13,
+        "fn": 2,
+        "precision": 0.1875,
+        "recall": 0.6,
+        "f1": 0.2857142857142857
+      },
+      {
+        "rep": 1,
+        "view": "lenient",
+        "tp": 3,
+        "fp": 13,
+        "fn": 2,
+        "precision": 0.1875,
+        "recall": 0.6,
+        "f1": 0.2857142857142857
+      }
+    ],
+    "recall_by_group": {
+      "category:logic": [
+        0.0,
+        2
+      ],
+      "category:pattern": [
+        1.0,
+        3
+      ],
+      "measured:neither": [
+        0.0,
+        2
+      ],
+      "measured:sast_sca": [
+        1.0,
+        3
+      ]
+    },
+    "fp_on_clean": [
+      1
+    ],
+    "vuln_blocked": 2,
+    "vuln_total": 4,
+    "clean_passed": 1,
+    "clean_total": 2,
+    "detection": {
+      "S01-1": [
+        1,
+        1
+      ],
+      "S07-1": [
+        0,
+        1
+      ],
+      "S10-1": [
+        1,
+        1
+      ],
+      "S10-2": [
+        1,
+        1
+      ],
+      "S14-1": [
+        0,
+        1
+      ]
+    },
+    "failed_runs": 0,
+    "degraded_runs": 0,
+    "known": 0,
+    "fp_old": 9,
+    "needs_review": 0
+  },
+  "C1+DAST": {
+    "reps": 1,
+    "per_rep": [
+      {
+        "rep": 1,
+        "view": "strict",
+        "tp": 3,
+        "fp": 13,
+        "fn": 2,
+        "precision": 0.1875,
+        "recall": 0.6,
+        "f1": 0.2857142857142857
+      },
+      {
+        "rep": 1,
+        "view": "lenient",
+        "tp": 3,
+        "fp": 13,
+        "fn": 2,
+        "precision": 0.1875,
+        "recall": 0.6,
+        "f1": 0.2857142857142857
+      }
+    ],
+    "recall_by_group": {
+      "category:logic": [
+        0.0,
+        2
+      ],
+      "category:pattern": [
+        1.0,
+        3
+      ],
+      "measured:neither": [
+        0.0,
+        2
+      ],
+      "measured:sast_sca": [
+        1.0,
+        3
+      ]
+    },
+    "fp_on_clean": [
+      1
+    ],
+    "vuln_blocked": 2,
+    "vuln_total": 4,
+    "clean_passed": 1,
+    "clean_total": 2,
+    "detection": {
+      "S01-1": [
+        1,
+        1
+      ],
+      "S07-1": [
+        0,
+        1
+      ],
+      "S10-1": [
+        1,
+        1
+      ],
+      "S10-2": [
+        1,
+        1
+      ],
+      "S14-1": [
+        0,
+        1
+      ]
+    },
+    "failed_runs": 0,
+    "degraded_runs": 0,
+    "known": 59,
+    "fp_old": 9,
+    "needs_review": 0
+  },
+  "C2": {
+    "reps": 1,
+    "per_rep": [
+      {
+        "rep": 1,
+        "view": "strict",
+        "tp": 5,
+        "fp": 3,
+        "fn": 0,
+        "precision": 0.625,
+        "recall": 1.0,
+        "f1": 0.7692307692307693
+      },
+      {
+        "rep": 1,
+        "view": "lenient",
+        "tp": 5,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.8333333333333334,
+        "recall": 1.0,
+        "f1": 0.9090909090909091
+      }
+    ],
+    "recall_by_group": {
+      "category:logic": [
+        1.0,
+        2
+      ],
+      "category:pattern": [
+        1.0,
+        3
+      ],
+      "measured:neither": [
+        1.0,
+        2
+      ],
+      "measured:sast_sca": [
+        1.0,
+        3
+      ]
+    },
+    "fp_on_clean": [
+      0
+    ],
+    "vuln_blocked": 4,
+    "vuln_total": 4,
+    "clean_passed": 2,
+    "clean_total": 2,
+    "detection": {
+      "S01-1": [
+        1,
+        1
+      ],
+      "S07-1": [
+        1,
+        1
+      ],
+      "S10-1": [
+        1,
+        1
+      ],
+      "S10-2": [
+        1,
+        1
+      ],
+      "S14-1": [
+        1,
+        1
+      ]
+    },
+    "failed_runs": 0,
+    "degraded_runs": 0,
+    "known": 59,
+    "fp_old": 0,
+    "needs_review": 2,
+    "cost": {
+      "duration_s": 64.865,
+      "wall_s": 64.865,
+      "llm_calls": 29.5,
+      "tool_calls": 19.5,
+      "tokens_in": 122801.16666666667,
+      "tokens_out": 10022.5,
+      "cost_usd": 0.20607133333333333
+    },
+    "model": [
+      "claude-mcp/claude-sonnet-5-5"
+    ]
+  }
+}

@@ -1,0 +1,285 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T16:35:46+00:00",
+    "duration_s": 38.59,
+    "llm_calls": 16,
+    "tool_calls": 15,
+    "tokens_in": 84985,
+    "tokens_out": 5623,
+    "cost_usd": 0.130928,
+    "step_limit": 40,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Fail-open trong get_current_user: shift không hợp lệ vô hiệu hóa kiểm tra session",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "tool_severity": null,
+      "cwe": "CWE-636",
+      "owasp": "A10",
+      "violated_rule": "R-08",
+      "reasoning": "`login` nhận `shift` từ form không validate và `start_session` lưu thẳng vào session. `_max_age` dùng `SHIFT_MAX_AGE[...]` nên giá trị lạ (ví dụ \"x\") gây KeyError. Lỗi này nằm trong `_session_user`, bị `except Exception` trong `get_current_user` bắt, và nhánh fallback lấy user từ session mà không kiểm tra hạn tuyệt đối (iat), `session_version` hay `is_active`. Kết quả: session không bao giờ hết hạn, không bị thu hồi (revoke_sessions, đổi mật khẩu, khóa tài khoản đều vô hiệu), và người dùng bị khóa vẫn truy cập được.",
+      "evidence": [
+        {
+          "file": "app/medicare/common/auth.py",
+          "start_line": 88,
+          "end_line": 92,
+          "snippet": "def _max_age(request: Request) -> int:\n    shift_age = SHIFT_MAX_AGE[request.session.get(\"shift\", DEFAULT_SHIFT)]"
+        },
+        {
+          "file": "app/medicare/common/auth.py",
+          "start_line": 112,
+          "end_line": 121,
+          "snippet": "    except Exception as exc:  # noqa: BLE001"
+        }
+      ],
+      "exploit_scenario": "Kẻ tấn công (hoặc nhân viên bị thu hồi quyền) đăng nhập với shift=bogus. Mọi request sau đó gây KeyError và đi vào nhánh fallback, nên session sống vĩnh viễn và vẫn hợp lệ sau khi admin khóa tài khoản hoặc tăng session_version. Cookie bị đánh cắp cũng dùng được mãi.",
+      "fix": {
+        "description": "Trong auth/router.py `login` và `start_session`, chỉ chấp nhận shift nằm trong SHIFT_MAX_AGE, giá trị lạ thì dùng DEFAULT_SHIFT hoặc trả lỗi 400. Trong `_max_age` dùng `.get` với mặc định an toàn. Quan trọng nhất: bỏ nhánh fallback fail-open trong `get_current_user`. Khi kiểm tra session lỗi thì xóa session và raise LoginRequired (fail-closed), chỉ log loại lỗi. Cân nhắc giới hạn shift dài cho các vai trò nhân viên được phép."
+      },
+      "file": "app/medicare/common/auth.py",
+      "line": 88
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.85,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có middleware hay cấu hình nào đặt X-Frame-Options hoặc CSP frame-ancestors (main.py chỉ có Session, Metrics, CatchAll middleware). Ứng dụng có thể bị nhúng iframe (clickjacking).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm một middleware security headers trong app/medicare/main.py đặt X-Frame-Options: DENY (hoặc CSP frame-ancestors 'none'), X-Content-Type-Options: nosniff và Content-Security-Policy cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.85,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking nào được đặt ở bất kỳ đâu trong ứng dụng; trang /login có thể bị nhúng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware security headers chung trong app/medicare/main.py để đặt X-Frame-Options: DENY / frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.85,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có mã nào đặt X-Content-Type-Options: nosniff hay CSP (tìm kiếm toàn repo không thấy).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware đặt X-Content-Type-Options: nosniff và CSP cho mọi response trong app/medicare/main.py."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Ứng dụng không đặt Content-Security-Policy ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP chặt (default-src 'self', frame-ancestors 'none') bằng middleware chung trong app/medicare/main.py."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Ứng dụng không đặt Content-Security-Policy ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng cùng middleware security headers để đặt CSP cho mọi response."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Ứng dụng không đặt Content-Security-Policy ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng cùng middleware security headers để đặt CSP cho mọi response."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Ứng dụng không đặt Content-Security-Policy ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng cùng middleware security headers để đặt CSP cho mọi response."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Ứng dụng không đặt Content-Security-Policy ở đâu cả.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng cùng middleware security headers để đặt CSP cho mọi response."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có mã nào đặt X-Content-Type-Options: nosniff.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt X-Content-Type-Options: nosniff trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có mã nào đặt X-Content-Type-Options: nosniff, kể cả cho /health.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Đặt X-Content-Type-Options: nosniff trong middleware security headers áp dụng cho mọi route."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    }
+  ]
+}

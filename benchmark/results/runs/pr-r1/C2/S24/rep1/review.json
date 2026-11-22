@@ -1,0 +1,13 @@
+{
+  "commit_id": "6527fb1e1161749c2cdc9cf4b4b90aed588d3580",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/common/auth.py",
+      "line": 54,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Remember-me token vô hiệu hóa khóa tài khoản, cho phép brute-force mật khẩu không giới hạn\nCWE-307 · vi phạm R-07\n\nauthenticate() bỏ qua kiểm tra locked_until và không tăng failed_login_count khi remembered_device=True. Cờ này chỉ dựa vào việc cookie medicare_remember của request khớp BẤT KỲ token hợp lệ nào (is_remembered_device không gắn với username đang đăng nhập). Kẻ tấn công chỉ cần có tài khoản hợp lệ của chính mình, bật \"ghi nhớ\", rồi gửi cookie đó kèm mọi lần đoán mật khẩu của tài khoản nạn nhân: không bị khóa, không bị đếm. Lỗi này phá vỡ R-07 (khóa 15 phút sau 5 lần sai). Ngoài ra khi tài khoản đang bị khóa, kẻ tấn công vẫn đăng nhập được nếu đoán đúng.\n\n**Đề xuất sửa:** Xóa tham số remembered_device khỏi authenticate() trong app/medicare/common/auth.py và bỏ remember.is_remembered_device trong login (auth/router.py): luôn áp dụng khóa và đếm lần sai theo R-07 cho mọi lần đăng nhập bằng mật khẩu, bất kể cookie remember."
+    }
+  ],
+  "body": "<!-- secagent-review:6527fb1e1161749c2cdc9cf4b4b90aed588d3580 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

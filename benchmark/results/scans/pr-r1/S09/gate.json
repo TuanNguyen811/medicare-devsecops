@@ -1,0 +1,14 @@
+{
+  "C1": {
+    "block": true,
+    "blocking": [
+      "codeql:py/full-ssrf:app/medicare/record/lab.py:37"
+    ]
+  },
+  "C1+DAST": {
+    "block": true,
+    "blocking": [
+      "codeql:py/full-ssrf:app/medicare/record/lab.py:37"
+    ]
+  }
+}

@@ -1,0 +1,548 @@
+{
+  "rows": [
+    {
+      "config": "C1",
+      "scenario": "D01",
+      "kind": "decoy",
+      "split": "dev",
+      "rep": 1,
+      "truths": 0,
+      "tp": [],
+      "fp": 1,
+      "fn": [],
+      "fp_lenient": 1,
+      "known": 0,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": true,
+      "gate_ok": false,
+      "failed": false
+    },
+    {
+      "config": "C1+DAST",
+      "scenario": "D01",
+      "kind": "decoy",
+      "split": "dev",
+      "rep": 1,
+      "truths": 0,
+      "tp": [],
+      "fp": 1,
+      "fn": [],
+      "fp_lenient": 1,
+      "known": 10,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": true,
+      "gate_ok": false,
+      "failed": false
+    },
+    {
+      "config": "C2",
+      "scenario": "D01",
+      "kind": "decoy",
+      "split": "dev",
+      "rep": 1,
+      "truths": 0,
+      "tp": [],
+      "fp": 0,
+      "fn": [],
+      "fp_lenient": 0,
+      "known": 10,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": false,
+      "gate_ok": true,
+      "failed": false,
+      "provider": "claude-mcp",
+      "model": "claude-sonnet-5-5",
+      "duration_s": 58.45,
+      "llm_calls": 26,
+      "tool_calls": 15,
+      "tokens_in": 115827,
+      "tokens_out": 9685,
+      "cost_usd": 0.196269,
+      "limit_hit": false,
+      "degraded": false,
+      "wall_s": 58.45
+    },
+    {
+      "config": "C1",
+      "scenario": "S00",
+      "kind": "baseline",
+      "split": "test",
+      "rep": 1,
+      "truths": 0,
+      "tp": [],
+      "fp": 0,
+      "fn": [],
+      "fp_lenient": 0,
+      "known": 0,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": false,
+      "gate_ok": true,
+      "failed": false
+    },
+    {
+      "config": "C1+DAST",
+      "scenario": "S00",
+      "kind": "baseline",
+      "split": "test",
+      "rep": 1,
+      "truths": 0,
+      "tp": [],
+      "fp": 0,
+      "fn": [],
+      "fp_lenient": 0,
+      "known": 10,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": false,
+      "gate_ok": true,
+      "failed": false
+    },
+    {
+      "config": "C2",
+      "scenario": "S00",
+      "kind": "baseline",
+      "split": "test",
+      "rep": 1,
+      "truths": 0,
+      "tp": [],
+      "fp": 0,
+      "fn": [],
+      "fp_lenient": 0,
+      "known": 10,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": false,
+      "gate_ok": true,
+      "failed": false,
+      "provider": "claude-mcp",
+      "model": "claude-sonnet-5-5",
+      "duration_s": 44.58,
+      "llm_calls": 26,
+      "tool_calls": 15,
+      "tokens_in": 89069,
+      "tokens_out": 7394,
+      "cost_usd": 0.12674,
+      "limit_hit": false,
+      "degraded": false,
+      "wall_s": 44.58
+    },
+    {
+      "config": "C1",
+      "scenario": "S01",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 1,
+      "tp": [
+        "S01-1"
+      ],
+      "fp": 0,
+      "fn": [],
+      "fp_lenient": 0,
+      "known": 0,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": true,
+      "gate_ok": true,
+      "failed": false
+    },
+    {
+      "config": "C1+DAST",
+      "scenario": "S01",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 1,
+      "tp": [
+        "S01-1"
+      ],
+      "fp": 0,
+      "fn": [],
+      "fp_lenient": 0,
+      "known": 9,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": true,
+      "gate_ok": true,
+      "failed": false
+    },
+    {
+      "config": "C2",
+      "scenario": "S01",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 1,
+      "tp": [
+        "S01-1"
+      ],
+      "fp": 0,
+      "fn": [],
+      "fp_lenient": 0,
+      "known": 9,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": true,
+      "gate_ok": true,
+      "failed": false,
+      "provider": "claude-mcp",
+      "model": "claude-sonnet-5-5",
+      "duration_s": 39.41,
+      "llm_calls": 16,
+      "tool_calls": 15,
+      "tokens_in": 82579,
+      "tokens_out": 5547,
+      "cost_usd": 0.126121,
+      "limit_hit": false,
+      "degraded": false,
+      "wall_s": 39.41
+    },
+    {
+      "config": "C1",
+      "scenario": "S07",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 1,
+      "tp": [],
+      "fp": 0,
+      "fn": [
+        "S07-1"
+      ],
+      "fp_lenient": 0,
+      "known": 0,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": false,
+      "gate_ok": false,
+      "failed": false
+    },
+    {
+      "config": "C1+DAST",
+      "scenario": "S07",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 1,
+      "tp": [],
+      "fp": 0,
+      "fn": [
+        "S07-1"
+      ],
+      "fp_lenient": 0,
+      "known": 10,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": false,
+      "gate_ok": false,
+      "failed": false
+    },
+    {
+      "config": "C2",
+      "scenario": "S07",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 1,
+      "tp": [
+        "S07-1"
+      ],
+      "fp": 0,
+      "fn": [],
+      "fp_lenient": 0,
+      "known": 10,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": true,
+      "gate_ok": true,
+      "failed": false,
+      "provider": "claude-mcp",
+      "model": "claude-sonnet-5-5",
+      "duration_s": 58.41,
+      "llm_calls": 26,
+      "tool_calls": 15,
+      "tokens_in": 116870,
+      "tokens_out": 10045,
+      "cost_usd": 0.201461,
+      "limit_hit": false,
+      "degraded": false,
+      "wall_s": 58.41
+    },
+    {
+      "config": "C1",
+      "scenario": "S10",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 2,
+      "tp": [
+        "S10-1",
+        "S10-2"
+      ],
+      "fp": 11,
+      "fn": [],
+      "fp_lenient": 11,
+      "known": 0,
+      "needs_review": 0,
+      "fp_old": 9,
+      "blocked": true,
+      "gate_ok": true,
+      "failed": false
+    },
+    {
+      "config": "C1+DAST",
+      "scenario": "S10",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 2,
+      "tp": [
+        "S10-1",
+        "S10-2"
+      ],
+      "fp": 11,
+      "fn": [],
+      "fp_lenient": 11,
+      "known": 10,
+      "needs_review": 0,
+      "fp_old": 9,
+      "blocked": true,
+      "gate_ok": true,
+      "failed": false
+    },
+    {
+      "config": "C2",
+      "scenario": "S10",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 2,
+      "tp": [
+        "S10-1",
+        "S10-2"
+      ],
+      "fp": 3,
+      "fn": [],
+      "fp_lenient": 1,
+      "known": 10,
+      "needs_review": 2,
+      "fp_old": 0,
+      "blocked": true,
+      "gate_ok": true,
+      "failed": false,
+      "provider": "claude-mcp",
+      "model": "claude-sonnet-5-5",
+      "duration_s": 137.36,
+      "llm_calls": 52,
+      "tool_calls": 38,
+      "tokens_in": 204363,
+      "tokens_out": 19130,
+      "cost_usd": 0.398188,
+      "limit_hit": false,
+      "degraded": false,
+      "wall_s": 137.36
+    },
+    {
+      "config": "C1",
+      "scenario": "S14",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 1,
+      "tp": [],
+      "fp": 1,
+      "fn": [
+        "S14-1"
+      ],
+      "fp_lenient": 1,
+      "known": 0,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": false,
+      "gate_ok": false,
+      "failed": false
+    },
+    {
+      "config": "C1+DAST",
+      "scenario": "S14",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 1,
+      "tp": [],
+      "fp": 1,
+      "fn": [
+        "S14-1"
+      ],
+      "fp_lenient": 1,
+      "known": 10,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": false,
+      "gate_ok": false,
+      "failed": false
+    },
+    {
+      "config": "C2",
+      "scenario": "S14",
+      "kind": "vuln",
+      "split": "dev",
+      "rep": 1,
+      "truths": 1,
+      "tp": [
+        "S14-1"
+      ],
+      "fp": 0,
+      "fn": [],
+      "fp_lenient": 0,
+      "known": 10,
+      "needs_review": 0,
+      "fp_old": 0,
+      "blocked": true,
+      "gate_ok": true,
+      "failed": false,
+      "provider": "claude-mcp",
+      "model": "claude-sonnet-5-5",
+      "duration_s": 50.98,
+      "llm_calls": 31,
+      "tool_calls": 19,
+      "tokens_in": 128099,
+      "tokens_out": 8334,
+      "cost_usd": 0.187649,
+      "limit_hit": false,
+      "degraded": false,
+      "wall_s": 50.98
+    }
+  ],
+  "truths": {
+    "D01": [],
+    "S00": [],
+    "S01": [
+      {
+        "id": "S01-1",
+        "scenario": "S01",
+        "title": "SQL injection qua tham số địa chỉ (area) ghép vào text()",
+        "category": "pattern",
+        "cwes": [
+          "CWE-89"
+        ],
+        "file": "app/medicare/patient/service.py",
+        "start": 79,
+        "end": 80,
+        "routes": [
+          "GET /patients/search"
+        ],
+        "rules": [],
+        "violated_rules": [],
+        "also": []
+      }
+    ],
+    "S07": [
+      {
+        "id": "S07-1",
+        "scenario": "S07",
+        "title": "Tỷ lệ BHYT chi trả lấy từ form do client gửi, không tính từ mã thẻ",
+        "category": "logic",
+        "cwes": [
+          "CWE-20",
+          "CWE-472",
+          "CWE-602",
+          "CWE-840"
+        ],
+        "file": "app/medicare/billing/router.py",
+        "start": 100,
+        "end": 117,
+        "routes": [
+          "POST /invoices/{invoice_id}/coverage"
+        ],
+        "rules": [],
+        "violated_rules": [
+          "R-04",
+          "R-17"
+        ],
+        "also": []
+      }
+    ],
+    "S10": [
+      {
+        "id": "S10-1",
+        "scenario": "S10",
+        "title": "CronJob sao lưu chạy container bằng root (runAsUser 0)",
+        "category": "pattern",
+        "cwes": [
+          "CWE-250",
+          "CWE-269"
+        ],
+        "file": "infra/k8s/backup-cronjob.yaml",
+        "start": 3,
+        "end": 30,
+        "routes": [],
+        "rules": [
+          "CKV_K8S_23",
+          "CKV_K8S_40"
+        ],
+        "violated_rules": [],
+        "also": []
+      },
+      {
+        "id": "S10-2",
+        "scenario": "S10",
+        "title": "Bucket chứa bản sao lưu CSDL cho phép đọc công khai (Principal *)",
+        "category": "pattern",
+        "cwes": [
+          "CWE-200",
+          "CWE-284",
+          "CWE-668",
+          "CWE-732"
+        ],
+        "file": "infra/terraform/main.tf",
+        "start": 320,
+        "end": 401,
+        "routes": [],
+        "rules": [
+          "CKV2_AWS_6",
+          "CKV_AWS_145",
+          "CKV_AWS_54",
+          "CKV_AWS_56"
+        ],
+        "violated_rules": [],
+        "also": []
+      }
+    ],
+    "S14": [
+      {
+        "id": "S14-1",
+        "scenario": "S14",
+        "title": "Kê đơn nhanh chỉ kiểm tra quyền xem bệnh án, y tá và bác sĩ không phụ trách kê được đơn",
+        "category": "logic",
+        "cwes": [
+          "CWE-285",
+          "CWE-863"
+        ],
+        "file": "app/medicare/prescription/service.py",
+        "start": 64,
+        "end": 73,
+        "routes": [
+          "POST /records/{record_id}/prescriptions/quick"
+        ],
+        "rules": [],
+        "violated_rules": [
+          "R-03"
+        ],
+        "also": []
+      }
+    ]
+  },
+  "agent_versions": {
+    "C2": [
+      [
+        "7c014a964c5f229ced789bf8e23c00265f2fc06d",
+        false
+      ]
+    ]
+  }
+}
