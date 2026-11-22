@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from medicare.auth.models import User
+from medicare.auth.schemas import ProfileForm
 from medicare.common import metrics
 from medicare.common.auth import (
     authenticate,
@@ -63,6 +65,32 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
 @router.get("/")
 def home(request: Request, user: User = Depends(get_current_user)) -> Response:
     return render(request, "home.html", {"breadcrumbs": []})
+
+
+@router.get("/account/profile")
+def profile_form(request: Request, user: User = Depends(get_current_user)) -> Response:
+    return render(request, "profile.html", _profile_ctx(user))
+
+
+@router.post("/account/profile", dependencies=[Depends(verify_csrf)])
+def update_profile(
+    request: Request,
+    form: Annotated[ProfileForm, Form()],
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    for field, value in form.model_dump(exclude={"csrf_token"}).items():
+        setattr(user, field, value)
+    db.commit()
+    flash(request, "Đã cập nhật thông tin cá nhân")
+    return RedirectResponse("/account/profile", status_code=303)
+
+
+def _profile_ctx(user: User) -> dict:
+    return {
+        "values": {"full_name": user.full_name, "phone": user.phone or ""},
+        "breadcrumbs": [("Trang chủ", "/"), ("Thông tin cá nhân", None)],
+    }
 
 
 @router.get("/account/password")

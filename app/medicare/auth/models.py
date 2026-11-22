@@ -23,6 +23,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(100))
+    phone: Mapped[str | None] = mapped_column(String(20))
     role: Mapped[Role] = mapped_column(str_enum(Role, "role"))
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"))
     # use_alter: users and patients reference each other (patients.attending_doctor_id).
