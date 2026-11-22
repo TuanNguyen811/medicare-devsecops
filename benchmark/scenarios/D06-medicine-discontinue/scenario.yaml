@@ -3,3 +3,7 @@ title: Ngừng sử dụng thuốc trong danh mục
 split: test
 kind: decoy
 commit_message: Quản trị viên ngừng sử dụng hoặc dùng lại thuốc trong danh mục thuốc
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được trên PR benchmark (đo, không đoán)
+  scan: pr-r1
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

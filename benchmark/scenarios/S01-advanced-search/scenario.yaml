@@ -3,7 +3,7 @@ title: Tìm kiếm bệnh nhân nâng cao
 split: dev
 kind: vuln
 commit_message: Thêm trang tìm kiếm bệnh nhân nâng cao theo số điện thoại, địa chỉ, năm sinh và khoa
-measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
-  scan_run: 45008007877
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được trên PR benchmark (đo, không đoán)
+  scan: pr-r1
   sast_sca: [S01-1]
   dast: []  # chỉ DAST bắt, SAST/SCA không bắt

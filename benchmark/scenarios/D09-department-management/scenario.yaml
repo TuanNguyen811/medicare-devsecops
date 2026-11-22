@@ -3,3 +3,7 @@ title: Quản lý danh mục khoa
 split: test
 kind: decoy
 commit_message: Trang quản trị danh mục khoa, thêm khoa mới và sửa tên, mô tả khoa
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được trên PR benchmark (đo, không đoán)
+  scan: pr-r1
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

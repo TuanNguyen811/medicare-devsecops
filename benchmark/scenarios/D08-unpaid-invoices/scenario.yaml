@@ -3,3 +3,7 @@ title: Hóa đơn chưa thanh toán theo khoảng ngày
 split: test
 kind: decoy
 commit_message: Thêm trang hóa đơn chưa thanh toán lọc theo ngày lập, kèm tổng số tiền còn phải thu
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được trên PR benchmark (đo, không đoán)
+  scan: pr-r1
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

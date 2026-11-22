@@ -3,7 +3,7 @@ title: Mẫu in phiếu khám tùy chỉnh
 split: test
 kind: vuln
 commit_message: Bác sĩ tự thiết kế mẫu in phiếu khám (HTML có chèn biến)
-measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
-  scan_run: 45016434867
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được trên PR benchmark (đo, không đoán)
+  scan: pr-r1
   sast_sca: []
   dast: []  # chỉ DAST bắt, SAST/SCA không bắt

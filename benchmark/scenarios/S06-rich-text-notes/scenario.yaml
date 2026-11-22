@@ -3,7 +3,7 @@ title: Ghi chú bác sĩ dạng rich text
 split: test
 kind: vuln
 commit_message: Ghi chú bác sĩ có định dạng (đậm, nghiêng, danh sách) trên phiếu khám
-measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
-  scan_run: 45016434867
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được trên PR benchmark (đo, không đoán)
+  scan: pr-r1
   sast_sca: [S06-1]
   dast: []  # chỉ DAST bắt, SAST/SCA không bắt
