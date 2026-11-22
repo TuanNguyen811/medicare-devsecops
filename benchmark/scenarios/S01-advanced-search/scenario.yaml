@@ -1,0 +1,5 @@
+id: S01
+title: Tìm kiếm bệnh nhân nâng cao
+split: dev
+kind: vuln
+commit_message: Thêm trang tìm kiếm bệnh nhân nâng cao theo số điện thoại, địa chỉ, năm sinh và khoa

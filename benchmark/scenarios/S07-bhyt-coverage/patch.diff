@@ -1,0 +1,163 @@
+diff --git a/app/medicare/billing/router.py b/app/medicare/billing/router.py
+index 8b9a485..e8c3498 100644
+--- a/app/medicare/billing/router.py
++++ b/app/medicare/billing/router.py
+@@ -1,11 +1,15 @@
+-from fastapi import APIRouter, Depends, Request
++from decimal import Decimal, InvalidOperation
++
++from fastapi import APIRouter, Depends, Form, Request
+ from fastapi.responses import RedirectResponse, Response
+ from sqlalchemy.orm import Session
+ 
+ from medicare.auth.models import Role, User
+ from medicare.billing import service
++from medicare.billing.models import InvoiceStatus
+ from medicare.common.auth import get_current_user, require_roles
+ from medicare.common.csrf import verify_csrf
++from medicare.common.errors import Conflict
+ from medicare.common.ids import ObjectId
+ from medicare.common.templating import flash, render
+ from medicare.db import get_db
+@@ -16,6 +20,13 @@ receptionist_user = require_roles(Role.RECEPTIONIST)
+ invoice_reader = require_roles(Role.RECEPTIONIST, Role.ADMIN, Role.PATIENT)
+ 
+ STATUS_LABELS = {"UNPAID": ("Chưa thanh toán", "warning"), "PAID": ("Đã thanh toán", "success")}
++COVERAGE_CHOICES = [
++    ("1.00", "100% (mức 1, 2, 5)"),
++    ("0.95", "95% (mức 3)"),
++    ("0.80", "80% (mức 4)"),
++    ("0.40", "40% (trái tuyến, nội trú tuyến tỉnh)"),
++    ("0.00", "Không hưởng BHYT"),
++]
+ 
+ 
+ @router.post("/records/{record_id}/invoice", dependencies=[Depends(verify_csrf)])
+@@ -61,6 +72,7 @@ def invoice_detail(
+         "exam_fee": service.EXAM_FEE,
+         "drug_cost": invoice.total_amount - service.EXAM_FEE,
+         "can_pay": user.role == Role.RECEPTIONIST,
++        "coverage_choices": COVERAGE_CHOICES,
+         "status_labels": STATUS_LABELS,
+         "breadcrumbs": [("Trang chủ", "/"), ("Hóa đơn", "/invoices"),
+                         (f"Hóa đơn #{invoice.id}", None)],
+@@ -79,3 +91,30 @@ def pay_invoice(
+     db.commit()
+     flash(request, f"Đã thu tiền hóa đơn #{invoice.id}")
+     return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
++
++
++@router.post("/invoices/{invoice_id}/coverage", dependencies=[Depends(verify_csrf)])
++def adjust_coverage(
++    request: Request,
++    invoice_id: ObjectId,
++    coverage_rate: str = Form(""),
++    user: User = Depends(receptionist_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    """Re-split an unpaid invoice when the patient's BHYT benefit level changes at the desk."""
++    invoice = service.get_invoice_for(db, user, invoice_id)
++    if invoice.status != InvoiceStatus.UNPAID:
++        raise Conflict("Hóa đơn đã được thanh toán")
++    try:
++        rate = Decimal(coverage_rate).quantize(Decimal("0.01"))
++    except InvalidOperation:
++        raise Conflict("Mức hưởng BHYT không hợp lệ") from None
++    if not rate.is_finite() or not Decimal(0) <= rate <= Decimal(1):
++        raise Conflict("Mức hưởng BHYT không hợp lệ")
++    invoice.coverage_rate = rate
++    invoice.insurance_amount, invoice.patient_amount = service.compute_amounts(
++        invoice.total_amount, rate
++    )
++    db.commit()
++    flash(request, f"Đã cập nhật mức hưởng BHYT cho hóa đơn #{invoice.id}")
++    return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
+diff --git a/app/medicare/templates/billing/detail.html b/app/medicare/templates/billing/detail.html
+index f0a1332..96661a9 100644
+--- a/app/medicare/templates/billing/detail.html
++++ b/app/medicare/templates/billing/detail.html
+@@ -24,4 +24,23 @@
+   </table>
+   <div class="card-footer small text-secondary">Lập lúc {{ invoice.created_at | datetime_vn }}. Tỷ lệ BHYT được hệ thống tính theo mã thẻ.</div>
+ </div>
++{% if can_pay and invoice.status.value == "UNPAID" %}
++<div class="card mc-card mt-3" style="max-width: 640px;">
++  <div class="card-header">Điều chỉnh mức hưởng BHYT</div>
++  <div class="card-body">
++    <form class="row g-2 align-items-center" method="post" action="/invoices/{{ invoice.id }}/coverage">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <div class="col-sm-8">
++        <select class="form-select form-select-sm" name="coverage_rate">
++          {% for value, label in coverage_choices %}
++          <option value="{{ value }}"{% if "%.2f" | format(invoice.coverage_rate) == value %} selected{% endif %}>{{ label }}</option>
++          {% endfor %}
++        </select>
++      </div>
++      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit">Cập nhật</button></div>
++    </form>
++    <div class="form-text">Dùng khi người bệnh xuất trình giấy chuyển tuyến hoặc khám trái tuyến.</div>
++  </div>
++</div>
++{% endif %}
+ {% endblock %}
+diff --git a/app/tests/test_billing.py b/app/tests/test_billing.py
+index 365b51c..469f927 100644
+--- a/app/tests/test_billing.py
++++ b/app/tests/test_billing.py
+@@ -5,6 +5,7 @@ from sqlalchemy import select
+ 
+ from medicare.audit.models import AuditLog
+ from medicare.auth.models import Role
++from medicare.billing import service as billing_service
+ from medicare.billing.models import Invoice, InvoiceStatus
+ from medicare.prescription.models import Prescription, PrescriptionItem
+ from tests.conftest import csrf_token, login
+@@ -167,3 +168,48 @@ def test_patient_cannot_mark_paid(client, db):
+     login(client, make_user(db, Role.PATIENT, patient=me))
+     r = client.post(f"/invoices/{inv.id}/pay", data={"csrf_token": csrf_token(client, "/")})
+     assert r.status_code == 403
++
++
++def adjust(client, inv, rate):
++    data = {"coverage_rate": rate, "csrf_token": csrf_token(client, f"/invoices/{inv.id}")}
++    return client.post(f"/invoices/{inv.id}/coverage", data=data, follow_redirects=False)
++
++
++def test_reception_adjusts_coverage_of_unpaid_invoice(client, db):
++    _, record = visit(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    create_invoice(client, record)
++    inv = invoice_of(db, record)
++    assert adjust(client, inv, "0.40").status_code == 303
++    db.refresh(inv)
++    assert (inv.coverage_rate, inv.insurance_amount, inv.patient_amount) == (
++        Decimal("0.40"), Decimal(92000), Decimal(138000))
++
++
++def test_coverage_of_paid_invoice_is_locked(client, db):
++    _, record = visit(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    create_invoice(client, record)
++    inv = invoice_of(db, record)
++    inv.status = InvoiceStatus.PAID
++    db.flush()
++    assert adjust(client, inv, "1.00").status_code == 409
++
++
++def test_coverage_rate_out_of_range_is_rejected(client, db):
++    _, record = visit(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    create_invoice(client, record)
++    inv = invoice_of(db, record)
++    assert adjust(client, inv, "1.5").status_code == 409
++    assert adjust(client, inv, "abc").status_code == 409
++
++
++def test_patient_cannot_adjust_coverage(client, db):
++    patient, record = visit(db)
++    inv = billing_service.create_invoice(db, make_user(db, Role.RECEPTIONIST), record.id)
++    login(client, make_user(db, Role.PATIENT, patient=patient))
++    r = client.post(f"/invoices/{inv.id}/coverage",
++                    data={"coverage_rate": "1.00", "csrf_token": csrf_token(client, "/invoices")},
++                    follow_redirects=False)
++    assert r.status_code == 403

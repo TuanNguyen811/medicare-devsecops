@@ -1,0 +1,11 @@
+findings:
+  - id: S07-1
+    title: Tỷ lệ BHYT chi trả lấy từ form do client gửi, không tính từ mã thẻ
+    category: logic
+    severity: high
+    cwe: [CWE-602, CWE-472, CWE-840, CWE-20]
+    file: app/medicare/billing/router.py
+    lines: [100, 117]
+    routes: ["POST /invoices/{invoice_id}/coverage"]
+    rules: []
+    violated_rule: [R-04, R-17]

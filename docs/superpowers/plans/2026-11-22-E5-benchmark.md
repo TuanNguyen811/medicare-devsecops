@@ -51,7 +51,7 @@
   - tìm ra CWE-639, vi phạm R-02, có kèm bản vá;
   - model dùng `read_file`, `find_callers`, `report_finding`;
   - 19 giây, khoảng 0,07 USD quy đổi.
-- [ ] Review toàn nhánh (Opus), PR, label, merge.
+- [x] Review toàn nhánh (Opus), PR, label, merge (PR #13).
 
 ## Bước 2b: Bộ công cụ benchmark
 - [x] **2b-1 (PR #14):** `benchmark/scenario.py` dựng kịch bản tất định, và `.github/workflows/benchmark-scan.yml`.
@@ -75,7 +75,7 @@
   - **Timeout:** giết cả cây tiến trình.
   - **Kiểm chứng bản vá:** chạy trong khóa git.
   - **Log:** không chứa đường dẫn máy.
-- [ ] PR.
+- [x] PR #14, PR #15.
 
 ## Bước 3: Tập dev và chốt prompt
 - [ ] S01, S07, S10, S14, D1: patch và đáp án; áp sạch lên `v0.3-baseline`; test của app vẫn đạt (trừ khi lỗi cài vào cố ý làm hỏng test).

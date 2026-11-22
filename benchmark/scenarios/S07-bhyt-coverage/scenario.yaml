@@ -1,0 +1,5 @@
+id: S07
+title: Điều chỉnh mức hưởng BHYT trên hóa đơn
+split: dev
+kind: vuln
+commit_message: "Thanh toán BHYT: lễ tân điều chỉnh mức hưởng khi người bệnh xuất trình giấy chuyển tuyến"

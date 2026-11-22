@@ -1,0 +1,147 @@
+diff --git a/app/medicare/patient/router.py b/app/medicare/patient/router.py
+index 00439e7..d949bcb 100644
+--- a/app/medicare/patient/router.py
++++ b/app/medicare/patient/router.py
+@@ -68,10 +68,14 @@ def _submitted(full_name, date_of_birth, gender, national_id, insurance_number,
+ def list_patients(
+     request: Request,
+     q: str | None = None,
++    year: str = "",
++    year_field: str = "dob",
+     user: User = Depends(staff_user),
+     db: Session = Depends(get_db),
+ ) -> Response:
+-    patients = service.search_patients(db, user, q)
++    year = year.strip()
++    year_value = int(year) if year.isascii() and year.isdigit() and len(year) == 4 else None
++    patients = service.search_patients(db, user, q, year=year_value, year_field=year_field)
+     rows = [(p, _identifiers(user, p)) for p in patients]
+     return render(
+         request,
+@@ -79,6 +83,8 @@ def list_patients(
+         {
+             "rows": rows,
+             "q": q or "",
++            "year": year_value or "",
++            "year_field": year_field if year_field in service.YEAR_FIELDS else "dob",
+             "can_create": policy.can_edit_patient(user),
+             "breadcrumbs": [("Trang chủ", "/"), ("Bệnh nhân", None)],
+         },
+diff --git a/app/medicare/patient/service.py b/app/medicare/patient/service.py
+index 226150e..84a7bbb 100644
+--- a/app/medicare/patient/service.py
++++ b/app/medicare/patient/service.py
+@@ -1,6 +1,6 @@
+ import secrets
+ 
+-from sqlalchemy import false, or_, select
++from sqlalchemy import false, or_, select, text
+ from sqlalchemy.exc import IntegrityError
+ from sqlalchemy.orm import Session
+ 
+@@ -13,6 +13,8 @@ from medicare.patient.models import Patient
+ from medicare.patient.schemas import PatientForm
+ 
+ SEARCH_LIMIT = 50
++# Year filters offered on the patient list: form value -> column of the patients table.
++YEAR_FIELDS = {"dob": "date_of_birth", "admitted": "created_at"}
+ 
+ 
+ class PatientDataError(ValueError):
+@@ -44,7 +46,14 @@ def _scope_filter(user: User):
+     return or_(*conditions) if conditions else false()
+ 
+ 
+-def search_patients(db: Session, user: User, q: str | None) -> list[Patient]:
++def search_patients(
++    db: Session,
++    user: User,
++    q: str | None,
++    *,
++    year: int | None = None,
++    year_field: str = "dob",
++) -> list[Patient]:
+     stmt = select(Patient).order_by(Patient.code).limit(SEARCH_LIMIT)
+     scope = _scope_filter(user)
+     if scope is not None:
+@@ -57,6 +66,11 @@ def search_patients(db: Session, user: User, q: str | None) -> list[Patient]:
+                 Patient.full_name.icontains(term, autoescape=True),
+             )
+         )
++    if year is not None:
++        column = YEAR_FIELDS.get(year_field, YEAR_FIELDS["dob"])
++        stmt = stmt.where(
++            text(f"EXTRACT(YEAR FROM patients.{column}) = :year").bindparams(year=year)
++        )
+     return list(db.scalars(stmt).unique())
+ 
+ 
+diff --git a/app/medicare/templates/patient/list.html b/app/medicare/templates/patient/list.html
+index eea04ab..5c520da 100644
+--- a/app/medicare/templates/patient/list.html
++++ b/app/medicare/templates/patient/list.html
+@@ -11,6 +11,15 @@
+       <div class="col-sm-6 col-lg-4">
+         <input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" maxlength="100" placeholder="Tìm theo mã hoặc họ tên">
+       </div>
++      <div class="col-auto">
++        <select class="form-select form-select-sm" name="year_field" aria-label="Lọc theo năm">
++          <option value="dob"{% if year_field == "dob" %} selected{% endif %}>Năm sinh</option>
++          <option value="admitted"{% if year_field == "admitted" %} selected{% endif %}>Năm tiếp nhận</option>
++        </select>
++      </div>
++      <div class="col-auto" style="max-width: 110px;">
++        <input class="form-control form-control-sm" type="number" name="year" value="{{ year }}" min="1900" max="2100" placeholder="Năm">
++      </div>
+       <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-search"></i> Tìm</button></div>
+     </form>
+   </div>
+diff --git a/app/tests/test_patient.py b/app/tests/test_patient.py
+index 2180878..a8b51df 100644
+--- a/app/tests/test_patient.py
++++ b/app/tests/test_patient.py
+@@ -1,3 +1,5 @@
++from datetime import date
++
+ from sqlalchemy import select
+ 
+ from medicare.auth.models import Role
+@@ -195,3 +197,38 @@ def test_me_shows_own_profile(client, db):
+     login(client, make_user(db, Role.PATIENT, patient=me))
+     r = client.get("/me")
+     assert r.status_code == 200 and me.code in r.text and me.national_id in r.text
++
++
++def test_filter_by_birth_year(client, db):
++    old = make_patient(db)
++    young = make_patient(db)
++    young.date_of_birth = date(2001, 5, 20)
++    db.flush()
++    login(client, make_user(db, Role.RECEPTIONIST))
++    html = client.get("/patients", params={"year": "2001"}).text
++    assert young.code in html and old.code not in html
++
++
++def test_filter_by_admission_year(client, db):
++    p = make_patient(db)
++    db.refresh(p)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    this_year = str(p.created_at.year)
++    html = client.get("/patients", params={"year": this_year, "year_field": "admitted"}).text
++    assert p.code in html
++    html = client.get("/patients", params={"year": "1990", "year_field": "admitted"}).text
++    assert p.code not in html
++
++
++def test_unknown_year_field_falls_back_to_birth_year(client, db):
++    p = make_patient(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    r = client.get("/patients", params={"year": "1990", "year_field": "discharged"})
++    assert r.status_code == 200 and p.code in r.text
++
++
++def test_invalid_year_is_ignored(client, db):
++    p = make_patient(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    r = client.get("/patients", params={"year": "90"})
++    assert r.status_code == 200 and p.code in r.text

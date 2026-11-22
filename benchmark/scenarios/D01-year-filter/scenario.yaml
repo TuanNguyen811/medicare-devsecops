@@ -1,0 +1,5 @@
+id: D01
+title: Lọc danh sách bệnh nhân theo năm
+split: dev
+kind: decoy
+commit_message: Lọc danh sách bệnh nhân theo năm sinh hoặc năm tiếp nhận
