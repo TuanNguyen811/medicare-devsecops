@@ -7,8 +7,9 @@
 ## 0. Vì sao bổ sung
 
 1. **`secagent` cần một LLM.** Ngoài các chế độ gọi API bằng key (`anthropic`, `openai`, `gemini`), `secagent` có thêm chế độ **`claude-mcp`**: dùng Claude Code đã đăng nhập trên máy làm LLM, không cần API key. Benchmark chạy bằng chế độ này (gói Claude Max 5x).
-   - `claude-mcp` **chỉ chạy trên máy.** Thông tin đăng nhập không bao giờ đặt trên GitHub, và nội dung PR không điều khiển được một tiến trình có tài khoản của người dùng.
+   - `claude-mcp` **chỉ chạy trên máy.** Thông tin đăng nhập không bao giờ đặt trên GitHub. Nội dung PR chỉ đến được phiên Claude dưới dạng dữ liệu, qua các công cụ chỉ đọc của `secagent`: không chạy được lệnh, nhưng prompt injection vẫn có thể làm lệch kết luận và tốn hạn mức.
    - Trên CI, `secagent` dùng các chế độ có key (`LLM_API_KEY`). Chưa có key thì gate dùng chế độ truyền thống (fail-safe).
+   - Với biến repo `LLM_PROVIDER=claude-mcp`, job `ai-security-agent` không gọi LLM mà chờ report do người review chạy trên máy và đăng lên PR (`security/handoff/`, mô tả ở `docs/pipeline.md`). Job chỉ nhận comment chưa bị sửa của tài khoản `AGENT_REPORT_AUTHOR` cho đúng commit HEAD; khi chính người đó mở PR, chế độ này không phải lớp kiểm soát độc lập. Claude Code vẫn chỉ chạy trên máy, chỉ với các công cụ chỉ đọc của `secagent`.
 2. **Đồ án thiếu phân tích động (DAST)** và **thiếu phần Ops** (deploy thật, kiểm soát chuỗi cung ứng, giám sát). Spec gốc để DAST ngoài phạm vi. Giờ đưa vào để luồng DevSecOps khép kín như thực tế: code → PR → build → ký → deploy → giám sát.
 3. **Benchmark cần nhiều kịch bản lỗi logic hơn**, vì đây là nhóm lỗi công cụ quét và DAST đều không bắt được, cũng là lý do tồn tại của AI Agent.
 

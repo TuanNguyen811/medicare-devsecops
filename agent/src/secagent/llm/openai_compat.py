@@ -58,7 +58,8 @@ class OpenAIChatClient:
             raise LLMError("phản hồi rỗng (không có choices)")
         message = response.choices[0].message
         calls = [ToolCall(c.id or f"call_{index}", c.function.name or "",
-                          c.function.arguments or "{}")
+                          c.function.arguments or "{}",
+                          getattr(c, "extra_content", None) or None)
                  for index, c in enumerate(message.tool_calls or [])
                  if getattr(c, "function", None)]
         usage = response.usage

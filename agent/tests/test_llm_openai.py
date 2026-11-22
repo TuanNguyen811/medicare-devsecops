@@ -65,6 +65,22 @@ def test_complete_parses_tool_calls_and_usage():
                                         "tool_calls": [call]}
 
 
+def test_gemini_thought_signature_is_echoed_back():
+    """Gemini 3 rejects (HTTP 400) a tool-call turn sent back without its thought signature."""
+    extra = {"google": {"thought_signature": "c2lnbmF0dXJl"}}
+    call = {"id": "call_1", "type": "function", "extra_content": extra,
+            "function": {"name": "read_file", "arguments": '{"path": "a.py"}'}}
+    server = Server((200, completion({"role": "assistant", "content": None,
+                                      "tool_calls": [call]})),
+                    (200, completion({"role": "assistant", "content": "ok"})))
+    llm = client(server)
+    resp = llm.complete([{"role": "user", "content": "hi"}], TOOLS)
+    assert resp.assistant_message()["tool_calls"] == [call]
+    llm.complete([{"role": "user", "content": "hi"}, resp.assistant_message(),
+                  {"role": "tool", "tool_call_id": "call_1", "content": "x"}], TOOLS)
+    assert server.requests[1]["messages"][1]["tool_calls"][0]["extra_content"] == extra
+
+
 def test_optional_params_omitted():
     server = Server((200, completion({"role": "assistant", "content": "ok"})),
                     (200, completion({"role": "assistant", "content": "ok"})))

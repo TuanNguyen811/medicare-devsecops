@@ -34,7 +34,7 @@ jobs:
           uv run pytest -q
           uv run ruff check
       - name: Quality gate tests
-        run: uv run --no-project --python 3.12 --with pytest pytest security/gate/tests -q
+        run: uv run --no-project --python 3.12 --with pytest pytest security/gate/tests security/handoff/tests -q
 
   full-scan:
     name: full-scan
