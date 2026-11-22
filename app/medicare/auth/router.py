@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
+from medicare.auth import remember
 from medicare.auth.models import User
 from medicare.common import metrics
 from medicare.common.auth import (
@@ -34,19 +35,26 @@ def login(
     request: Request,
     username: str = Form(""),
     password: str = Form(""),
+    remember_me: str = Form(""),
     db: Session = Depends(get_db),
 ) -> Response:
     user = None
+    now = datetime.now(UTC)
     if (len(username) <= 50 and len(password) <= MAX_PASSWORD_LENGTH
             and "\x00" not in username and "\x00" not in password):
-        user = authenticate(db, username, password, datetime.now(UTC))
+        user = authenticate(db, username, password, now,
+                            remembered_device=remember.is_remembered_device(db, request, now))
     else:
         metrics.login_attempt(metrics.LOGIN_FAILURE)
     db.commit()  # persists the failed-attempt counter and lock
     if user is None:
         return render(request, "login.html", {"error": LOGIN_ERROR})
     start_session(request, user)
-    return RedirectResponse("/", status_code=303)
+    response = RedirectResponse("/", status_code=303)
+    if remember_me == "on":
+        remember.set_cookie(request, response, remember.issue(db, user, now))
+        db.commit()
+    return response
 
 
 @router.post("/logout", dependencies=[Depends(verify_csrf)])
@@ -57,7 +65,9 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
         revoke_sessions(user)  # a copied cookie must not outlive the logout
         db.commit()
     request.session.clear()
-    return RedirectResponse("/login", status_code=303)
+    response = RedirectResponse("/login", status_code=303)
+    remember.clear_cookie(response)
+    return response
 
 
 @router.get("/")
@@ -96,6 +106,7 @@ def change_password(
         return render(request, "password.html", _password_ctx() | {"error": error})
     user.password_hash = hash_password(new_password)
     revoke_sessions(user)  # sign out every other device
+    remember.revoke_all(db, user)
     db.commit()
     request.session["sv"] = user.session_version  # keep this session alive
     flash(request, "Đã đổi mật khẩu")

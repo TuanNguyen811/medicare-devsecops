@@ -1,11 +1,12 @@
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from medicare.auth import remember
 from medicare.auth.models import Role, User
 from medicare.common import metrics
 from medicare.common.csrf import rotate_csrf_token
@@ -28,7 +29,15 @@ def _now() -> float:
     return time.time()
 
 
-def authenticate(db: Session, username: str, password: str, now: datetime) -> User | None:
+def authenticate(
+    db: Session, username: str, password: str, now: datetime, *, remembered_device: bool = False
+) -> User | None:
+    """Check credentials, counting failures toward the lockout (R-07).
+
+    `remembered_device`: the login comes from a browser holding a remember-me token
+    (a ward workstation shared by the staff on shift); see medicare.auth.remember for
+    how such a browser is recognised.
+    """
     # Row lock: concurrent failed guesses must each count toward the lockout (R-07).
     # OF users: the joined department is the nullable side of an outer join.
     user = db.scalar(
@@ -42,17 +51,19 @@ def authenticate(db: Session, username: str, password: str, now: datetime) -> Us
     if not user.is_active:
         metrics.login_attempt(metrics.LOGIN_FAILURE)
         return None
-    if user.locked_until is not None and user.locked_until > now:
+    locked = user.locked_until is not None and user.locked_until > now
+    if locked and not remembered_device:
         metrics.login_attempt(metrics.LOGIN_LOCKED)
         return None
     if not password_ok:
         metrics.login_attempt(metrics.LOGIN_FAILURE)
-        user.failed_login_count += 1
-        if user.failed_login_count >= MAX_FAILED_LOGINS:
-            user.locked_until = now + LOCK_DURATION
-            user.failed_login_count = 0
-            metrics.account_locked()
-        db.flush()
+        if not remembered_device:
+            user.failed_login_count += 1
+            if user.failed_login_count >= MAX_FAILED_LOGINS:
+                user.locked_until = now + LOCK_DURATION
+                user.failed_login_count = 0
+                metrics.account_locked()
+            db.flush()
         return None
     user.failed_login_count = 0
     user.locked_until = None
@@ -92,7 +103,10 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     user = db.get(User, user_id) if isinstance(user_id, int) else None
     if not _session_valid(request, user):
         request.session.clear()
-        raise LoginRequired
+        user = remember.remembered_user(db, request, datetime.now(UTC))
+        if user is None:
+            raise LoginRequired
+        start_session(request, user)
     request.state.current_user = user
     return user
 
