@@ -177,3 +177,82 @@ def test_nurse_list_scoped_to_department(client, db):
     login(client, make_user(db, Role.NURSE, department=noi))
     html = client.get("/appointments").text
     assert p_noi.code in html and p_ngoai.code not in html
+
+
+def schedule(client, days=1, **params):
+    params.setdefault("day", (date.today() + timedelta(days=days)).isoformat())
+    return client.get("/appointments/schedule", params=params)
+
+
+def test_schedule_shows_selected_day_only(client, db):
+    doc = setup_doctor(db)
+    p_tomorrow, p_later = make_patient(db), make_patient(db)
+    make_appt(db, p_tomorrow, doc, days=1)
+    make_appt(db, p_later, doc, days=2)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    r = schedule(client)
+    assert r.status_code == 200
+    assert p_tomorrow.code in r.text and p_later.code not in r.text
+
+
+def test_schedule_filters_by_status_and_doctor(client, db):
+    doc, other_doc = setup_doctor(db), make_user(db, Role.DOCTOR)
+    requested, confirmed, elsewhere = make_patient(db), make_patient(db), make_patient(db)
+    make_appt(db, requested, doc, hour=9)
+    make_appt(db, confirmed, doc, status=AppointmentStatus.CONFIRMED, hour=10)
+    make_appt(db, elsewhere, other_doc, hour=9)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    html = schedule(client, status="CONFIRMED").text
+    assert confirmed.code in html and requested.code not in html
+    html = schedule(client, doctor_id=str(doc.id)).text
+    assert requested.code in html and confirmed.code in html and elsewhere.code not in html
+
+
+def test_schedule_paginates(client, db):
+    doc = setup_doctor(db)
+    start = slot_dt(hour=7)
+    for i in range(25):
+        db.add(Appointment(patient_id=make_patient(db).id, doctor_id=doc.id,
+                           scheduled_at=start + timedelta(minutes=30 * i), reason="Tái khám",
+                           status=AppointmentStatus.REQUESTED, created_by_id=doc.id))
+    db.flush()
+    login(client, make_user(db, Role.RECEPTIONIST))
+    first, second = schedule(client).text, schedule(client, page="2").text
+    assert first.count("Tái khám") == 20 and "Trang 1/2" in first
+    assert second.count("Tái khám") == 5 and "Trang 2/2" in second
+    assert "25 lịch hẹn" in second
+
+
+def test_schedule_doctor_sees_only_own(client, db):
+    dept = make_department(db)
+    doc, colleague = (make_user(db, Role.DOCTOR, department=dept) for _ in range(2))
+    p_mine, p_theirs = make_patient(db), make_patient(db)
+    make_appt(db, p_mine, doc)
+    make_appt(db, p_theirs, colleague)
+    login(client, doc)
+    html = schedule(client, doctor_id=str(colleague.id)).text
+    assert p_mine.code in html and p_theirs.code not in html
+
+
+def test_schedule_nurse_scoped_to_department(client, db):
+    noi, ngoai = make_department(db, "NOI"), make_department(db, "NGOAI")
+    doc = make_user(db, Role.DOCTOR, department=noi)
+    p_noi, p_ngoai = make_patient(db, department=noi), make_patient(db, department=ngoai)
+    make_appt(db, p_noi, doc, hour=9)
+    make_appt(db, p_ngoai, doc, hour=10)
+    login(client, make_user(db, Role.NURSE, department=noi))
+    html = schedule(client).text
+    assert p_noi.code in html and p_ngoai.code not in html
+    assert 'href="/appointments/schedule"' in client.get("/").text
+
+
+def test_schedule_not_for_patients(client, db):
+    login(client, make_user(db, Role.PATIENT, patient=make_patient(db)))
+    assert schedule(client).status_code == 403
+
+
+def test_schedule_invalid_day_defaults_to_today(client, db):
+    login(client, make_user(db, Role.RECEPTIONIST))
+    r = client.get("/appointments/schedule", params={"day": "31/12", "page": "x"})
+    today = datetime.now(VN_TZ).date().strftime("%d/%m/%Y")
+    assert r.status_code == 200 and f"Lịch khám ngày {today}" in r.text

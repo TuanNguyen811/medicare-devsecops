@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Lịch khám theo ngày{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h5 mb-0">Lịch khám ngày {{ day | date_vn }}{% if is_today %} <span class="badge text-bg-info">Hôm nay</span>{% endif %}</h1>
+  <div class="btn-group btn-group-sm" role="group" aria-label="Chuyển ngày">
+    <a class="btn btn-outline-secondary" href="{{ prev_day_url }}"><i class="bi bi-chevron-left"></i> Ngày trước</a>
+    <a class="btn btn-outline-secondary" href="/appointments/schedule">Hôm nay</a>
+    <a class="btn btn-outline-secondary" href="{{ next_day_url }}">Ngày sau <i class="bi bi-chevron-right"></i></a>
+  </div>
+</div>
+<div class="card mc-card">
+  <div class="card-body pb-0">
+    <form class="row g-2 mb-3" method="get" action="/appointments/schedule">
+      <div class="col-auto">
+        <input class="form-control form-control-sm" type="date" name="day" value="{{ filters.day }}" aria-label="Ngày khám">
+      </div>
+      <div class="col-auto">
+        <select class="form-select form-select-sm" name="status" aria-label="Trạng thái">
+          <option value="">Tất cả trạng thái</option>
+          {% for value, (label, _) in status_labels.items() %}
+          <option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if doctors %}
+      <div class="col-auto">
+        <select class="form-select form-select-sm" name="doctor_id" aria-label="Bác sĩ">
+          <option value="">Tất cả bác sĩ</option>
+          {% for d in doctors %}
+          <option value="{{ d.id }}"{% if filters.doctor_id == d.id %} selected{% endif %}>{{ d.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-funnel"></i> Lọc</button></div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Giờ khám</th><th>Bệnh nhân</th><th>Bác sĩ</th><th>Lý do khám</th><th>Trạng thái</th></tr>
+      </thead>
+      <tbody>
+        {% for a in result.items %}
+        {% set label, color = status_labels[a.status.value] %}
+        <tr>
+          <td class="text-nowrap">{{ a.scheduled_at | datetime_vn }}</td>
+          <td>{{ a.patient.code }} - {{ a.patient.full_name }}</td>
+          <td>{{ a.doctor.full_name }}</td>
+          <td>{{ a.reason }}</td>
+          <td><span class="badge text-bg-{{ color }}">{{ label }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-secondary py-3">Không có lịch hẹn trong ngày</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer d-flex justify-content-between align-items-center small">
+    <span class="text-secondary">{{ result.total }} lịch hẹn</span>
+    {% if result.pages > 1 %}
+    <nav aria-label="Phân trang">
+      <ul class="pagination pagination-sm mb-0">
+        <li class="page-item{% if result.page == 1 %} disabled{% endif %}"><a class="page-link" href="{{ prev_page_url }}">Trang trước</a></li>
+        <li class="page-item disabled"><span class="page-link">Trang {{ result.page }}/{{ result.pages }}</span></li>
+        <li class="page-item{% if result.page == result.pages %} disabled{% endif %}"><a class="page-link" href="{{ next_page_url }}">Trang sau</a></li>
+      </ul>
+    </nav>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
