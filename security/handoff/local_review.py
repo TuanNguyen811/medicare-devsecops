@@ -92,11 +92,36 @@ def wait_for_agent_job(repo: str, run: int, timeout_s: float) -> bool:
         time.sleep(POLL_S)
 
 
+def hidden_conflicts(changed: list[str], hidden: list[str]) -> list[str]:
+    """Changed files under a hidden directory: hiding them would hide the PR from review."""
+    prefixes = [h.strip("/") + "/" for h in hidden]
+    return [f for f in changed if any(f.startswith(p) for p in prefixes)]
+
+
+def hide(tree: Path, base: str, head: str, hidden: list[str]) -> None:
+    """Remove `hidden` directories from the worktree and its index (the agent lists files with
+    git ls-files). The diff is between commits, so the review itself is unchanged."""
+    changed = sh("git", "-C", str(tree), "diff", "--name-only", base, head).splitlines()
+    clash = hidden_conflicts(changed, hidden)
+    if clash:
+        sys.exit(f"local-review: the PR changes hidden files ({', '.join(clash[:5])}); "
+                 "not hiding them")
+    for path in hidden:
+        sh("git", "-C", str(tree), "rm", "-r", "-q", "--cached", "--ignore-unmatch", "--",
+           path.strip("/"))
+        shutil.rmtree(tree / path.strip("/"), ignore_errors=True)
+    print(f"local-review: hidden from the agent: {', '.join(hidden)}", flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--pr", type=int, required=True)
     ap.add_argument("--timeout", type=float, default=1800, help="seconds to wait for the run")
     ap.add_argument("--keep", action="store_true", help="keep the temporary directory")
+    ap.add_argument("--hide", action="append", default=[], metavar="DIR",
+                    help="leave DIR out of the checkout the agent reads (e.g. benchmark: the "
+                         "answer key must stay hidden when a benchmark scenario is a PR)")
+    ap.add_argument("--save", metavar="DIR", help="copy the agent's output (trace too) to DIR")
     args = ap.parse_args(argv)
 
     repo = sh("gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner").strip()
@@ -120,6 +145,8 @@ def main(argv: list[str] | None = None) -> int:
 
         sh("git", "fetch", "--quiet", "origin", base, f"pull/{args.pr}/head")
         sh("git", "worktree", "add", "--quiet", "--detach", str(tree), head)
+        if args.hide:
+            hide(tree, base, head, args.hide)
         out = work / "out"
         env = {**os.environ, "LLM_PROVIDER": "claude-mcp", "PYTHONIOENCODING": "utf-8"}
         env.pop("VIRTUAL_ENV", None)
@@ -128,6 +155,8 @@ def main(argv: list[str] | None = None) -> int:
              "--repo", str(tree), "--base", base, "--head", head, "--sarif-dir", str(sarif),
              "--requirements", "docs/security-requirements.md", "--out", str(out)],
             cwd=ROOT, env=env, check=False)
+        if args.save:
+            shutil.copytree(out, Path(args.save), dirs_exist_ok=True)
         if done.returncode != 0:
             print(f"local-review: secagent exited {done.returncode}; nothing posted "
                   "(the job will time out and the gate falls back to traditional mode)")
