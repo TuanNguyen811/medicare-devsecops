@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Mẫu in phiếu khám{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Mẫu in phiếu khám {% if not is_custom %}<span class="badge text-bg-secondary">Mặc định</span>{% endif %}</h1>
+{% if errors %}
+<div class="alert alert-danger py-2" role="alert">
+  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card mc-card">
+      <div class="card-body">
+        <form method="post" action="/account/print-template">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label class="form-label" for="body">Nội dung mẫu (HTML, chèn dữ liệu bằng <code>{{ "{{ biến }}" }}</code>)</label>
+          <textarea class="form-control font-monospace" id="body" name="body" rows="18" maxlength="{{ max_length }}">{{ body }}</textarea>
+          <div class="form-text">Để trống rồi lưu để dùng lại mẫu mặc định.</div>
+          <button class="btn btn-primary btn-sm mt-2" type="submit">Lưu mẫu in</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card mc-card">
+      <div class="card-header">Biến dùng được</div>
+      <ul class="list-group list-group-flush small">
+        {% for name, fields in variables.items() %}
+          {% if fields %}
+            {% for f in fields %}<li class="list-group-item font-monospace">{{ name }}.{{ f }}</li>{% endfor %}
+          {% else %}
+            <li class="list-group-item font-monospace">{{ name }}</li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
