@@ -43,6 +43,7 @@ pull_request → main
 
      Bộ kiểm tra là `security/handoff/handoff.py` lấy từ nhánh gốc, không phải từ PR. Bước này không chạy code của PR và không giữ key LLM.
   3. Sau đó `agent-comment` và `quality-gate` chạy như khi có key. Không có report hợp lệ thì bước nhận report ghi mã khác 0 vào `agent-exit` (job vẫn xanh) và gate dùng chế độ `traditional`.
+  - Khi mở một kịch bản benchmark thành PR (để kiểm chứng trên pipeline thật), thêm `--hide benchmark --hide docs/benchmark-results.md --hide docs/superpowers`: bản checkout mà agent đọc khi đó không có đáp án, giống điều kiện của benchmark (chạy trên `v0.3-baseline`). Script dừng nếu không xóa được, hoặc nếu chính PR sửa vào các đường dẫn đó.
   - Nếu chạy script muộn, sau khi job đã kết thúc, script vẫn đăng report và nhắc chạy lại toàn bộ workflow (`gh run rerun <run>`). Lượt chạy lại sẽ nhận report vì commit HEAD không đổi.
   - Trong chế độ này, gate tin vào máy của người review: người chạy script chịu trách nhiệm về kết quả. Người khác mở PR không gửi thay được: comment của tài khoản khác hoặc comment đã bị sửa đều bị bỏ qua. Nhưng khi chính `AGENT_REPORT_AUTHOR` mở PR (luôn đúng khi một người làm), họ gửi được bất kỳ kết luận nào. Vì vậy chế độ này không phải lớp kiểm soát độc lập với người review.
   - Nội dung PR vẫn đến được phiên Claude trên máy người review, dù chỉ dưới dạng dữ liệu đọc qua các công cụ chỉ đọc của `secagent`. Prompt injection trong PR có thể làm lệch kết luận và tốn hạn mức của tài khoản đó, nhưng không chạy được lệnh trên máy.

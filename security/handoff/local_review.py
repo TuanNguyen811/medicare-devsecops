@@ -20,11 +20,12 @@ import argparse
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from handoff import pack  # noqa: E402
@@ -92,25 +93,60 @@ def wait_for_agent_job(repo: str, run: int, timeout_s: float) -> bool:
         time.sleep(POLL_S)
 
 
+def clean_path(raw: str) -> str:
+    """A repo-relative path to hide, normalised; refuses the root and anything climbing out."""
+    path = PurePosixPath(raw.replace("\\", "/")).as_posix().strip("/")
+    if path in ("", ".") or ".." in PurePosixPath(path).parts:
+        raise ValueError(f"cannot hide {raw!r}")
+    return path
+
+
 def hidden_conflicts(changed: list[str], hidden: list[str]) -> list[str]:
-    """Changed files under a hidden directory: hiding them would hide the PR from review."""
-    prefixes = [h.strip("/") + "/" for h in hidden]
-    return [f for f in changed if any(f.startswith(p) for p in prefixes)]
+    """Changed files that are, or are inside, a hidden path: hiding would hide the PR."""
+    return [f for f in changed if any(f == h or f.startswith(h + "/") for h in hidden)]
+
+
+def _force_remove(path: Path) -> None:
+    def writable_then_retry(func, target, _exc):
+        os.chmod(target, stat.S_IWRITE)  # read-only files (Windows) refuse to go otherwise
+        func(target)
+
+    if path.is_dir() and not path.is_symlink():
+        handler = "onexc" if sys.version_info >= (3, 12) else "onerror"
+        shutil.rmtree(path, **{handler: writable_then_retry})
+    elif path.exists() or path.is_symlink():
+        os.chmod(path, stat.S_IWRITE)
+        path.unlink()
 
 
 def hide(tree: Path, base: str, head: str, hidden: list[str]) -> None:
-    """Remove `hidden` directories from the worktree and its index (the agent lists files with
-    git ls-files). The diff is between commits, so the review itself is unchanged."""
-    changed = sh("git", "-C", str(tree), "diff", "--name-only", base, head).splitlines()
-    clash = hidden_conflicts(changed, hidden)
+    """Remove `hidden` files and directories from the worktree and its index (the agent lists
+    files with git ls-files and reads them from disk). The PR diff is between commits, so the
+    review itself is unchanged. Exits unless every path is verifiably gone."""
+    try:
+        paths = [clean_path(h) for h in hidden]
+    except ValueError as exc:
+        sys.exit(f"local-review: {exc}")
+    # The same changed files the agent's diff sees: base...head, renames as delete + add.
+    changed = [f for f in sh("git", "-C", str(tree), "-c", "core.quotePath=false", "diff",
+                             "--name-only", "--no-renames", "-z", f"{base}...{head}").split("\0")
+               if f]
+    clash = hidden_conflicts(changed, paths)
     if clash:
         sys.exit(f"local-review: the PR changes hidden files ({', '.join(clash[:5])}); "
                  "not hiding them")
-    for path in hidden:
+    for path in paths:
         sh("git", "-C", str(tree), "rm", "-r", "-q", "--cached", "--ignore-unmatch", "--",
-           path.strip("/"))
-        shutil.rmtree(tree / path.strip("/"), ignore_errors=True)
-    print(f"local-review: hidden from the agent: {', '.join(hidden)}", flush=True)
+           f":(literal){path}")
+        target = (tree / path).resolve()
+        if tree.resolve() not in target.parents:
+            sys.exit(f"local-review: {path} is outside the checkout")
+        _force_remove(tree / path)
+        left = sh("git", "-C", str(tree), "ls-files", "--cached", "--others",
+                  "--exclude-standard", "--", f":(literal){path}").strip()
+        if (tree / path).exists() or left:
+            sys.exit(f"local-review: could not hide {path}")
+    print(f"local-review: hidden from the agent: {', '.join(paths)}", flush=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -119,8 +155,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--timeout", type=float, default=1800, help="seconds to wait for the run")
     ap.add_argument("--keep", action="store_true", help="keep the temporary directory")
     ap.add_argument("--hide", action="append", default=[], metavar="DIR",
-                    help="leave DIR out of the checkout the agent reads (e.g. benchmark: the "
-                         "answer key must stay hidden when a benchmark scenario is a PR)")
+                    help="leave DIR (or a file) out of the checkout the agent reads. For a "
+                         "benchmark scenario opened as a PR, hide the answer key: benchmark, "
+                         "docs/benchmark-results.md and docs/superpowers")
     ap.add_argument("--save", metavar="DIR", help="copy the agent's output (trace too) to DIR")
     args = ap.parse_args(argv)
 
@@ -155,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
              "--repo", str(tree), "--base", base, "--head", head, "--sarif-dir", str(sarif),
              "--requirements", "docs/security-requirements.md", "--out", str(out)],
             cwd=ROOT, env=env, check=False)
-        if args.save:
+        if args.save and out.exists():
             shutil.copytree(out, Path(args.save), dirs_exist_ok=True)
         if done.returncode != 0:
             print(f"local-review: secagent exited {done.returncode}; nothing posted "
