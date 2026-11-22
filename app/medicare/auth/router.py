@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
+from medicare.announcement import service as announcements
 from medicare.auth.models import User
 from medicare.common import metrics
 from medicare.common.auth import (
@@ -61,8 +62,13 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
 
 
 @router.get("/")
-def home(request: Request, user: User = Depends(get_current_user)) -> Response:
-    return render(request, "home.html", {"breadcrumbs": []})
+def home(
+    request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> Response:
+    return render(request, "home.html", {
+        "announcements": announcements.latest(db),
+        "breadcrumbs": [],
+    })
 
 
 @router.get("/account/password")

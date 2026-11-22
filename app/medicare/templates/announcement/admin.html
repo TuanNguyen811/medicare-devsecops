@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Thông báo{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Thông báo</h1>
+{% if errors %}
+<div class="alert alert-danger py-2" role="alert">
+  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="card mc-card mb-3">
+  <div class="card-header">Đăng thông báo</div>
+  <div class="card-body">
+    <form method="post" action="/admin/announcements">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="mb-2">
+        <label class="form-label" for="title">Tiêu đề</label>
+        <input class="form-control form-control-sm" id="title" name="title" value="{{ values.title or '' }}" maxlength="200" required>
+      </div>
+      <div class="mb-2">
+        <label class="form-label" for="body">Nội dung</label>
+        <textarea class="form-control form-control-sm font-monospace" id="body" name="body" rows="6" maxlength="{{ max_body }}" required>{{ values.body or '' }}</textarea>
+        <div class="form-text">Định dạng được phép: &lt;p&gt;, &lt;strong&gt;, &lt;em&gt;, &lt;u&gt;, danh sách &lt;ul&gt;/&lt;ol&gt;/&lt;li&gt;, &lt;blockquote&gt; và liên kết &lt;a href="https://..."&gt;.</div>
+      </div>
+      <button class="btn btn-primary btn-sm" type="submit">Đăng</button>
+    </form>
+  </div>
+</div>
+<div class="card mc-card">
+  <div class="card-header">Đã đăng</div>
+  <ul class="list-group list-group-flush">
+    {% for a in announcements %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <div class="fw-semibold">{{ a.title }}</div>
+          <div class="small text-secondary">{{ a.created_at | datetime_vn }} · {{ a.author.full_name }}</div>
+          <div class="mt-1">{{ a.body_html | safe }}</div>
+        </div>
+        <form method="post" action="/admin/announcements/{{ a.id }}/delete">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash"></i> Gỡ</button>
+        </form>
+      </div>
+    </li>
+    {% else %}
+    <li class="list-group-item text-center text-secondary py-3">Chưa có thông báo</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
