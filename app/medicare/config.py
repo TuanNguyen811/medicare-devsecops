@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # app from another pod set METRICS_HOST to the pod address range they listen on.
     metrics_port: int | None = Field(default=None, ge=1, le=65535)
     metrics_host: str = "127.0.0.1"
+    # BHXH card lookup tool installed on the application server.
+    bhyt_cli: str = "/opt/bhxh/bin/tra-cuu-the"
 
     @field_validator("secret_key")
     @classmethod
