@@ -1,0 +1,5 @@
+id: D10
+title: Danh sách bác sĩ theo khoa
+split: test
+kind: decoy
+commit_message: Thêm danh sách bác sĩ theo khoa cho lễ tân, đặt lịch nhanh với bác sĩ đã chọn

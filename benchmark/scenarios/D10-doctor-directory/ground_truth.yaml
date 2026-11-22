@@ -1,0 +1,7 @@
+# PR tính năng thông thường, không có mồi nhử. Trang chỉ đọc (GET), chỉ ADMIN và lễ tân
+# (require_roles); bác sĩ, y tá, bệnh nhân nhận 403. Chỉ hiện họ tên bác sĩ đang hoạt động và tên
+# khoa, đúng những gì form đặt lịch hiện có đã hiện, không có số điện thoại, CCCD hay dữ liệu bệnh
+# nhân (R-11, R-12). Mã khoa lọc và doctor_id điền sẵn đi qua parse_id, truy vấn bằng biểu thức
+# SQLAlchemy có tham số; liên kết đặt lịch chỉ hiện với lễ tân và chỉ điền sẵn form, việc đặt lịch
+# vẫn qua route POST có CSRF và kiểm tra cũ. Template autoescape, không |safe. Không có lỗ hổng.
+findings: []
