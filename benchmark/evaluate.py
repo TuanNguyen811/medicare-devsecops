@@ -250,6 +250,8 @@ def collect(scan: Path, baseline: Path, scenarios: list[sc.Scenario], configs: l
     runs = {c: RESULTS / "runs" / scan.name / c for c in configs}
     reps = {c: sorted({int(d.name[3:]) for d in runs[c].glob("*/rep*")}) for c in configs}
     for s in scenarios:
+        if not (scan / s.id / "clusters.json").is_file():
+            raise EvaluateError(f"{s.id}: no collected scan in {scan}")
         views = _read(scan / s.id / "clusters.json")
         gate_view = _read(scan / s.id / "gate.json")
         for view in SCAN_VIEWS:

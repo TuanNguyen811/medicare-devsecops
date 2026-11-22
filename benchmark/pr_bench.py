@@ -197,8 +197,17 @@ def active_jobs(repo: str) -> int:
     return count
 
 
+def _timing(tag: str, sid: str, state: dict, run_id: int, version: dict, **fields) -> None:
+    (_rundir(tag, sid) / "timing.json").write_text(json.dumps({
+        "config": "C2", "scenario": sid, "rep": 1, "scan": f"pr-{tag}",
+        "pr": state[sid]["pr"], "run": run_id, "base": state[sid]["base"],
+        "head": state[sid]["head"], **version, **fields,
+        "finished_at": datetime.now(UTC).isoformat(timespec="seconds"),
+    }, indent=2), encoding="utf-8")
+
+
 def _finish_review(tag: str, sid: str, state: dict, proc, run_id: int, late: bool,
-                   version: dict, attempt: int) -> int:
+                   started: float, version: dict, attempt: int, failures: int) -> int:
     rundir = _rundir(tag, sid)
     _scrub_tree(rundir)
     kind = runner.classify(rundir)
@@ -207,24 +216,43 @@ def _finish_review(tag: str, sid: str, state: dict, proc, run_id: int, late: boo
         raise sc.ScenarioError("Claude Code is not logged in")
     if code == 0 and kind:  # stopped midway by the plan's limit: not a result
         code = 3
-    report = rundir / "report.json"
-    meta = (json.loads(report.read_text(encoding="utf-8")).get("meta") or {}
-            if report.is_file() else {})
-    (rundir / "timing.json").write_text(json.dumps({
-        "config": "C2", "scenario": sid, "rep": 1, "scan": f"pr-{tag}",
-        "pr": state[sid]["pr"], "run": run_id, "base": state[sid]["base"],
-        "head": state[sid]["head"], **version, "exit": code, "wall_s": meta.get("duration_s"),
-        "late": late, "attempt": attempt,
-        "finished_at": datetime.now(UTC).isoformat(timespec="seconds"),
-    }, indent=2), encoding="utf-8")
+    _timing(tag, sid, state, run_id, version, exit=code,
+            wall_s=round(time.monotonic() - started, 2), late=late, attempt=attempt,
+            failed_attempts=failures)
     _say(f"{sid}: secagent exit {code}" + (f" ({kind})" if kind else ""))
     return code
 
 
+def _adopt_pipeline_report(tag: str, sid: str, state: dict, run_id: int, repo: str,
+                           version: dict) -> bool:
+    """The PR's agent job already accepted a report (e.g. a review the tool lost track of when
+    it was restarted): score that report rather than reviewing again."""
+    rundir = _rundir(tag, sid)
+    _keep_failed(rundir)
+    rundir.mkdir(parents=True)
+    sh("gh", "run", "download", str(run_id), "--repo", repo, "--dir", str(rundir), "--name",
+       "agent-report", check=False)
+    if not (rundir / "report.json").is_file():
+        return False
+    _timing(tag, sid, state, run_id, version, exit=0, wall_s=None, late=False, attempt=0,
+            failed_attempts=0, adopted_from_pipeline=True)
+    _say(f"{sid}: the pipeline already used a report; scoring that one")
+    return True
+
+
+def _keep_failed(rundir: Path) -> None:
+    """Move an earlier attempt aside (scenario/failed-<n>/) instead of deleting it."""
+    if not rundir.exists():
+        return
+    n = 1
+    while (rundir.parent / f"failed-{n}").exists():
+        n += 1
+    rundir.rename(rundir.parent / f"failed-{n}")
+
+
 def _start_review(tag: str, sid: str, state: dict, env: dict):
     rundir = _rundir(tag, sid)
-    if rundir.exists():
-        shutil.rmtree(rundir)
+    _keep_failed(rundir)
     rundir.mkdir(parents=True)
     log = (rundir / "review.log").open("w", encoding="utf-8")
     proc = subprocess.Popen(
@@ -272,9 +300,14 @@ def run_all(tag: str, spec: str, max_jobs: int, jobs: int) -> None:
     collect each PR once its run has finished."""
     ids, repo = _ids(spec), repo_name()
     version, gate = runner.agent_version(), runner.load_gate()
+    # The benchmark tool's own commit, so a run can be traced to the harness that produced it.
+    version["bench_commit"] = sh("git", "rev-parse", "HEAD").strip()
+    version["bench_dirty"] = bool(sh("git", "status", "--porcelain", "--", "benchmark",
+                                     "security/handoff").strip())
+    uncollected: list[str] = []
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     env.pop("VIRTUAL_ENV", None)
-    reviews: dict[str, tuple] = {}  # sid -> (proc, log, run_id, late)
+    reviews: dict[str, tuple] = {}  # sid -> (proc, log, run_id, late, started)
     attempts: dict[str, int] = {}
     retry_at: dict[str, float] = {}
     rerun: set[str] = set()
@@ -294,19 +327,19 @@ def run_all(tag: str, spec: str, max_jobs: int, jobs: int) -> None:
         while len(finished) < len(ids):
             state = load_state(tag)
             # 1. reviews that ended
-            for sid, (proc, log, run_id, late) in list(reviews.items()):
+            for sid, (proc, log, run_id, late, started) in list(reviews.items()):
                 if proc.poll() is None:
                     continue
                 log.close()
                 del reviews[sid]
-                code = _finish_review(tag, sid, state, proc, run_id, late, version,
-                                      attempts.get(sid, 0))
+                code = _finish_review(tag, sid, state, proc, run_id, late, started, version,
+                                      attempts.get(sid, 0), failures.get(sid, 0))
                 if code == 3 and attempts.get(sid, 0) < runner.USAGE_MAX_WAITS:
                     attempts[sid] = attempts.get(sid, 0) + 1
                     retry_at[sid] = time.monotonic() + runner.USAGE_WAIT_S
                     again.add(sid)
                     _say(f"{sid}: usage limit; retrying in {runner.USAGE_WAIT_S // 60} min")
-                elif code != 0 and failures.get(sid, 0) < TRANSIENT_RETRIES:
+                elif code not in (0, 3) and failures.get(sid, 0) < TRANSIENT_RETRIES:
                     # e.g. a failed artifact download: try again shortly
                     failures[sid] = failures.get(sid, 0) + 1
                     retry_at[sid] = time.monotonic() + 60
@@ -332,10 +365,17 @@ def run_all(tag: str, spec: str, max_jobs: int, jobs: int) -> None:
                         _say(f"{sid}: {AGENT_JOB} skipped; not reviewed")
                         skipped.add(sid)
                         again.discard(sid)
+                    elif (job and job["status"] == "completed" and t is None
+                          and _agent_exit(repo, run["id"]) == 0
+                          and _adopt_pipeline_report(tag, sid, state, run["id"], repo,
+                                                     version)):
+                        again.discard(sid)
+                        continue
                     elif job and job["status"] in ("in_progress", "completed"):
                         again.discard(sid)
                         proc, log = _start_review(tag, sid, state, env)
-                        reviews[sid] = (proc, log, run["id"], job["status"] == "completed")
+                        reviews[sid] = (proc, log, run["id"], job["status"] == "completed",
+                                        time.monotonic())
                         _say(f"{sid}: reviewing PR #{info['pr']} (run {run['id']})")
                         time.sleep(15)  # stagger git fetch/worktree add of the reviews
                         continue
@@ -354,7 +394,8 @@ def run_all(tag: str, spec: str, max_jobs: int, jobs: int) -> None:
                     rerun.add(sid)
                     _say(f"{sid}: report arrived late; re-running {AGENT_JOB}")
                     continue
-                _collect_one(tag, sid, info, run, gate, repo)
+                if not _collect_one(tag, sid, info, run, gate, repo):
+                    uncollected.append(sid)  # evaluate.py will refuse to score without it
                 finished.add(sid)
             # 3. the next PR, if Actions has room
             pending = [s for s in ids if s not in state]
@@ -364,9 +405,11 @@ def run_all(tag: str, spec: str, max_jobs: int, jobs: int) -> None:
                  f"{len(pending)} not opened")
             time.sleep(30)
     finally:
-        for proc, log, _, _ in reviews.values():  # never leave orphaned reviews behind
+        for proc, log, *_ in reviews.values():  # never leave orphaned reviews behind
             proc.wait()
             log.close()
+    if uncollected:
+        raise sc.ScenarioError(f"not collected (missing SARIF): {', '.join(uncollected)}")
 
 
 def _ids(spec: str) -> list[str]:

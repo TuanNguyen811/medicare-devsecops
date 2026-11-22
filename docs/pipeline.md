@@ -43,7 +43,7 @@ pull_request → main
 
      Bộ kiểm tra là `security/handoff/handoff.py` lấy từ nhánh gốc, không phải từ PR. Bước này không chạy code của PR và không giữ key LLM.
   3. Sau đó `agent-comment` và `quality-gate` chạy như khi có key. Không có report hợp lệ thì bước nhận report ghi mã khác 0 vào `agent-exit` (job vẫn xanh) và gate dùng chế độ `traditional`.
-  - Khi mở một kịch bản benchmark thành PR (để kiểm chứng trên pipeline thật), thêm `--hide benchmark --hide docs/benchmark-results.md --hide docs/superpowers`: bản checkout mà agent đọc khi đó không có đáp án, giống điều kiện của benchmark (chạy trên `v0.3-baseline`). Script dừng nếu không xóa được, hoặc nếu chính PR sửa vào các đường dẫn đó.
+  - Khi một kịch bản benchmark chạy thành PR (`benchmark/pr_bench.py`), script được gọi với `--benchmark-view`: bản checkout mà agent đọc khi đó đúng bằng cây `scenario.materialize` (mốc benchmark đã làm trung tính cộng thay đổi của PR), không có đáp án, kết quả hay tài liệu thiết kế. `--hide <đường dẫn>` ẩn thêm từng đường dẫn; script dừng nếu không xóa được, hoặc nếu chính PR sửa vào các đường dẫn đó.
   - Nếu chạy script muộn, sau khi job đã kết thúc, script vẫn đăng report và nhắc chạy lại toàn bộ workflow (`gh run rerun <run>`). Lượt chạy lại sẽ nhận report vì commit HEAD không đổi.
   - Trong chế độ này, gate tin vào máy của người review: người chạy script chịu trách nhiệm về kết quả. Người khác mở PR không gửi thay được: comment của tài khoản khác hoặc comment đã bị sửa đều bị bỏ qua. Nhưng khi chính `AGENT_REPORT_AUTHOR` mở PR (luôn đúng khi một người làm), họ gửi được bất kỳ kết luận nào. Vì vậy chế độ này không phải lớp kiểm soát độc lập với người review.
   - Nội dung PR vẫn đến được phiên Claude trên máy người review, dù chỉ dưới dạng dữ liệu đọc qua các công cụ chỉ đọc của `secagent`. Prompt injection trong PR có thể làm lệch kết luận và tốn hạn mức của tài khoản đó, nhưng không chạy được lệnh trên máy.
@@ -107,7 +107,7 @@ Bảng tóm tắt gate ghi vào job summary của Actions. Bảng này **không 
 
 **Giới hạn đã biết** (ghi vào phần "mối đe dọa đối với tính hợp lệ" của báo cáo):
 - Với sự kiện `pull_request`, GitHub chạy **workflow và `gate.py` của chính PR**. Người có quyền push nhánh có thể sửa workflow để bỏ qua gate. Chính sách cấu hình nhạy cảm chỉ làm việc này lộ ra (PR bị chặn cho tới khi có label `security-reviewed`), không ngăn được hoàn toàn. Muốn chặn hẳn cần review bắt buộc kèm CODEOWNERS cho `.github/` và `security/`, việc sẽ bật khi nhóm có thêm người review (hiện một người làm nên chưa thể tự duyệt PR của mình).
-- Bộ rule `p/python` và `p/owasp-top-ten` của Semgrep lấy từ registry, không có phiên bản. Kết quả Semgrep có thể đổi theo ngày, nên benchmark lưu lại SARIF của từng lần chạy.
+- Bộ rule `p/python` và `p/owasp-top-ten` của Semgrep lấy từ registry, không có phiên bản. Kết quả Semgrep có thể đổi theo ngày. Benchmark commit phần dữ liệu suy ra từ SARIF của từng PR (`clusters.json`, `gate.json`…); bản SARIF gốc nằm trong artifact của lượt chạy GitHub Actions (giữ 90 ngày).
 - Checkov bỏ qua (không báo lỗi) file Terraform có lỗi cú pháp.
 - Ở chế độ `claude-mcp`, kết luận của AI đến từ máy của người trong `AGENT_REPORT_AUTHOR`; pipeline kiểm tra người gửi và commit, không kiểm tra được máy đó đã chạy đúng `secagent` hay chưa.
 - Bước có `LLM_API_KEY` chạy code Agent lấy từ chính PR. Người có quyền push vốn đã có thể sửa workflow để đọc secret, nên đây không phải bề mặt tấn công mới; PR sửa `agent/**` bị chặn cho tới khi có label `security-reviewed`.

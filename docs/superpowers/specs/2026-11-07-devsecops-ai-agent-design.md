@@ -278,7 +278,7 @@ Agent dùng mô hình **review một lượt**: chỉ có một phiên Agent duy
 
 ### 5.2 Bộ dữ liệu
 
-Bộ dữ liệu hiện hành (35 kịch bản: S00, 20 PR có lỗ hổng và 9 PR không có lỗ hổng ở tập test, 5 kịch bản tập dev) ở spec bổ sung `2026-11-21-ops-dast-benchmark-design.md` mục 8.2. Các kịch bản S01–S15:
+Bộ dữ liệu hiện hành (35 kịch bản: tập test 30 PR gồm 20 PR có lỗ hổng và 10 PR không có lỗ hổng kể cả S00; tập dev 5 kịch bản) ở spec bổ sung `2026-11-21-ops-dast-benchmark-design.md` mục 8.2. Các kịch bản S01–S15:
 
 | Mã | Tính năng mới | Lỗi được cài | OWASP 2025 | Nhóm |
 |---|---|---|---|---|

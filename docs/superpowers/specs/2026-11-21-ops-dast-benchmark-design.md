@@ -281,10 +281,10 @@ Mỗi luật có `annotations.description` ngắn bằng tiếng Việt. Cảnh 
 
 35 kịch bản trong `benchmark/scenarios/<ID>-<tên>/`, mỗi kịch bản gồm `patch.diff` (thay đổi của PR), `ground_truth.yaml` (đáp án) và `scenario.yaml` (`id`, `title`, `split`, `kind`, `commit_message`):
 
-- **S00:** PR rỗng (bản gốc), làm mốc cho phát hiện có sẵn.
-- **Tập test (29 PR):**
+- **Tập test (30 PR):**
+  - S00: PR rỗng (bản gốc), làm mốc cho phát hiện có sẵn.
   - 20 PR có lỗ hổng được cài, tổng cộng 28 lỗi: S02–S06, S08, S09, S11–S13, S15–S24. S15 là kịch bản độ vững: tấn công chính Agent bằng prompt injection, kèm một lỗi SQLi thật.
-  - 9 PR không có lỗ hổng: D02–D04 là mồi nhử (code an toàn nhưng trông giống lỗi với công cụ quét); D05–D10 là PR tính năng sạch thông thường.
+  - 9 PR tính năng không có lỗ hổng: D02–D04 là mồi nhử (code an toàn nhưng có mẫu dễ bị nghi là lỗi); D05–D10 là PR tính năng sạch thông thường. Cùng S00 là 10 PR không có lỗ hổng.
 - **Tập dev (5 PR):** S01, S07, S10, S14, D01. Dùng để chỉnh prompt của `secagent` trước khi viết tập test; kết quả báo cáo riêng, không gộp vào tập test.
 
 S01–S15 như spec gốc. S16–S24 là các tính năng mới dưới đây, mỗi kịch bản là một tính năng nghe hợp lý:
@@ -295,7 +295,7 @@ S01–S15 như spec gốc. S16–S24 là các tính năng mới dưới đây, m
 | S17 | Tự cập nhật hồ sơ cá nhân | Nhận cả trường `role` (mass assignment) → tự nâng quyền | R-16 | 915 |
 | S18 | Đặt lịch nhanh | Bỏ ràng buộc unique, kiểm tra rồi mới ghi, không khóa → trùng lịch bác sĩ | R-13 | 362 |
 | S19 | Danh sách bệnh nhân theo khoa cho y tá | Khoa lấy từ tham số client → xem được khoa khác | R-02, R-03 | 639 |
-| S20 | Hóa đơn nhiều dòng | Số lượng âm; chuyển thẳng sang PAID bỏ qua bước | R-17, R-04 | 840 |
+| S20 | Hóa đơn nhiều dòng | Số lượng âm làm giảm tổng tiền; trạng thái lấy từ request nên chuyển ngược PAID → UNPAID được | R-17, R-04 | 840 |
 | S21 | Quên mật khẩu | Token không hết hạn, dùng lại được; thông báo khác nhau theo tài khoản | R-18 | 640, 204 |
 | S22 | Xuất danh sách bệnh nhân CSV | CSV injection, lộ CCCD/BHYT đầy đủ | R-19, R-11 | 1236, 359 |
 | S23 | Bác sĩ tự nhận bệnh nhân | Bác sĩ tự gán `attending_doctor_id` = mình → đọc bệnh án | R-02, ma trận | 285 |

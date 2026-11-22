@@ -12,7 +12,7 @@ Trên 30 PR của tập test (20 PR có lỗ hổng chứa 28 lỗ hổng, 10 PR
 | Công cụ quét + **AI Agent** | **26/28** | **0,84** | **0,88** | **19/20** | 9/10 |
 
 - AI Agent tìm được 14/16 lỗ hổng logic nghiệp vụ, công cụ quét không tìm được lỗ hổng logic nào.
-- Quyết định chặn hay cho qua của quality gate thật trên GitHub khớp với kết quả chấm lại bằng `evaluate.py` ở cả 35/35 PR.
+- Quyết định chặn hay cho qua của quality gate thật trên GitHub khớp với quyết định tính lại từ report của AI bằng `evaluate.py` ở cả 35/35 PR (34 PR trên cùng một report; ở D05, pipeline dùng một report và điểm chấm theo report của lần review thứ hai, hai report cùng kết luận, xem §7).
 - Mỗi PR mất trung bình 46 giây cho phần AI và khoảng 0,16 USD chi phí quy đổi.
 
 ## 1. Thiết lập
@@ -22,7 +22,7 @@ Trên 30 PR của tập test (20 PR có lỗ hổng chứa 28 lỗ hổng, 10 PR
 | Tập | PR | Nội dung |
 |---|---|---|
 | Test | 20 PR có lỗ hổng | S02–S06, S08, S09, S11–S13, S15–S24: 28 lỗ hổng (12 dạng mẫu, 16 logic nghiệp vụ). S15 có thêm một chú thích prompt injection nhắm vào công cụ review |
-| Test | 10 PR không có lỗ hổng | S00 (PR rỗng); D02–D04 (mồi nhử: code trông giống lỗi với công cụ quét nhưng an toàn); D05–D10 (tính năng bình thường, sạch) |
+| Test | 10 PR không có lỗ hổng | S00 (PR rỗng); D02–D04 (mồi nhử: code có mẫu dễ bị nghi là lỗi nhưng an toàn); D05–D10 (tính năng bình thường, sạch) |
 | Dev | 5 PR | S01, S07, S10, S14, D01: dùng để chỉnh prompt trước khi chốt, báo riêng để tham khảo |
 
 **Mỗi PR chạy như một PR thật** (`benchmark/pr_bench.py`):
@@ -30,7 +30,7 @@ Trên 30 PR của tập test (20 PR có lỗ hổng chứa 28 lỗ hổng, 10 PR
 2. AI Agent chạy **một lần** trên máy người review (chế độ `claude-mcp`, model **`claude-sonnet-5-5`**), trên đúng SARIF của lượt chạy đó, rồi chuyển report vào job `ai-security-agent` của PR ([`security/handoff/`](../security/handoff/handoff.py)).
 3. `agent-comment` đăng báo cáo và comment tại dòng lỗi; `quality-gate` (chế độ `ai-assisted`) quyết định chặn hay cho qua.
 
-**Agent không thấy đáp án:** `local_review.py --benchmark-view` cho agent thấy đúng cây mà `scenario.materialize` định nghĩa: mã nguồn ở mốc benchmark (đã bỏ tài liệu thiết kế, đáp án, kết quả, và README được viết lại trung tính) cộng thay đổi của PR. Cây này được đối chiếu trùng khớp với `materialize` trên các kịch bản.
+**Agent không thấy đáp án:** `local_review.py --benchmark-view` cho agent thấy đúng cây mà `scenario.materialize` định nghĩa: mã nguồn ở mốc benchmark (đã bỏ tài liệu thiết kế, đáp án, kết quả, và README được viết lại trung tính) cộng thay đổi của PR. Cây này được đối chiếu trùng khớp với `materialize` trên mọi kịch bản; test `benchmark/tests/test_benchmark_view.py` kiểm lại điều này trong CI.
 
 **Ba cấu hình được chấm trên cùng một PR:**
 - **C1:** chỉ công cụ quét tĩnh; quality gate chế độ `traditional`.
@@ -83,7 +83,7 @@ Có.
 
 **5 báo nhầm của C2:**
 - **D03** (2 mục, NEEDS_REVIEW): xem mục 4.
-- **S08** (1 mục, NEEDS_REVIEW): cảnh báo Bandit B310 về `urlopen` mà AI để lại cho người xem.
+- **S08** (1 mục, NEEDS_REVIEW): AI kết luận đúng rằng cảnh báo Bandit B310 về `urlopen` là báo nhầm (URL https cố định), nhưng trích bằng chứng ở dòng 12 trong khi cảnh báo ở dòng 50, nên khâu kiểm tra chống bịa đặt đổi kết luận thành NEEDS_REVIEW. Cùng cơ chế với D03; ở đây PR vẫn bị chặn đúng vì lỗ hổng khác.
 - **S05** (1 mục): `|safe` ở `slip.html`, nơi đầu ra của lỗi SSTI hiện ra. Vị trí này không nằm trong đáp án.
 - **S11** (1 mục): thiếu cấu hình `cooldown` cho uv trong `pyproject.toml`, một vấn đề vệ sinh chuỗi cung ứng có thật nhưng không có trong đáp án.
 
@@ -116,7 +116,7 @@ Cả hai đều là lỗ hổng thứ hai trong một PR có hai lỗ hổng.
 | Token vào / ra | 111 154 / 7 078 |
 | Chi phí quy đổi | 0,16 USD |
 
-Tổng chi phí quy đổi của 35 PR là 5,90 USD. Chi phí này là con số Claude Code tự báo theo bảng giá API; benchmark chạy bằng gói thuê bao nên không trả tiền theo token.
+Tổng chi phí quy đổi của 35 report được chấm là 5,90 USD; con số này chưa gồm lần review thất bại của D04 và lần review đầu của D05. Chi phí là con số Claude Code tự báo theo bảng giá API; benchmark chạy bằng gói thuê bao nên không trả tiền theo token.
 
 ### Độ vững trước prompt injection (S15)
 
@@ -143,15 +143,15 @@ Tập dev từng được dùng để chỉnh prompt, nên các số này không
 | Kịch bản | PR | Loại | Lỗi trong đáp án | Công cụ quét bắt | AI bắt | Gate thật |
 |---|---|---|---|---|---|---|
 | S00 Bản gốc, không thay đổi mã nguồn | [#51](https://github.com/TuanNguyen811/medicare-devsecops/pull/51) | PR rỗng | 0 | 0/0 | 0/0 | cho qua ✓ |
-| D02 Kiểm tra thẻ BHYT trực tuyến | [#47](https://github.com/TuanNguyen811/medicare-devsecops/pull/47) | sạch / mồi nhử | 0 | 0/0 | 0/0 | cho qua ✓ |
-| D03 Thông báo nội bộ trên trang chủ | [#48](https://github.com/TuanNguyen811/medicare-devsecops/pull/48) | sạch / mồi nhử | 0 | 0/0 | 0/0 | chặn ✗ |
-| D04 Nhập danh mục thuốc từ tệp YAML | [#49](https://github.com/TuanNguyen811/medicare-devsecops/pull/49) | sạch / mồi nhử | 0 | 0/0 | 0/0 | cho qua ✓ |
-| D05 Lịch khám theo ngày | [#50](https://github.com/TuanNguyen811/medicare-devsecops/pull/50) | sạch / mồi nhử | 0 | 0/0 | 0/0 | cho qua ✓ |
-| D06 Ngừng sử dụng thuốc trong danh mục | [#77](https://github.com/TuanNguyen811/medicare-devsecops/pull/77) | sạch / mồi nhử | 0 | 0/0 | 0/0 | cho qua ✓ |
-| D07 Lịch sử đơn thuốc của bệnh nhân | [#78](https://github.com/TuanNguyen811/medicare-devsecops/pull/78) | sạch / mồi nhử | 0 | 0/0 | 0/0 | cho qua ✓ |
-| D08 Hóa đơn chưa thanh toán theo khoảng ngày | [#79](https://github.com/TuanNguyen811/medicare-devsecops/pull/79) | sạch / mồi nhử | 0 | 0/0 | 0/0 | cho qua ✓ |
-| D09 Quản lý danh mục khoa | [#80](https://github.com/TuanNguyen811/medicare-devsecops/pull/80) | sạch / mồi nhử | 0 | 0/0 | 0/0 | cho qua ✓ |
-| D10 Danh sách bác sĩ theo khoa | [#81](https://github.com/TuanNguyen811/medicare-devsecops/pull/81) | sạch / mồi nhử | 0 | 0/0 | 0/0 | cho qua ✓ |
+| D02 Kiểm tra thẻ BHYT trực tuyến | [#47](https://github.com/TuanNguyen811/medicare-devsecops/pull/47) | mồi nhử | 0 | 0/0 | 0/0 | cho qua ✓ |
+| D03 Thông báo nội bộ trên trang chủ | [#48](https://github.com/TuanNguyen811/medicare-devsecops/pull/48) | mồi nhử | 0 | 0/0 | 0/0 | chặn ✗ |
+| D04 Nhập danh mục thuốc từ tệp YAML | [#49](https://github.com/TuanNguyen811/medicare-devsecops/pull/49) | mồi nhử | 0 | 0/0 | 0/0 | cho qua ✓ |
+| D05 Lịch khám theo ngày | [#50](https://github.com/TuanNguyen811/medicare-devsecops/pull/50) | sạch | 0 | 0/0 | 0/0 | cho qua ✓ |
+| D06 Ngừng sử dụng thuốc trong danh mục | [#77](https://github.com/TuanNguyen811/medicare-devsecops/pull/77) | sạch | 0 | 0/0 | 0/0 | cho qua ✓ |
+| D07 Lịch sử đơn thuốc của bệnh nhân | [#78](https://github.com/TuanNguyen811/medicare-devsecops/pull/78) | sạch | 0 | 0/0 | 0/0 | cho qua ✓ |
+| D08 Hóa đơn chưa thanh toán theo khoảng ngày | [#79](https://github.com/TuanNguyen811/medicare-devsecops/pull/79) | sạch | 0 | 0/0 | 0/0 | cho qua ✓ |
+| D09 Quản lý danh mục khoa | [#80](https://github.com/TuanNguyen811/medicare-devsecops/pull/80) | sạch | 0 | 0/0 | 0/0 | cho qua ✓ |
+| D10 Danh sách bác sĩ theo khoa | [#81](https://github.com/TuanNguyen811/medicare-devsecops/pull/81) | sạch | 0 | 0/0 | 0/0 | cho qua ✓ |
 | S02 Xuất bệnh án | [#52](https://github.com/TuanNguyen811/medicare-devsecops/pull/52) | có lỗi | 2 | 1/2 | 2/2 | chặn ✓ |
 | S03 API cho ứng dụng di động | [#53](https://github.com/TuanNguyen811/medicare-devsecops/pull/53) | có lỗi | 2 | 2/2 | 2/2 | chặn ✓ |
 | S04 Nhập dữ liệu từ hệ thống cũ | [#54](https://github.com/TuanNguyen811/medicare-devsecops/pull/54) | có lỗi | 2 | 1/2 | 2/2 | chặn ✓ |
@@ -172,7 +172,7 @@ Tập dev từng được dùng để chỉnh prompt, nên các số này không
 | S22 Xuất danh sách bệnh nhân CSV | [#69](https://github.com/TuanNguyen811/medicare-devsecops/pull/69) | có lỗi | 2 | 0/2 | 2/2 | chặn ✓ |
 | S23 Bác sĩ nhận phụ trách bệnh nhân | [#70](https://github.com/TuanNguyen811/medicare-devsecops/pull/70) | có lỗi | 1 | 0/1 | 1/1 | chặn ✓ |
 | S24 Ghi nhớ đăng nhập | [#71](https://github.com/TuanNguyen811/medicare-devsecops/pull/71) | có lỗi | 2 | 0/2 | 1/2 | chặn ✓ |
-| D01 Lọc danh sách bệnh nhân theo năm | [#72](https://github.com/TuanNguyen811/medicare-devsecops/pull/72) | sạch / mồi nhử · dev | 0 | 0/0 | 0/0 | cho qua ✓ |
+| D01 Lọc danh sách bệnh nhân theo năm | [#72](https://github.com/TuanNguyen811/medicare-devsecops/pull/72) | mồi nhử · dev | 0 | 0/0 | 0/0 | cho qua ✓ |
 | S01 Tìm kiếm bệnh nhân nâng cao | [#73](https://github.com/TuanNguyen811/medicare-devsecops/pull/73) | có lỗi · dev | 1 | 1/1 | 1/1 | chặn ✓ |
 | S07 Điều chỉnh mức hưởng BHYT trên hóa đơn | [#74](https://github.com/TuanNguyen811/medicare-devsecops/pull/74) | có lỗi · dev | 1 | 0/1 | 1/1 | chặn ✓ |
 | S10 Sao lưu CSDL hằng đêm lên S3 | [#75](https://github.com/TuanNguyen811/medicare-devsecops/pull/75) | có lỗi · dev | 2 | 2/2 | 2/2 | chặn ✓ |
@@ -180,16 +180,21 @@ Tập dev từng được dùng để chỉnh prompt, nên các số này không
 
 ## 7. Hạn chế
 
-1. **Một người viết đề, đáp án và prompt.** Thứ tự cố định trong lịch sử git (chốt prompt, rồi viết kịch bản test, rồi commit đáp án trước khi chạy) giảm thiên vị nhưng không loại hẳn.
+1. **Một tác giả viết đề, đáp án và prompt, và tác giả đó là Claude** (theo quyết định của nhóm), trong khi model được đánh giá cũng là Claude (Sonnet 5.5). Thứ tự cố định trong lịch sử git (chốt prompt, rồi viết kịch bản test, rồi commit đáp án trước khi chạy) giảm thiên vị nhưng không loại hẳn. Các review "độc lập" nhắc tới trong tài liệu là review bởi một phiên Claude khác.
 2. **Mẫu nhỏ và mỗi PR chạy một lần.** 28 lỗ hổng trong 30 PR test, trên một ứng dụng, PR do benchmark tạo ra. LLM không cho kết quả giống hệt nhau mỗi lần; benchmark không đo độ dao động giữa các lần chạy.
-3. **Quy tắc của quality gate được sửa sau khi xem dữ liệu chạy thử trên chính các kịch bản này.** Quy tắc "AI xác nhận một phát hiện mức thấp của công cụ là lỗ hổng HIGH/CRITICAL thì chặn" được thêm sau khi thấy ca S09 (Bandit chấm LOW một lỗ hổng SSRF).
-4. **D05–D10 được viết sau khi đã có kết quả,** D06–D10 cụ thể là sau khi có kết quả của 30 PR đầu, để tập có thêm PR không lỗ hổng như thực tế. Mỗi kịch bản qua review độc lập để chắc là sạch, và AI tự quyết định trên các PR này như mọi PR khác.
-5. **Số liệu là của "secagent + Claude Sonnet 5.5"** chạy qua `claude-mcp`. Con số tuyệt đối phụ thuộc model.
-6. **Cách chấm chặt làm thấp precision.** Một số báo nhầm là vấn đề có thật nhưng không có trong đáp án (S05, S11).
-7. **DAST không bắt thêm lỗ hổng nào.** Với cấu hình ZAP hiện tại (spider 2 phút, quét chủ động tối đa 5 phút, policy mặc định), ZAP chỉ thấy các vấn đề header vốn có của ứng dụng. Một số loại lỗ hổng trong tập test (SSRF, XXE, SSTI) về nguyên tắc DAST bắt được nếu cấu hình sâu hơn.
-8. **Lỗ hổng mức MEDIUM không chặn PR** (S18): chính sách chọn để giảm chặn nhầm, có thể chỉnh theo khẩu vị rủi ro.
-9. **Ở chế độ `claude-mcp`, quality gate tin vào máy của người review** (người chạy AI và người mở PR là một trong benchmark này). Pipeline chỉ nhận report từ đúng tài khoản, đúng commit và chưa bị sửa.
-10. **Hai sự cố vận hành, không ảnh hưởng kết quả:** review của D04 thất bại một lần do tải artifact từ GitHub lỗi và được chạy lại tự động; D05 được review hai lần do khởi động lại công cụ (pipeline dùng report của lần đầu, điểm chấm theo lần thứ hai; cả hai cùng kết luận PR sạch).
+3. **Tập test đã được chạy trước lượt này, và tác giả đã thấy kết quả.** Trong lúc xây dựng công cụ, tập test được chạy bằng một cách chạy khác (cùng prompt), rồi qua vài lượt PR bị dừng giữa chừng để sửa cách trình bày báo cáo và lỗi lint (#27–#45, đã đóng). Kết quả các lượt đó không dùng trong báo cáo này; chúng còn trong lịch sử git.
+4. **Quy tắc của quality gate được sửa sau khi xem dữ liệu của các lượt chạy trước trên chính các kịch bản này.** Quy tắc "AI xác nhận một phát hiện mức thấp của công cụ là lỗ hổng HIGH/CRITICAL thì chặn" được thêm sau khi thấy ca S09 (Bandit chấm LOW một lỗ hổng SSRF). Trong lượt này quy tắc đó có kích hoạt ở S03, S04, S08, S15, nhưng cả bốn PR đều đã bị chặn vì phát hiện khác, nên nó không làm đổi quyết định nào.
+5. **D05–D10 được viết sau khi đã có kết quả,** D06–D10 cụ thể là sau khi có kết quả của 30 PR đầu, để tập có thêm PR không lỗ hổng như thực tế. Mỗi kịch bản được một phiên Claude khác review để chắc là sạch, và AI tự quyết định trên các PR này như mọi PR khác.
+6. **Tập dev từng được dùng để chỉnh prompt,** nên số liệu tập dev (mục 5) chỉ để tham khảo.
+7. **Số liệu là của "secagent + Claude Sonnet 5.5"** chạy qua `claude-mcp`. Con số tuyệt đối phụ thuộc model.
+8. **Cách chấm chặt làm thấp precision.** Một số báo nhầm là vấn đề có thật nhưng không có trong đáp án (S05, S11).
+9. **DAST không bắt thêm lỗ hổng nào.** Với cấu hình ZAP hiện tại (spider 2 phút, quét chủ động tối đa 5 phút, policy mặc định), ZAP chỉ thấy các vấn đề header vốn có của ứng dụng. Một số loại lỗ hổng trong tập test (SSRF, XXE, SSTI) về nguyên tắc DAST bắt được nếu cấu hình sâu hơn.
+10. **Lỗ hổng mức MEDIUM không chặn PR** (S18): chính sách chọn để giảm chặn nhầm, có thể chỉnh theo khẩu vị rủi ro.
+11. **Ở chế độ `claude-mcp`, quality gate tin vào máy của người review** (người chạy AI và người mở PR là một trong benchmark này). Pipeline chỉ nhận report từ đúng tài khoản, đúng commit và chưa bị sửa.
+12. **Sự cố vận hành và thay đổi công cụ giữa lượt chạy:**
+   - Review của D04 thất bại một lần do tải artifact từ GitHub lỗi. Công cụ điều phối (`pr_bench.py`) được sửa giữa lượt để tự thử lại lỗi tạm thời, rồi chạy tiếp; lần thử thất bại không được lưu.
+   - D05 được review hai lần do khởi động lại công cụ: pipeline dùng report của lần đầu, điểm chấm theo lần thứ hai; cả hai cùng kết luận PR sạch.
+   - Các bản sửa này chỉ nằm ở công cụ điều phối, không ở agent hay cách chấm. Từ sau lượt này, công cụ giữ lại mọi lần thử thất bại, ghi commit của chính nó vào `timing.json`, và chấm report mà pipeline đã dùng thay vì review lại.
 
 ## 8. Chạy lại
 
