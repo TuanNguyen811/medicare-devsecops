@@ -36,6 +36,14 @@ AUTHZ_DENIED = Counter(
 LOGIN_SUCCESS = "success"
 LOGIN_FAILURE = "failure"
 LOGIN_LOCKED = "locked"
+AUTHZ_RESOURCES = ("patient", "record", "prescription", "appointment", "invoice", "role")
+
+# Export every known series at 0 from the start: increase() over a series that appears
+# mid-window misses its first increments, which would blunt the brute-force and IDOR alerts.
+for _result in (LOGIN_SUCCESS, LOGIN_FAILURE, LOGIN_LOCKED):
+    LOGINS.labels(result=_result)
+for _resource in AUTHZ_RESOURCES:
+    AUTHZ_DENIED.labels(resource=_resource)
 
 
 def login_attempt(result: str) -> None:

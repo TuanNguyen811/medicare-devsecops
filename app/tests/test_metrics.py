@@ -1,7 +1,7 @@
 import urllib.request
 
 from fastapi.testclient import TestClient
-from prometheus_client import REGISTRY
+from prometheus_client import REGISTRY, generate_latest
 
 from medicare.auth.models import Role
 from medicare.config import Settings
@@ -99,3 +99,15 @@ def test_metrics_server_serves_on_its_own_port(database_url):
         with urllib.request.urlopen("http://127.0.0.1:19000/metrics", timeout=5) as r:
             assert b"medicare_login_total" in r.read()
     app.state.engine.dispose()
+
+
+def test_alerting_series_exported_before_any_event():
+    """Login and refusal series exist from import (alerts use increase(), which misses the
+    first increments of a series that appears mid-window). Run alone, nothing else has
+    touched them, so their presence comes from the pre-initialisation."""
+    out = generate_latest().decode()
+    for result in ("success", "failure", "locked"):
+        assert f'medicare_login_total{{result="{result}"}} ' in out
+    for resource in ("patient", "record", "prescription", "appointment", "invoice", "role"):
+        assert f'medicare_authz_denied_total{{resource="{resource}"}} ' in out
+    assert "medicare_account_lockouts_total " in out

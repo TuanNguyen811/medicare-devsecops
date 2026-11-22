@@ -267,6 +267,15 @@ Mỗi luật có `annotations.description` ngắn bằng tiếng Việt. Cảnh 
 - `--mode normal`: các vai trò đăng nhập, xem danh sách, xem bệnh án đúng quyền, đặt lịch, ở nhịp người dùng thật.
 - `--mode brute-force`: dò mật khẩu một tài khoản → bật `BruteForceSuspected` và `AccountLockout`.
 - `--mode idor-probe`: một bệnh nhân thử lần lượt id bệnh án của người khác → bật `AuthzDeniedSpike`.
+- `--mode bulk-read` (thêm khi làm, để `RecordAccessSpike` cũng demo được): một bác sĩ mở liên tiếp mọi bệnh án mình được xem.
+
+### 7.4 Quyết định khi làm (giai đoạn 4)
+
+- **Bật metrics bằng cấu hình.** `METRICS_PORT` mặc định tắt. `METRICS_HOST` mặc định `127.0.0.1`. Overlay `deploy/local` đặt `9000` và `0.0.0.0`. Test và compose không mở cổng nào.
+- **`authz_denied` chỉ đếm đối tượng có thật mà người dùng không được xem**, cùng với các lần bị chặn theo vai trò (`resource="role"`). Người ngoài vẫn nhận cùng một câu trả lời 404 (R-15), nhưng chỉ lần từ chối thật mới là dấu hiệu dò.
+- **Khởi tạo sẵn các nhãn bằng 0** (kết quả đăng nhập, loại đối tượng). `increase()` trên một chuỗi xuất hiện giữa cửa sổ sẽ bỏ mất những lần tăng đầu: lúc thử, 30 lần sai chỉ đếm được 21.
+- **Prometheus tìm pod qua Service headless `medicare-metrics` (DNS)**, không dùng service discovery của Kubernetes, nên không cần ServiceAccount hay RBAC.
+- **TSDB và dữ liệu Grafana nằm trên emptyDir.** Demo cục bộ không cần giữ lịch sử.
 
 ## 8. Benchmark (thay mục 5.2, 5.4 của spec gốc; các mục khác giữ nguyên)
 

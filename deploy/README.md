@@ -9,6 +9,7 @@ main-ci (GitHub)                                  máy này
                                                       → Kyverno (admission) kiểm tra lại
                                                       → apply deploy/local → rollout
                                                       → smoke test (lỗi: rollback)
+                                                      → giám sát: Prometheus, Alertmanager, Grafana
                                                       → (--dast) ZAP quét bản vừa deploy
 ```
 
@@ -21,7 +22,7 @@ main-ci (GitHub)                                  máy này
 ## Lệnh
 
 ```bash
-bash deploy/pull-deploy.sh                 # bản main mới nhất (:latest → digest), 1-2 phút
+bash deploy/pull-deploy.sh                 # bản main mới nhất (:latest → digest), 2-6 phút
 bash deploy/pull-deploy.sh --digest sha256:<...>
 bash deploy/pull-deploy.sh --dast          # thêm ZAP quét bản vừa deploy, 5 vai trò (~25 phút)
 bash deploy/demo-unsigned.sh               # demo: cụm từ chối image không do main-ci ký
@@ -45,6 +46,43 @@ Smoke test, seed và việc xuất route chỉ nhắm vào pod mới (đúng dig
 kubectl -n medicare port-forward --address 127.0.0.1 svc/medicare-app 18000:80
 # rồi mở http://127.0.0.1:18000
 ```
+
+## Giám sát (spec bổ sung mục 7)
+
+`pull-deploy.sh` apply `monitoring/` (namespace `monitoring`) ở mỗi lần chạy, rồi kiểm tra Prometheus lấy được metrics của pod mới.
+
+- App phục vụ metrics ở **cổng riêng 9000**, không qua cổng 8000 và Service của app. NetworkPolicy `metrics-from-prometheus` chỉ cho pod `app=prometheus` của namespace `monitoring` vào cổng này. Một pod ở namespace khác thử vào thì bị chặn (đã kiểm tra 2026-11-22).
+- Prometheus tìm pod qua Service headless `medicare-metrics` (DNS), nên không cần quyền đọc Kubernetes API.
+- Lần chạy đầu sinh secret `grafana-admin` và **in mật khẩu Grafana (user `admin`) một lần**. Đọc lại bằng:
+  ```bash
+  kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.password}' | base64 -d
+  ```
+
+```bash
+kubectl -n monitoring port-forward --address 127.0.0.1 svc/grafana 13000:3000       # dashboard "MediCare Security"
+kubectl -n monitoring port-forward --address 127.0.0.1 svc/alertmanager 19093:9093  # cảnh báo đang bật
+kubectl -n monitoring port-forward --address 127.0.0.1 svc/prometheus 19090:9090    # truy vấn, luật cảnh báo
+```
+
+**Cảnh báo** (`monitoring/config/rules.yml`, cửa sổ 5 phút). Cảnh báo chỉ hiện trên Alertmanager và Grafana, không gửi ra ngoài.
+
+| Cảnh báo | Điều kiện | Gây ra bằng |
+|---|---|---|
+| `BruteForceSuspected` | > 20 lần đăng nhập thất bại | `--mode brute-force` |
+| `AccountLockout` | có tài khoản bị khóa | `--mode brute-force` |
+| `RecordAccessSpike` | một người truy cập dữ liệu lâm sàng > 30 lần | `--mode bulk-read` |
+| `AuthzDeniedSpike` | > 20 lần bị từ chối quyền trên đối tượng có thật | `--mode idor-probe` |
+| `HighErrorRate` | > 5% request trả 5xx | (lỗi thật của app) |
+| `AppDown` | Prometheus không lấy được metrics quá 1 phút | `kubectl -n medicare scale deploy/medicare-app --replicas=0` |
+
+**Tạo truy cập** (cần port-forward app ở cổng 18000; chỉ nhận `127.0.0.1`/`localhost`; mật khẩu demo lấy từ `DEMO_PASSWORD` hoặc từ secret trong cụm):
+```bash
+python deploy/simulate-traffic.py --mode normal --duration 300   # nhịp người dùng thật: không bật cảnh báo
+python deploy/simulate-traffic.py --mode brute-force             # khóa bacsi4 trong 15 phút
+python deploy/simulate-traffic.py --mode idor-probe              # benhnhan1 dò id bệnh án 1..40
+python deploy/simulate-traffic.py --mode bulk-read               # bacsi1 mở 40 bệnh án liên tiếp
+```
+Cảnh báo hiện sau khoảng 30–60 giây (Prometheus lấy metrics và đánh giá luật mỗi 15 giây).
 
 ## Hai lớp kiểm tra chữ ký
 
@@ -75,6 +113,9 @@ Script không có cờ nào để bỏ qua kiểm tra chữ ký.
 | `install-tools.sh` | Tải cosign ghim sha256 vào `.tools/` |
 | `pull-deploy.sh` | Deploy kiểu kéo về như sơ đồ trên |
 | `demo-unsigned.sh` | Dry-run phía server với một image không do `main` ký, để thấy Kyverno từ chối |
+| `monitoring/` | Prometheus, Alertmanager, Grafana (image ghim digest, uid cao, root filesystem chỉ đọc, NetworkPolicy default-deny); `config/` chứa cấu hình scrape, luật cảnh báo, dashboard |
+| `local/metrics.yaml` | Service headless `medicare-metrics` và NetworkPolicy cho Prometheus vào cổng 9000 |
+| `simulate-traffic.py` | Tạo truy cập bình thường hoặc tấn công để demo cảnh báo |
 
 **Các file sinh ra khi chạy (không commit):**
 - `.tools/`: cosign, manifest Kyverno;
