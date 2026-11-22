@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,6 +14,21 @@ from medicare.record.models import MedicalRecord
 from medicare.record.schemas import RecordForm
 
 ENTITY = "record"
+
+logger = logging.getLogger("medicare.record")
+
+
+def _log_event(event: str, user: User, record: MedicalRecord, patient: Patient) -> None:
+    """Operational event for support: who opened which visit of which patient."""
+    logger.info(event, extra={
+        "user_id": user.id,
+        "role": user.role.value,
+        "record_id": record.id,
+        "patient_code": patient.code,
+        "national_id": patient.national_id,
+        "insurance_number": patient.insurance_number,
+        "diagnosis": f"{record.diagnosis_code} {record.diagnosis_text}",
+    })
 
 
 def _load(db: Session, record_id: int) -> tuple[MedicalRecord, Patient] | None:
@@ -30,6 +47,7 @@ def get_record_for(db: Session, user: User, record_id: int, ip: str | None) -> M
         metrics.authz_denied("record")
         raise NotFound
     audit.log_access(db, user, audit.VIEW_RECORD, ENTITY, record_id, ip)
+    _log_event("record.view", user, *loaded)
     return loaded[0]
 
 
@@ -88,4 +106,5 @@ def update_record(
         setattr(record, field, value)
     db.flush()
     audit.log_access(db, user, audit.UPDATE_RECORD, ENTITY, record.id, ip)
+    _log_event("record.update", user, record, record.patient)
     return record
