@@ -162,3 +162,60 @@ def test_record_page_offers_prescribing_to_attending_only(client, db):
     client.cookies.clear()
     login(client, make_user(db, Role.NURSE, department=dept))
     assert f"/records/{record.id}/prescriptions/new" not in client.get(f"/records/{record.id}").text
+
+
+def set_active(client, med, action):
+    data = {"csrf_token": csrf_token(client, "/admin/medicines")}
+    return client.post(f"/admin/medicines/{med.id}/{action}", data=data, follow_redirects=False)
+
+
+def test_admin_discontinues_and_reactivates_medicine(client, db):
+    med = make_medicine(db)
+    login(client, make_user(db, Role.ADMIN))
+    assert set_active(client, med, "discontinue").status_code == 303
+    db.refresh(med)
+    assert not med.is_active and med.discontinued_at is not None
+    assert "Dùng lại" in client.get("/admin/medicines").text
+    assert set_active(client, med, "reactivate").status_code == 303
+    db.refresh(med)
+    assert med.is_active and med.discontinued_at is None
+
+
+def test_discontinued_medicine_not_offered_for_new_prescription(client, db):
+    _, doc, _, record = ward(db)
+    kept, dropped = make_medicine(db), make_medicine(db)
+    login(client, make_user(db, Role.ADMIN))
+    set_active(client, dropped, "discontinue")
+    client.cookies.clear()
+    login(client, doc)
+    html = client.get(f"/records/{record.id}/prescriptions/new").text
+    assert kept.name in html and dropped.name not in html
+    assert prescribe(client, record, [(dropped.id, 1, "Sáng")]).status_code == 400
+
+
+def test_existing_prescription_keeps_discontinued_medicine(client, db):
+    _, doc, _, record = ward(db)
+    med = make_medicine(db)
+    p = make_prescription(db, record, doc, [(med, 2)])
+    login(client, make_user(db, Role.ADMIN))
+    set_active(client, med, "discontinue")
+    client.cookies.clear()
+    login(client, doc)
+    html = client.get(f"/prescriptions/{p.id}").text
+    assert med.name in html and "Ngừng sử dụng" in html
+
+
+def test_only_admin_changes_medicine_status(client, db):
+    med = make_medicine(db)
+    login(client, make_user(db, Role.DOCTOR))
+    data = {"csrf_token": csrf_token(client, "/")}
+    r = client.post(f"/admin/medicines/{med.id}/discontinue", data=data)
+    assert r.status_code == 403
+    db.refresh(med)
+    assert med.is_active
+
+
+def test_discontinue_unknown_medicine_is_404(client, db):
+    login(client, make_user(db, Role.ADMIN))
+    data = {"csrf_token": csrf_token(client, "/admin/medicines")}
+    assert client.post("/admin/medicines/999999/discontinue", data=data).status_code == 404

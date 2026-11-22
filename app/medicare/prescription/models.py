@@ -20,6 +20,7 @@ class Medicine(Base):
     unit: Mapped[str] = mapped_column(String(20))
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 0))
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
+    discontinued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Prescription(Base):

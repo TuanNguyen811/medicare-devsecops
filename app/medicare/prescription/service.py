@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -109,5 +110,22 @@ def add_medicine(db: Session, code: str, name: str, unit: str, unit_price: str) 
         raise PrescriptionError("Mã thuốc đã tồn tại")
     medicine = Medicine(code=code, name=name, unit=unit, unit_price=Decimal(unit_price))
     db.add(medicine)
+    db.flush()
+    return medicine
+
+
+def set_medicine_active(db: Session, medicine_id: int, active: bool) -> Medicine:
+    """Discontinue or reactivate a catalogue entry.
+
+    Discontinued medicines are no longer offered for new prescriptions; prescriptions
+    that already reference them are left untouched.
+    """
+    medicine = db.get(Medicine, medicine_id)
+    if medicine is None:
+        raise NotFound
+    if medicine.is_active == active:
+        return medicine
+    medicine.is_active = active
+    medicine.discontinued_at = None if active else datetime.now(UTC)
     db.flush()
     return medicine

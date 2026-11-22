@@ -23,7 +23,7 @@
 <div class="card mc-card">
   <div class="table-responsive">
     <table class="table table-sm table-hover align-middle mb-0">
-      <thead><tr><th>Mã</th><th>Tên thuốc</th><th>Đơn vị</th><th class="text-end">Đơn giá</th><th>Trạng thái</th></tr></thead>
+      <thead><tr><th>Mã</th><th>Tên thuốc</th><th>Đơn vị</th><th class="text-end">Đơn giá</th><th>Trạng thái</th><th></th></tr></thead>
       <tbody>
         {% for m in medicines %}
         <tr>
@@ -31,10 +31,23 @@
           <td>{{ m.name }}</td>
           <td>{{ m.unit }}</td>
           <td class="text-end">{{ m.unit_price | vnd }}</td>
-          <td>{% if m.is_active %}<span class="badge text-bg-success">Đang dùng</span>{% else %}<span class="badge text-bg-secondary">Ngừng</span>{% endif %}</td>
+          <td>
+            {% if m.is_active %}<span class="badge text-bg-success">Đang dùng</span>
+            {% else %}<span class="badge text-bg-secondary">Ngừng</span>{% if m.discontinued_at %} <span class="small text-secondary">từ {{ m.discontinued_at | datetime_vn }}</span>{% endif %}{% endif %}
+          </td>
+          <td class="text-end">
+            <form method="post" action="/admin/medicines/{{ m.id }}/{{ 'discontinue' if m.is_active else 'reactivate' }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              {% if m.is_active %}
+              <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-pause-circle"></i> Ngừng sử dụng</button>
+              {% else %}
+              <button class="btn btn-outline-success btn-sm" type="submit"><i class="bi bi-arrow-counterclockwise"></i> Dùng lại</button>
+              {% endif %}
+            </form>
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="text-center text-secondary py-3">Chưa có thuốc</td></tr>
+        <tr><td colspan="6" class="text-center text-secondary py-3">Chưa có thuốc</td></tr>
         {% endfor %}
       </tbody>
     </table>
