@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Form, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -8,9 +10,10 @@ from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
 from medicare.common.errors import NotFound
-from medicare.common.ids import ObjectId
+from medicare.common.ids import INT4_MAX, ObjectId
 from medicare.common.templating import flash, render
 from medicare.db import get_db
+from medicare.department.models import Department
 from medicare.patient import service
 from medicare.patient.models import Patient
 from medicare.patient.schemas import FIELD_LABELS, PatientForm, form_errors
@@ -23,6 +26,7 @@ EDITORS = (Role.RECEPTIONIST, Role.ADMIN)
 staff_user = require_roles(*STAFF)
 editor_user = require_roles(*EDITORS)
 patient_user = require_roles(Role.PATIENT)
+nurse_user = require_roles(Role.NURSE)
 _FORM_FIELDS = tuple(FIELD_LABELS)
 
 
@@ -81,6 +85,32 @@ def list_patients(
             "q": q or "",
             "can_create": policy.can_edit_patient(user),
             "breadcrumbs": [("Trang chủ", "/"), ("Bệnh nhân", None)],
+        },
+    )
+
+
+@router.get("/ward/patients")
+def ward_patients(
+    request: Request,
+    department_id: Annotated[int | None, Query(ge=1, le=INT4_MAX)] = None,
+    user: User = Depends(nurse_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Ward round list: patients of a department, the nurse's own by default."""
+    dept_id = department_id or user.department_id
+    department = db.get(Department, dept_id) if dept_id is not None else None
+    rows = []
+    if department is not None:
+        rows = [(p, _identifiers(user, p), last_visit)
+                for p, last_visit in service.ward_patients(db, department.id)]
+    return render(
+        request,
+        "patient/ward.html",
+        {
+            "rows": rows,
+            "department": department,
+            "departments": service.list_departments(db),
+            "breadcrumbs": [("Trang chủ", "/"), ("Buồng bệnh", None)],
         },
     )
 

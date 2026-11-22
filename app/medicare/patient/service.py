@@ -1,6 +1,7 @@
 import secrets
+from datetime import date
 
-from sqlalchemy import false, or_, select
+from sqlalchemy import false, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,8 +12,10 @@ from medicare.common.errors import NotFound
 from medicare.department.models import Department
 from medicare.patient.models import Patient
 from medicare.patient.schemas import PatientForm
+from medicare.record.models import MedicalRecord
 
 SEARCH_LIMIT = 50
+WARD_LIMIT = 200
 
 
 class PatientDataError(ValueError):
@@ -60,8 +63,29 @@ def search_patients(db: Session, user: User, q: str | None) -> list[Patient]:
     return list(db.scalars(stmt).unique())
 
 
+def ward_patients(db: Session, department_id: int) -> list[tuple[Patient, date | None]]:
+    """Patients of one department with the date of their latest visit, for ward rounds."""
+    last_visit = (
+        select(MedicalRecord.patient_id, func.max(MedicalRecord.visit_date).label("visit_date"))
+        .group_by(MedicalRecord.patient_id)
+        .subquery()
+    )
+    stmt = (
+        select(Patient, last_visit.c.visit_date)
+        .outerjoin(last_visit, last_visit.c.patient_id == Patient.id)
+        .where(Patient.department_id == department_id)
+        .order_by(Patient.full_name, Patient.code)
+        .limit(WARD_LIMIT)
+    )
+    return [(patient, visit) for patient, visit in db.execute(stmt).unique().all()]
+
+
+def list_departments(db: Session) -> list[Department]:
+    return list(db.scalars(select(Department).order_by(Department.name)))
+
+
 def form_choices(db: Session) -> dict:
-    departments = db.scalars(select(Department).order_by(Department.name)).all()
+    departments = list_departments(db)
     doctors = db.scalars(
         select(User)
         .where(User.role == Role.DOCTOR, User.is_active.is_(True))

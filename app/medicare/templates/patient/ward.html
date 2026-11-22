@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Buồng bệnh{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h5 mb-0">Bệnh nhân {{ department.name if department else "theo khoa" }}</h1>
+  <span class="small text-secondary">{{ rows | length }} bệnh nhân</span>
+</div>
+<div class="card mc-card">
+  <div class="card-body pb-0">
+    <form class="row g-2 mb-3" method="get" action="/ward/patients">
+      <div class="col-sm-6 col-lg-4">
+        <select class="form-select form-select-sm" name="department_id" aria-label="Khoa">
+          {% for d in departments %}
+          <option value="{{ d.id }}" {% if department and d.id == department.id %}selected{% endif %}>{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> Xem</button></div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Mã BN</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>CCCD</th><th>Mã BHYT</th><th>BS phụ trách</th><th>Khám gần nhất</th></tr>
+      </thead>
+      <tbody>
+        {% for p, ids, last_visit in rows %}
+        <tr>
+          <td><a href="/patients/{{ p.id }}">{{ p.code }}</a></td>
+          <td>{{ p.full_name }}</td>
+          <td>{{ p.date_of_birth | date_vn }}</td>
+          <td>{{ "Nam" if p.gender == "M" else "Nữ" }}</td>
+          <td class="font-monospace">{{ ids.national_id }}</td>
+          <td class="font-monospace">{{ ids.insurance_number or "" }}</td>
+          <td>{{ p.attending_doctor.full_name if p.attending_doctor else "" }}</td>
+          <td>{{ last_visit | date_vn }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-secondary py-3">Khoa chưa có bệnh nhân</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
