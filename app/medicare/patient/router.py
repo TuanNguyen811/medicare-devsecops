@@ -1,12 +1,16 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from medicare import policy
+from medicare.audit import service as audit
 from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
+from medicare.common.csv_export import csv_response
 from medicare.common.errors import NotFound
 from medicare.common.ids import ObjectId
 from medicare.common.templating import flash, render
@@ -24,6 +28,12 @@ staff_user = require_roles(*STAFF)
 editor_user = require_roles(*EDITORS)
 patient_user = require_roles(Role.PATIENT)
 _FORM_FIELDS = tuple(FIELD_LABELS)
+EXPORT_HEADER = ("Mã BN", "Họ tên", "Ngày sinh", "Giới tính", "CCCD", "Mã BHYT",
+                 "Số điện thoại", "Địa chỉ", "Khoa", "BS phụ trách")
+
+
+def _ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
 
 
 def _identifiers(user: User, patient: Patient) -> dict[str, str | None]:
@@ -83,6 +93,29 @@ def list_patients(
             "breadcrumbs": [("Trang chủ", "/"), ("Bệnh nhân", None)],
         },
     )
+
+
+@router.get("/patients/export")
+def export_patients(
+    request: Request,
+    q: str | None = None,
+    user: User = Depends(staff_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """The patient list as CSV, with the same filter and scope as the list page."""
+    patients = service.search_patients(db, user, q, limit=service.EXPORT_LIMIT)
+    audit.log_bulk_access(db, user, audit.EXPORT_PATIENT, "patient",
+                          [p.id for p in patients], _ip(request))
+    db.commit()
+    rows = [
+        (p.code, p.full_name, p.date_of_birth.strftime("%d/%m/%Y"),
+         "Nam" if p.gender == "M" else "Nữ", p.national_id, p.insurance_number, p.phone,
+         p.address, p.department.name if p.department else None,
+         p.attending_doctor.full_name if p.attending_doctor else None)
+        for p in patients
+    ]
+    filename = f"benh-nhan-{date.today():%Y%m%d}.csv"
+    return csv_response(filename, EXPORT_HEADER, rows)
 
 
 @router.get("/patients/new")
