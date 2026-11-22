@@ -43,6 +43,9 @@
         {% if role in ("ADMIN", "RECEPTIONIST", "DOCTOR", "NURSE") %}
         <li class="nav-item"><a class="nav-link" href="/patients"><i class="bi bi-people"></i> Bệnh nhân</a></li>
         {% endif %}
+        {% if role == "NURSE" %}
+        <li class="nav-item"><a class="nav-link" href="/ward/patients"><i class="bi bi-hospital"></i> Buồng bệnh</a></li>
+        {% endif %}
         {% if role in ("ADMIN", "RECEPTIONIST", "DOCTOR", "NURSE", "PATIENT") %}
         <li class="nav-item"><a class="nav-link" href="/appointments"><i class="bi bi-calendar-check"></i> Lịch hẹn</a></li>
         {% endif %}
