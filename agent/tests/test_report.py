@@ -44,6 +44,13 @@ def test_markdown_report():
     assert text.index("<details>") > text.index("SQL ghép chuỗi")
 
 
+def test_markdown_report_does_not_name_how_the_llm_was_reached():
+    """The PR comment shows the model, not whether it ran with an API key or claude-mcp."""
+    for provider in ("claude-mcp", "anthropic", "gemini"):
+        text = render_markdown(Report(meta=meta(provider=provider), findings=[entry()]))
+        assert provider not in text and "LLM `" not in text and "claude-sonnet-5-5" in text
+
+
 def test_markdown_report_is_capped_and_redacted():
     secret = "AKIA" + "Q" * 16
     many = [entry(line=i, reasoning=f"{secret} " + "x" * 2000) for i in range(1, 80)]
