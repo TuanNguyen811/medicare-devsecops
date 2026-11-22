@@ -307,7 +307,7 @@ Mỗi luật có `annotations.description` ngắn bằng tiếng Việt. Cảnh 
 
 **Nhãn dựa trên số đo:**
 - Sau khi viết xong toàn bộ kịch bản, chạy C1 và C1+DAST.
-- Ghi `measured_detection: {sast_sca: bool, dast: bool}` vào `scenario.yaml` của từng kịch bản.
+- Ghi `measured_detection` vào `scenario.yaml` của từng kịch bản, theo từng lỗi: `scan_run` (lượt quét), `sast_sca` (id các lỗi C1 bắt được), `dast` (id các lỗi chỉ C1+DAST bắt được). Ghi theo lỗi vì một kịch bản có thể có lỗi bị bắt và lỗi bị sót. `evaluate.py` tự tính lại nhóm này từ kết quả quét; trường trong `scenario.yaml` là bản ghi để đọc.
 - Bảng kết quả chia nhóm theo nhãn đo được, không theo nhãn dự đoán.
 
 **Chia dev/test:**

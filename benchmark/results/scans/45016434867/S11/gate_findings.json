@@ -1,0 +1,72 @@
+{
+  "C1": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "semgrep:package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown:app/pyproject.toml:43",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "trivy:CVE-2020-14343:app/uv.lock:1",
+        "severity": "CRITICAL"
+      }
+    ]
+  },
+  "C1+DAST": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "semgrep:package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown:app/pyproject.toml:43",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "trivy:CVE-2020-14343:app/uv.lock:1",
+        "severity": "CRITICAL"
+      },
+      {
+        "id": "zap:10020:dast:GET /:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10020:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10021:dast:GET /:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /health:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /login:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10038:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+        "severity": "MEDIUM"
+      }
+    ]
+  }
+}

@@ -3,3 +3,7 @@ title: "Nâng cấp tiện ích: nhập bảng giá thuốc từ file YAML"
 split: test
 kind: vuln
 commit_message: Nhập bảng giá thuốc từ file YAML của nhà cung cấp, dùng PyYAML cùng phiên bản với hệ thống kho dược
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: [S11-1]
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

@@ -3,3 +3,7 @@ title: Nhập dữ liệu từ hệ thống cũ
 split: test
 kind: vuln
 commit_message: Nhập danh mục thuốc từ file xuất của HIS cũ (YAML, XML)
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: [S04-1]
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

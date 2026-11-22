@@ -1,0 +1,9 @@
+[
+  "app/medicare/auth/models.py",
+  "app/medicare/auth/router.py",
+  "app/medicare/auth/schemas.py",
+  "app/medicare/templates/base.html",
+  "app/medicare/templates/profile.html",
+  "app/migrations/versions/0004_user_phone.py",
+  "app/tests/test_profile.py"
+]

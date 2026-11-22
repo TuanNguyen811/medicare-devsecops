@@ -1,0 +1,8 @@
+[
+  "app/medicare/audit/maintenance.py",
+  "app/medicare/common/logs.py",
+  "app/medicare/config.py",
+  "app/medicare/main.py",
+  "app/medicare/record/service.py",
+  "app/tests/test_logging.py"
+]

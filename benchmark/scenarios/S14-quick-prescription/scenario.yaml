@@ -3,3 +3,7 @@ title: Kê đơn nhanh theo đơn mẫu
 split: dev
 kind: vuln
 commit_message: Kê đơn nhanh theo đơn mẫu khi đi buồng
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45008007877
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

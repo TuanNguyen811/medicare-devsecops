@@ -1,0 +1,10 @@
+{
+  "C1": {
+    "block": false,
+    "blocking": []
+  },
+  "C1+DAST": {
+    "block": false,
+    "blocking": []
+  }
+}

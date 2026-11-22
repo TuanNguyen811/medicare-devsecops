@@ -1,0 +1,7 @@
+[
+  "app/medicare/config.py",
+  "app/medicare/patient/insurance_check.py",
+  "app/medicare/patient/router.py",
+  "app/medicare/templates/patient/detail.html",
+  "app/tests/test_insurance_check.py"
+]

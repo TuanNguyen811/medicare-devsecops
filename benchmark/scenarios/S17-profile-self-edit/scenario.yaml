@@ -3,3 +3,7 @@ title: Tự cập nhật hồ sơ cá nhân
 split: test
 kind: vuln
 commit_message: Trang thông tin cá nhân, người dùng tự sửa họ tên hiển thị và số điện thoại liên hệ
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

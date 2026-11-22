@@ -1,0 +1,11 @@
+[
+  "app/medicare/audit/service.py",
+  "app/medicare/record/models.py",
+  "app/medicare/record/router.py",
+  "app/medicare/record/service.py",
+  "app/medicare/static/css/app.css",
+  "app/medicare/static/js/rich-note.js",
+  "app/medicare/templates/record/detail.html",
+  "app/migrations/versions/0004_record_notes.py",
+  "app/tests/test_record_notes.py"
+]

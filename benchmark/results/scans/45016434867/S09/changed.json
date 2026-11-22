@@ -1,0 +1,9 @@
+[
+  "app/medicare/audit/service.py",
+  "app/medicare/record/lab.py",
+  "app/medicare/record/models.py",
+  "app/medicare/record/router.py",
+  "app/medicare/templates/record/detail.html",
+  "app/migrations/versions/0004_lab_results.py",
+  "app/tests/test_lab_results.py"
+]

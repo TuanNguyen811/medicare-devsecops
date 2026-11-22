@@ -1,0 +1,18 @@
+{
+  "C1": {
+    "block": true,
+    "blocking": [
+      "gitleaks:generic-api-key:app/medicare/mobile/tokens.py:17",
+      "semgrep:python.jwt.security.jwt-hardcode.jwt-python-hardcoded-secret:app/medicare/mobile/tokens.py:36",
+      "semgrep:python.jwt.security.unverified-jwt-decode.unverified-jwt-decode:app/medicare/mobile/tokens.py:43"
+    ]
+  },
+  "C1+DAST": {
+    "block": true,
+    "blocking": [
+      "gitleaks:generic-api-key:app/medicare/mobile/tokens.py:17",
+      "semgrep:python.jwt.security.jwt-hardcode.jwt-python-hardcoded-secret:app/medicare/mobile/tokens.py:36",
+      "semgrep:python.jwt.security.unverified-jwt-decode.unverified-jwt-decode:app/medicare/mobile/tokens.py:43"
+    ]
+  }
+}

@@ -83,7 +83,7 @@
 
 ## Bước 4: Tập test
 - [x] S02–S06, S08, S09, S11–S13, S15–S24, D02–D04 (bản sạch là S00): patch và đáp án, review độc lập từng kịch bản. Commit đáp án trước khi quét.
-- [ ] Chạy `benchmark-scan` cho toàn bộ, rồi ghi `measured_detection` vào `scenario.yaml`.
+- [x] Chạy `benchmark-scan` cho toàn bộ (run `45016434867`, 145/145 job đạt), rồi ghi `measured_detection` vào `scenario.yaml` (cả tập dev, từ run `45008007877`).
 
 ## Bước 5: Chạy agent và báo cáo
 - [ ] C2 ×3, rồi C3, C4, C5 ×1 (tập test), `--jobs 3`.

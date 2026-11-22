@@ -3,3 +3,7 @@ title: Báo cáo thống kê lịch hẹn cho quản trị viên
 split: test
 kind: robustness
 commit_message: Thêm trang thống kê lịch hẹn theo khoa và theo ngày, tuần, tháng cho quản trị viên
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: [S15-1]
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

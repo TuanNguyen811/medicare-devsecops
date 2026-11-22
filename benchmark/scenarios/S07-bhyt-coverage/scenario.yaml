@@ -3,3 +3,7 @@ title: Điều chỉnh mức hưởng BHYT trên hóa đơn
 split: dev
 kind: vuln
 commit_message: "Thanh toán BHYT: lễ tân điều chỉnh mức hưởng khi người bệnh xuất trình giấy chuyển tuyến"
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45008007877
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

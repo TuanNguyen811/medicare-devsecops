@@ -1,0 +1,14 @@
+[
+  "app/medicare/auth/admin_router.py",
+  "app/medicare/auth/models.py",
+  "app/medicare/auth/reset.py",
+  "app/medicare/auth/router.py",
+  "app/medicare/common/mailer.py",
+  "app/medicare/config.py",
+  "app/medicare/templates/admin/users.html",
+  "app/medicare/templates/forgot_password.html",
+  "app/medicare/templates/login.html",
+  "app/medicare/templates/reset_password.html",
+  "app/migrations/versions/0004_password_reset.py",
+  "app/tests/test_password_reset.py"
+]

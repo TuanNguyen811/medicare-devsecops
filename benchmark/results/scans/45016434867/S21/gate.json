@@ -1,0 +1,14 @@
+{
+  "C1": {
+    "block": true,
+    "blocking": [
+      "gitleaks:generic-api-key:app/tests/test_password_reset.py:15"
+    ]
+  },
+  "C1+DAST": {
+    "block": true,
+    "blocking": [
+      "gitleaks:generic-api-key:app/tests/test_password_reset.py:15"
+    ]
+  }
+}

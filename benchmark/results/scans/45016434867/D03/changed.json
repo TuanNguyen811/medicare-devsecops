@@ -1,0 +1,15 @@
+[
+  "app/medicare/announcement/__init__.py",
+  "app/medicare/announcement/models.py",
+  "app/medicare/announcement/router.py",
+  "app/medicare/announcement/service.py",
+  "app/medicare/auth/router.py",
+  "app/medicare/main.py",
+  "app/medicare/templates/announcement/admin.html",
+  "app/medicare/templates/base.html",
+  "app/medicare/templates/home.html",
+  "app/migrations/versions/0004_announcements.py",
+  "app/pyproject.toml",
+  "app/tests/test_announcement.py",
+  "app/uv.lock"
+]

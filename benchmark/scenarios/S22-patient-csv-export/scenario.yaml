@@ -3,3 +3,7 @@ title: Xuất danh sách bệnh nhân CSV
 split: test
 kind: vuln
 commit_message: Thêm chức năng xuất danh sách bệnh nhân ra file CSV
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

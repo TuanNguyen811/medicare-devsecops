@@ -1,0 +1,11 @@
+[
+  "app/medicare/record/models.py",
+  "app/medicare/record/printing.py",
+  "app/medicare/record/router.py",
+  "app/medicare/templates/base.html",
+  "app/medicare/templates/record/detail.html",
+  "app/medicare/templates/record/slip.html",
+  "app/medicare/templates/record/slip_template.html",
+  "app/migrations/versions/0004_slip_templates.py",
+  "app/tests/test_slip_template.py"
+]

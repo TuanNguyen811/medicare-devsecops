@@ -3,3 +3,7 @@ title: Danh sách bệnh nhân theo khoa cho y tá
 split: test
 kind: vuln
 commit_message: Thêm trang buồng bệnh liệt kê bệnh nhân theo khoa cho điều dưỡng
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

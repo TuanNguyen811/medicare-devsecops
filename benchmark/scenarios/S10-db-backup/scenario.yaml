@@ -3,3 +3,7 @@ title: Sao lưu CSDL hằng đêm lên S3
 split: dev
 kind: vuln
 commit_message: Sao lưu PostgreSQL hằng đêm lên S3 (CronJob Kubernetes và bucket Terraform)
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45008007877
+  sast_sca: [S10-1, S10-2]
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

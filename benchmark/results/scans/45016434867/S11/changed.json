@@ -1,0 +1,8 @@
+[
+  "app/medicare/prescription/price_list.py",
+  "app/medicare/prescription/router.py",
+  "app/medicare/templates/prescription/medicines.html",
+  "app/pyproject.toml",
+  "app/tests/test_prescription.py",
+  "app/uv.lock"
+]
