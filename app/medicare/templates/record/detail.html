@@ -21,6 +21,27 @@
   </div>
 </div>
 <div class="card mc-card mt-3">
+  <div class="card-header">Xuất bệnh án</div>
+  <div class="card-body">
+    <form class="row g-2 align-items-center" method="get" action="/records/{{ record.id }}/export">
+      <div class="col-sm-5">
+        <select class="form-select form-select-sm" name="letterhead" aria-label="Tiêu đề in">
+          {% for name in letterheads %}
+          <option value="{{ name }}">{{ name | replace(".txt", "") | replace("-", " ") | capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-3">
+        <select class="form-select form-select-sm" name="format" aria-label="Định dạng">
+          <option value="html">Trang in (HTML)</option>
+          <option value="txt">Văn bản (TXT)</option>
+        </select>
+      </div>
+      <div class="col-auto"><button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-download"></i> Tải xuống</button></div>
+    </form>
+  </div>
+</div>
+<div class="card mc-card mt-3">
   <div class="card-header">Đơn thuốc</div>
   <ul class="list-group list-group-flush">
     {% for p in prescriptions %}
