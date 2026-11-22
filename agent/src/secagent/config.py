@@ -1,7 +1,8 @@
 """Run settings from environment variables and CLI flags (spec 4.4, plan C Global Constraints).
 
-The LLM provider is not hard-wired: LLM_PROVIDER picks a preset (DeepSeek by default, OpenAI,
-Gemini, Claude, or any OpenAI-compatible endpoint); LLM_MODEL / LLM_BASE_URL override it.
+LLM_PROVIDER picks one of four modes (spec addendum 4.1): `anthropic` (default), `openai` and
+`gemini` call the provider's API with LLM_API_KEY; `claude-mcp` uses the Claude Code CLI logged in
+on this machine (no key, never in CI). LLM_MODEL / LLM_BASE_URL override the preset.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
-ClientKind = Literal["openai", "anthropic"]
+ClientKind = Literal["openai", "anthropic", "claude-mcp"]
 
 
 class ConfigError(Exception):
@@ -23,26 +24,27 @@ class ProviderPreset:
     base_url: str | None
     model: str | None
     thinking_model: str | None
-    thinking: Literal["model", "reasoning_effort", "anthropic"]
+    thinking: Literal["reasoning_effort", "anthropic", "none"]
     temperature: float | None
     price_in_per_m: float = 0.0
     price_out_per_m: float = 0.0
 
 
 PROVIDERS: dict[str, ProviderPreset] = {
-    "deepseek": ProviderPreset("openai", "https://api.deepseek.com", "deepseek-chat",
-                               "deepseek-reasoner", "model", 0.0, 0.28, 0.42),
+    # Claude: thinking is always on (effort is the knob) and sampling parameters are rejected.
+    # Prices: Claude Opus 5.5 list price per million tokens.
+    "anthropic": ProviderPreset("anthropic", None, "claude-opus-5-5", None, "anthropic", None,
+                                4.0, 20.0),
     # GPT-5 family models only accept the default temperature, so none is sent.
     "openai": ProviderPreset("openai", "https://api.openai.com/v1", "gpt-5-mini", None,
                              "reasoning_effort", None),
     "gemini": ProviderPreset("openai", "https://generativelanguage.googleapis.com/v1beta/openai/",
                              "gemini-2.5-flash", None, "reasoning_effort", 0.0),
-    # Claude: thinking is always on (effort is the knob) and sampling parameters are rejected.
-    # Prices: Claude Opus 5.5 list price per million tokens.
-    "anthropic": ProviderPreset("anthropic", None, "claude-opus-5-5", None, "anthropic", None,
-                                4.0, 20.0),
-    "openai-compatible": ProviderPreset("openai", None, None, None, "reasoning_effort", 0.0),
+    # Claude Code on this machine as the LLM, through the MCP bridge (llm/claude_mcp.py). Cost is
+    # the API-equivalent figure Claude Code reports, so no price is configured here.
+    "claude-mcp": ProviderPreset("claude-mcp", None, "claude-sonnet-5-5", None, "none", None),
 }
+KEYLESS = frozenset({"claude-mcp"})
 
 
 @dataclass(frozen=True)
@@ -84,19 +86,23 @@ class Settings:
             value = (env.get(name) or "").strip()
             return value or None
 
-        api_key = get("LLM_API_KEY")
-        if not api_key:
-            raise ConfigError("Thiếu LLM_API_KEY: Agent không gọi được LLM.")
-        provider = (get("LLM_PROVIDER") or "deepseek").lower()
+        provider = (get("LLM_PROVIDER") or "anthropic").lower()
         preset = PROVIDERS.get(provider)
         if preset is None:
             raise ConfigError(f"LLM_PROVIDER không hợp lệ: {provider!r}. "
                               f"Chọn một trong: {', '.join(PROVIDERS)}.")
+        api_key = get("LLM_API_KEY") or ""
+        if provider in KEYLESS:
+            if mode == "ci":
+                raise ConfigError(f"LLM_PROVIDER={provider} chỉ chạy trên máy, không chạy trên CI.")
+            if thinking:
+                raise ConfigError(f"LLM_PROVIDER={provider} không hỗ trợ --thinking.")
+            api_key = ""  # never forwarded: Claude Code uses its own login
+        elif not api_key:
+            raise ConfigError("Thiếu LLM_API_KEY: Agent không gọi được LLM.")
         base_url = get("LLM_BASE_URL") or preset.base_url
         model = (model_override or get("LLM_MODEL")
                  or (preset.thinking_model if thinking else None) or preset.model)
-        if provider == "openai-compatible" and not (base_url and model):
-            raise ConfigError("LLM_PROVIDER=openai-compatible cần cả LLM_BASE_URL và LLM_MODEL.")
         if not model:
             raise ConfigError("Thiếu LLM_MODEL.")
 

@@ -94,13 +94,15 @@ secagent (y nguyên): pha 0 (SARIF, diff, che secret) → review theo lô cluste
         công cụ đọc: get_diff, read_file, search_code, list_files, list_findings, get_finding,
                      list_routes, get_function, find_callers, get_dependency_usage,
                      read_security_requirements
-        công cụ nộp: submit_verdict, report_finding, finish → ghi vào trạng thái phiên
+        công cụ nộp: submit_verdict, report_finding, finish → vào trạng thái phiên
+     (trạng thái phiên nằm trong tiến trình secagent; cầu chỉ chuyển tiếp qua socket 127.0.0.1
+      có token dùng một lần)
 ```
 
 - **Cùng prompt:** system prompt là `prompts/system.md`; tin nhắn đầu dựng bằng `review.md` như chế độ API.
 - **Cùng công cụ:** cầu MCP phục vụ đúng các công cụ mà chế độ API đưa cho model, với cùng giới hạn đường dẫn, cùng cách che secret và cùng vỏ bọc `<untrusted-code>`. Cờ `--no-ast-tools` và `--no-requirements` bỏ công cụ tương ứng khỏi danh sách.
 - **Cùng các pha:** mỗi lô cluster chạy một `claude -p`. Cluster còn thiếu kết luận được hỏi lại trong một phiên mới, chỉ gồm các cluster đó. Sau đó là chống bịa, `validate_patch` và báo cáo, bằng đúng code của secagent.
-- **`--strategy single-shot`:** `claude -p --tools ""` không có MCP. Toàn bộ ngữ cảnh nằm trong prompt `single_shot.md`, và câu trả lời là một khối JSON.
+- **`--strategy single-shot`:** như chế độ API, cầu MCP chỉ có các công cụ nộp kết luận (không có công cụ đọc). Toàn bộ ngữ cảnh nằm trong prompt `single_shot.md`. Giới hạn 2 lượt, vì Claude Code tính câu trả lời kết thúc sau kết quả công cụ là một lượt riêng.
 - **`meta`:** lấy từ đầu ra stream-json: model thật, số lượt gọi, token vào và ra, thời gian, chi phí quy đổi theo bảng giá API. `report.md` ghi dòng "LLM: claude-mcp (model …)".
 
 ### 4.3 Khóa quyền
@@ -119,7 +121,7 @@ secagent (y nguyên): pha 0 (SARIF, diff, che secret) → review theo lô cluste
 
 ### 4.5 Cấu hình
 
-- `agent/claude-mcp.env` là nơi duy nhất đặt model, số lượt tối đa, timeout và cờ cách ly của `claude-mcp`.
+- Cờ cách ly và cách gọi nằm ở một chỗ: `agent/src/secagent/llm/claude_mcp.py`. Model chọn bằng `LLM_MODEL` (mặc định `claude-sonnet-5-5`); số lượt là giới hạn bước của phiên review; timeout là phần còn lại của ngân sách thời gian (`--time-budget-s`).
 - CLI `claude` trên máy: bản đi kèm extension VS Code (`claude.exe`), hoặc cài bằng `npm install -g @anthropic-ai/claude-code`. Đường dẫn đặt qua `CLAUDE_BIN`.
 
 ## 5. DAST với OWASP ZAP

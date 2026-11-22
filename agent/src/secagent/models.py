@@ -87,6 +87,7 @@ class ReportEntry(BaseModel):
 
 class Meta(BaseModel):
     model: str
+    provider: str = ""  # LLM mode (LLM_PROVIDER)
     strategy: str
     started_at: str
     duration_s: float

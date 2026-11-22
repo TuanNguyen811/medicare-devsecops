@@ -6,6 +6,7 @@ import pytest
 from secagent.config import Settings
 from secagent.llm.anthropic_client import AnthropicClient
 from secagent.llm.base import LLMError, ToolCall, make_client
+from secagent.llm.claude_mcp import ClaudeMcpRunner
 from secagent.llm.openai_compat import OpenAIChatClient
 
 KEY = "sk-test-" + "1234567890"
@@ -16,7 +17,8 @@ TOOLS = [{"type": "function", "function": {
 
 
 def settings(env=None, **kw) -> Settings:
-    return Settings.from_env({"LLM_API_KEY": KEY, **(env or {})}, mode="ci", **kw)
+    return Settings.from_env({"LLM_API_KEY": KEY, "LLM_PROVIDER": "gemini", **(env or {})},
+                             mode="ci", **kw)
 
 
 def completion(message: dict, tin: int = 11, tout: int = 7) -> dict:
@@ -57,7 +59,7 @@ def test_complete_parses_tool_calls_and_usage():
     assert resp.tool_calls == [ToolCall("call_1", "read_file", '{"path": "a.py"}')]
     assert (resp.content, resp.tokens_in, resp.tokens_out, resp.reasoning) == (None, 11, 7, None)
     body = server.requests[0]
-    assert body["model"] == "deepseek-chat" and body["temperature"] == 0
+    assert body["model"] == "gemini-2.5-flash" and body["temperature"] == 0
     assert body["tools"] == TOOLS and body["tool_choice"] == "auto"
     assert resp.assistant_message() == {"role": "assistant", "content": None,
                                         "tool_calls": [call]}
@@ -107,17 +109,10 @@ def test_auth_error_not_retried():
     assert KEY not in str(info.value) and "401" in str(info.value)
 
 
-def test_reasoning_content_round_trip():
-    server = Server((200, completion({"role": "assistant", "content": "x",
-                                      "reasoning_content": "suy nghĩ…"})))
-    resp = client(server, settings(thinking=True)).complete([{"role": "user", "content": "q"}],
-                                                            TOOLS)
-    assert resp.reasoning == "suy nghĩ…"
-    assert resp.assistant_message()["reasoning_content"] == "suy nghĩ…"
-    assert server.requests[0]["model"] == "deepseek-reasoner"
-
-
 def test_make_client_picks_by_provider():
     assert isinstance(make_client(settings()), OpenAIChatClient)
+    assert isinstance(make_client(settings({"LLM_PROVIDER": "openai"})), OpenAIChatClient)
+    keyless = Settings.from_env({"LLM_PROVIDER": "claude-mcp"}, mode="benchmark")
+    assert isinstance(make_client(keyless), ClaudeMcpRunner)
     assert isinstance(make_client(settings({"LLM_PROVIDER": "gemini"})), OpenAIChatClient)
     assert isinstance(make_client(settings({"LLM_PROVIDER": "anthropic"})), AnthropicClient)

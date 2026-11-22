@@ -176,14 +176,6 @@ def test_single_shot_one_call_no_read_tools(tmp_path):
     assert out.verdicts["F1"].verdict == "TP"
 
 
-def test_thinking_reasoning_kept_in_history(tmp_path):
-    llm = ScriptedLLM([reply(call("read_file", path=SERVICE), reasoning="nghĩ"),
-                       reply(call("finish"))])
-    run_review(context(tmp_path, n=0), llm, Trace(None))
-    assistant = next(m for m in llm.calls[1]["messages"] if m["role"] == "assistant")
-    assert assistant["reasoning_content"] == "nghĩ"
-
-
 def test_events_are_emitted(tmp_path):
     events = []
     llm = ScriptedLLM([reply(call("read_file", path=SERVICE)), reply(call("finish"))])

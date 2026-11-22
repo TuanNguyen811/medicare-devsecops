@@ -12,8 +12,8 @@ from secagent.models import (
 )
 
 CONTRACT_META = {
-    "model", "strategy", "started_at", "duration_s", "llm_calls", "tool_calls", "tokens_in",
-    "tokens_out", "cost_usd", "step_limit", "limit_hit", "uncovered_before_check",
+    "model", "provider", "strategy", "started_at", "duration_s", "llm_calls", "tool_calls",
+    "tokens_in", "tokens_out", "cost_usd", "step_limit", "limit_hit", "uncovered_before_check",
 }
 CONTRACT_ENTRY = {
     "finding_id", "finding_ids", "source", "verdict", "confidence", "severity", "cwe", "owasp",
@@ -22,7 +22,7 @@ CONTRACT_ENTRY = {
 
 
 def _meta() -> Meta:
-    return Meta(model="deepseek-chat", strategy="agent", started_at="2026-11-07T10:00:00+00:00",
+    return Meta(model="claude-sonnet-5-5", strategy="agent", started_at="2026-11-07T10:00:00+00:00",
                 duration_s=1.5, llm_calls=3, tool_calls=4, tokens_in=1000, tokens_out=200,
                 cost_usd=0.001, step_limit=13, limit_hit=False, uncovered_before_check=0)
 

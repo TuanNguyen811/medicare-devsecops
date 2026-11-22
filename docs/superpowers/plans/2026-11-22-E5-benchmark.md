@@ -31,25 +31,29 @@
 - [x] `docs/security-requirements.md`: R-16…R-19, cập nhật ma trận phân quyền.
 - [x] Spec mục 4, 8.3, 8.4: chế độ `claude-mcp`, bảng cấu hình C1…C5 và C2-api, cách trả lời RQ, C1 và DAST chạy trên Actions.
 - [x] Kế hoạch E4: đánh dấu đã xong.
-- [ ] PR, CI xanh, người dùng merge → gắn tag `v0.3-baseline` lên merge commit và push tag.
+- [x] PR #12 đã merge; tag `v0.3-baseline` gắn lên merge commit `8d668bd` và đã push.
 
-## Bước 2: Bộ công cụ benchmark (PR sửa `agent/` và `.github/`, cần label `security-reviewed`)
-- [ ] Prompt của secagent: đổi R-01..R-15 → R-01..R-19 (`system.md`, mô tả công cụ `read_security_requirements`).
-- [ ] Chế độ LLM: `anthropic` (mặc định), `openai`, `gemini`, `claude-mcp`.
-  - `claude-mcp` không cần `LLM_API_KEY`, và từ chối chạy khi `--mode ci`.
-  - Gỡ các file, lệnh và test không còn dùng trong `agent/` (liệt kê trong mô tả PR). Giữ phần đọc đầu ra stream-json để điền `meta`.
-  - Cập nhật test, `agent/README.md` và đoạn regex che key.
-- [ ] Cầu MCP `secagent.mcp_bridge`:
-  - JSON-RPC stdio tối thiểu: `initialize`, `tools/list`, `tools/call`;
-  - phục vụ `ToolRegistry` của secagent (công cụ đọc, `submit_verdict`, `report_finding`, `finish`), trạng thái phiên ghi ra file.
+## Bước 2a: Chế độ `claude-mcp` (PR sửa `agent/`, cần label `security-reviewed`)
+- [x] Prompt của secagent: R-01..R-19 (`system.md`, mô tả công cụ `read_security_requirements`).
+- [x] Chế độ LLM: `anthropic` (mặc định), `openai`, `gemini`, `claude-mcp`.
+  - `claude-mcp` không cần `LLM_API_KEY`, và từ chối khi `--mode ci` hoặc khi có `--thinking`.
+  - Gỡ các file, lệnh và test không còn dùng trong `agent/`.
+  - `meta.provider` được thêm vào Hợp đồng 2.
+- [x] `secagent/llm/claude_mcp.py`:
+  - `ToolRelay`: socket 127.0.0.1, token dùng một lần, gọi công cụ tuần tự;
+  - `ClaudeMcpRunner.run_session`: `claude -p` với cờ cách ly, cwd là thư mục tạm, prompt qua stdin;
+  - `summarize`: đọc stream-json lấy số lượt, token, chi phí, model;
+  - transcript chỉ lưu hội thoại và các con số tổng kết.
+- [x] `secagent/mcp_bridge.py`: MCP stdio (`initialize`, `tools/list`, `tools/call`, `ping`), chỉ dùng thư viện chuẩn, chạy với `python -I`.
+- [x] `phases/review.py`: `Session._execute` dùng chung cho cả chế độ API và `claude-mcp`; `_external` chạy một phiên; `force_submit` và `ask_missing` là phiên mới gồm prompt cộng chỉ dẫn bổ sung; single-shot giới hạn 2 lượt.
+- [x] Test (`tests/test_claude_mcp.py`): relay cần token; cầu MCP qua stdio thật; lệnh `claude` được cách ly; transcript không có thông tin máy; phiên review qua runner giả (giới hạn bước, kiểm độ phủ, single-shot, lỗi giữ kết luận đã nộp).
+- [x] Chạy thật trên một thay đổi IDOR (không có SARIF):
+  - tìm ra CWE-639, vi phạm R-02, có kèm bản vá;
+  - model dùng `read_file`, `find_callers`, `report_finding`;
+  - 19 giây, khoảng 0,07 USD quy đổi.
+- [ ] Review toàn nhánh (Opus), PR, label, merge.
 
-  Test: liệt kê công cụ khớp registry; gọi công cụ đọc; submit được ghi lại; đường dẫn ngoài repo bị từ chối.
-- [ ] Lớp LLM `claude-mcp` trong `run_review`:
-  - với mỗi lô: `claude -p --system-prompt … --tools "" --strict-mcp-config --mcp-config … --allowedTools mcp__secagent__*`;
-  - kiểm độ phủ bằng một phiên mới;
-  - `single-shot`: `--tools ""`, không MCP, đọc JSON cuối.
-
-  Model, số lượt và timeout đặt trong `agent/claude-mcp.env`. Test bằng `claude` giả.
+## Bước 2b: Bộ công cụ benchmark (PR sửa `.github/`, cần label)
 - [ ] `.github/workflows/benchmark-scan.yml`: ma trận kịch bản; bước quét dùng chung với `pr-security.yml` (cùng lệnh và phiên bản); ZAP khi kịch bản sửa `app/`; upload SARIF.
 - [ ] `benchmark/`:
   - `BASE_COMMIT`;

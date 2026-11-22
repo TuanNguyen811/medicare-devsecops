@@ -16,7 +16,7 @@ def patch(line: int, old=(OLD,), new=(NEW,)) -> str:
 
 
 def meta(**kw) -> Meta:
-    data = {"model": "deepseek-chat", "strategy": "agent",
+    data = {"model": "claude-sonnet-5-5", "strategy": "agent",
             "started_at": "2026-11-07T10:00:00+00:00",
             "duration_s": 12.5, "llm_calls": 4, "tool_calls": 6, "tokens_in": 1200,
             "tokens_out": 300, "cost_usd": 0.0005, "step_limit": 13, "limit_hit": False,
@@ -46,7 +46,7 @@ def test_markdown_report():
     assert text.splitlines()[0] == MARKER
     assert "````diff" in text and "\n````" in text
     assert "<details>" in text and "Hằng số, không phải dữ liệu người dùng" in text
-    assert "IDOR khi xuất" in text and "deepseek-chat" in text and "chưa kiểm chứng" in text
+    assert "IDOR khi xuất" in text and "claude-sonnet-5-5" in text and "chưa kiểm chứng" in text
     assert text.index("<details>") > text.index("SQL ghép chuỗi")
 
 
