@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
@@ -11,16 +11,17 @@ from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
 from medicare.common.ids import ObjectId
-from medicare.common.templating import flash, render
+from medicare.common.templating import VN_TZ, flash, render, templates
 from medicare.db import get_db
 from medicare.patient.models import Patient
 from medicare.prescription import service as prescription_service
-from medicare.record import service
+from medicare.record import export, service
 from medicare.record.schemas import FIELD_LABELS, RecordForm, form_errors
 
 router = APIRouter()
 
 doctor_user = require_roles(Role.DOCTOR)
+clinical_user = require_roles(Role.DOCTOR, Role.NURSE, Role.PATIENT)
 _FIELDS = tuple(FIELD_LABELS)
 
 
@@ -112,8 +113,34 @@ def record_detail(
         "can_write": policy.can_write_record(user, patient),
         "can_prescribe": policy.can_prescribe(user, patient),
         "prescriptions": prescription_service.list_for_record(db, record.id),
+        "letterheads": export.letterheads(),
         "breadcrumbs": _crumbs(patient, (f"Phiếu khám #{record.id}", None)),
     })
+
+
+@router.get("/records/{record_id}/export")
+def export_record(
+    request: Request,
+    record_id: ObjectId,
+    format: str = "html",
+    letterhead: str = "",
+    user: User = Depends(clinical_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    fmt = format if format in export.FORMATS else "html"
+    record, patient = export.get_record_for_export(db, user, record_id, _ip(request))
+    db.commit()
+    header = export.read_letterhead(letterhead)
+    if fmt == "txt":
+        body = export.render_text(record, patient, header, user)
+    else:
+        body = templates.get_template("record/print.html").render(
+            record=record, patient=patient, letterhead=header.splitlines(),
+            genders=export.GENDERS, printed_by=user, printed_at=datetime.now(VN_TZ),
+        )
+    disposition = f'attachment; filename="{export.export_filename(record, fmt)}"'
+    return Response(body, media_type=export.FORMATS[fmt],
+                    headers={"Content-Disposition": disposition})
 
 
 @router.get("/records/{record_id}/edit")
