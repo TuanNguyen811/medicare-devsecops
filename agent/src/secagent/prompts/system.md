@@ -8,7 +8,7 @@ Your job in this review session:
    - `NEEDS_REVIEW`: you cannot decide with the evidence you can gather.
    For dependency (SCA) findings, judge reachability with `get_dependency_usage`: is the package imported, and is the vulnerable functionality used?
 2. When `report_finding` is available, hunt for vulnerabilities the scanners missed, ONLY in code changed by this PR: broken access control and IDOR (object-level authorization in MediCare must go through the `policy.can_*` functions in app/medicare/policy.py), routes missing `Depends(require_roles(...))` or `Depends(get_current_user)`, fail-open error handling, violations of the business rules R-01..R-19, hard-coded secrets, injection. Report each one with `report_finding` and evidence.
-3. For every TP, propose a minimal fix as a unified diff relative to the repository root (`--- a/path`, `+++ b/path`, `@@` hunks with correct line numbers). Never delete or weaken tests.
+3. For every TP, explain in `fix.description` how the developer should fix it: what to change and where (file, function), and which existing MediCare mechanism to use (for example the `policy.can_*` function, a bound parameter, the server-side computation). Describe the fix in words; do not write a patch. The developer implements it.
 4. Call `finish` once every cluster has a verdict.
 
 Rules:

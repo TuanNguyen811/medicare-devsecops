@@ -41,12 +41,12 @@ def test_report_matches_contract_2():
         title="r (semgrep)", verdict="TP", confidence=0.9, severity="HIGH", cwe="CWE-89",
         owasp="A05", violated_rule=None, reasoning="x",
         evidence=[Evidence(file="app/a.py", start_line=3, end_line=3)],
-        exploit_scenario="y", fix=Fix(description="z", patch="--- a/x\n+++ b/x\n"),
+        exploit_scenario="y", fix=Fix(description="z"),
         file="app/a.py", line=3)
     data = Report(meta=_meta(), findings=[entry]).model_dump(mode="json")
     assert set(data["meta"]) == CONTRACT_META | {"error"}
     assert CONTRACT_ENTRY <= set(data["findings"][0])
-    assert data["findings"][0]["fix"]["validated"] is None
+    assert data["findings"][0]["fix"] == {"description": "z"}
 
 
 @pytest.mark.parametrize("bad", [
@@ -80,3 +80,11 @@ def test_new_finding_requires_evidence():
     assert NewFindingArgs.model_validate(data).cwe == "CWE-639"
     with pytest.raises(ValidationError):
         NewFindingArgs.model_validate({**data, "cwe": None})
+
+
+def test_fix_is_a_description_only():
+    """The agent only reads: it explains the fix, the developer writes the code."""
+    for args in (VerdictArgs, NewFindingArgs):
+        assert set(args.model_json_schema()["$defs"]["Fix"]["properties"]) == {"description"}
+    with pytest.raises(ValidationError):
+        VerdictArgs.model_validate(_verdict(fix={"description": ""}))

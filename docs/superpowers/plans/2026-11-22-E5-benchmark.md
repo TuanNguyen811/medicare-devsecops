@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Native (Claude tự làm, review toàn nhánh bằng Opus ở cuối mỗi PR). Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** đo bằng số liệu xem AI agent bổ sung được gì so với chỉ dùng công cụ quét, để trả lời RQ1–RQ5 của spec gốc (mục 5.1).
+**Goal:** đo bằng số liệu xem AI agent bổ sung được gì so với chỉ dùng công cụ quét, để trả lời RQ1–RQ4 của spec gốc (mục 5.1).
 
 **Architecture:**
 - Công cụ quét và DAST chạy trên GitHub Actions (`benchmark-scan.yml`, ma trận theo kịch bản), bằng đúng các bước của pipeline PR.
@@ -48,7 +48,7 @@
 - [x] `phases/review.py`: `Session._execute` dùng chung cho cả chế độ API và `claude-mcp`; `_external` chạy một phiên; `force_submit` và `ask_missing` là phiên mới gồm prompt cộng chỉ dẫn bổ sung; single-shot giới hạn 2 lượt.
 - [x] Test (`tests/test_claude_mcp.py`): relay cần token; cầu MCP qua stdio thật; lệnh `claude` được cách ly; transcript không có thông tin máy; phiên review qua runner giả (giới hạn bước, kiểm độ phủ, single-shot, lỗi giữ kết luận đã nộp).
 - [x] Chạy thật trên một thay đổi IDOR (không có SARIF):
-  - tìm ra CWE-639, vi phạm R-02, có kèm bản vá;
+  - tìm ra CWE-639, vi phạm R-02, có kèm cách sửa;
   - model dùng `read_file`, `find_callers`, `report_finding`;
   - 19 giây, khoảng 0,07 USD quy đổi.
 - [x] Review toàn nhánh (Opus), PR, label, merge (PR #13).
@@ -60,7 +60,7 @@
   - Chạy thật với S00 (run `44997648299`): job quét và 5 job DAST đều đạt.
 - [x] **2b-2:** `benchmark/run.py`.
   - `fetch`: tải artifact, gộp ZAP các vai trò, kiểm tra SHA, ghi `clusters.json`, `gate.json`, `gate_findings.json`.
-  - `agent`: worktree tạm, `claude-mcp`, `--jobs`, chạy tiếp từ chỗ dừng, chờ khi chạm hạn mức, dừng khi lỗi đăng nhập, `--validate`.
+  - `agent`: worktree tạm, `claude-mcp`, `--jobs`, chạy tiếp từ chỗ dừng, chờ khi chạm hạn mức, dừng khi lỗi đăng nhập.
 - [x] **2b-2:** `benchmark/evaluate.py` chấm theo spec bổ sung §8.4 và sinh `results.md`. Có test cho phần khớp đáp án, cách chấm chặt và lỏng, loại phát hiện DAST có sẵn, và phần tổng hợp.
 - [x] Chạy thật C2 trên S00:
   - 36 giây, 14 lượt gọi LLM, khoảng 0,10 USD quy đổi;
@@ -73,7 +73,6 @@
   - **Kết quả theo lần quét và phiên bản agent.**
   - **Hạn mức của gói:** lần chạy dừng giữa chừng vì hạn mức được chạy lại.
   - **Timeout:** giết cả cây tiến trình.
-  - **Kiểm chứng bản vá:** chạy trong khóa git.
   - **Log:** không chứa đường dẫn máy.
 - [x] PR #14, PR #15.
 
@@ -93,7 +92,6 @@
   - báo nhầm trên mồi nhử và bản sạch;
   - độ ổn định qua 3 lần chạy;
   - S15;
-  - bản vá;
   - thời gian, token, chi phí quy đổi;
   - hạn chế.
 

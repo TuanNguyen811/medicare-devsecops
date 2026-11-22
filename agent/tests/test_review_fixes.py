@@ -10,26 +10,20 @@ from fakes import (
     call,
     commit_all,
     git,
-    make_git_repo,
     miniapp_repo,
     reply,
     write_files,
 )
 from pydantic import BaseModel
 from test_cli import argv, run_main, sarif, scenario, scripted
-from test_report import OLD, SERVICE, entry, meta
 from test_sarif import _gate
 
 from secagent.config import Settings
-from secagent.context.diff import FileDiff, PrDiff
 from secagent.context.sarif import ScanFinding, filter_changed
 from secagent.llm.anthropic_client import AnthropicClient
 from secagent.llm.base import LLMError, ToolCall
 from secagent.llm.openai_compat import OpenAIChatClient
-from secagent.models import Fix, Report
-from secagent.patchutil import old_lines_match, parse_patch, patched_files
-from secagent.phases.validate_patch import validate_patch
-from secagent.report.github import build_review
+from secagent.models import Report
 from secagent.tools.registry import ToolRegistry, ToolSpec
 
 # --- I5: same finding set as the gate, most severe first ----------------------------------
@@ -162,38 +156,3 @@ def test_openai_tool_call_without_name_is_tolerated():
         ToolCall("c1", "", "{}")]
 
 
-# --- I6: never trust the hunk line numbers ------------------------------------------------
-
-
-def test_patch_parser_handles_tricky_lines():
-    text = ("--- a/m.py\n+++ b/m.py\n@@ -1,2 +1,3 @@\n x = 1\n-y = 2\n+++ y\n+z = 3\n"
-            "--- a/other.py\n+++ b/other.py\n@@ -0,0 +1 @@\n+new\n")
-    files = parse_patch(text)
-    assert patched_files(text) == ["m.py", "other.py"]
-    assert files[0].hunks[0].lines == [(" ", "x = 1"), ("-", "y = 2"), ("+", "++ y"),
-                                       ("+", "z = 3")]
-
-
-def test_old_lines_must_match_the_stated_position():
-    lines = ["x = 0", "y = 1", "value = 'raw'"]
-    good = parse_patch("--- a/m.py\n+++ b/m.py\n@@ -3 +3 @@\n-value = 'raw'\n+value = 'safe'\n")
-    bad = parse_patch("--- a/m.py\n+++ b/m.py\n@@ -1 +1 @@\n-value = 'raw'\n+value = 'safe'\n")
-    assert old_lines_match(good[0], lines) and not old_lines_match(bad[0], lines)
-
-
-def test_validation_rejects_a_patch_with_wrong_line_numbers(tmp_path):
-    repo = make_git_repo(tmp_path, {"m.py": "x = 0\ny = 1\nvalue = 'raw'\n"})
-    wrong = entry(fix=Fix(description="d", patch=(
-        "--- a/m.py\n+++ b/m.py\n@@ -1 +1 @@\n-value = 'raw'\n+value = 'safe'\n")))
-    result = validate_patch(repo, wrong, test_cmd=["git", "--version"], scan_cmd=None)
-    assert not result.applied and "không khớp" in result.note
-
-
-def test_suggestion_requires_matching_head_content():
-    diff = PrDiff({SERVICE: FileDiff(SERVICE, {13, 14, 15})})
-    report = Report(meta=meta(), findings=[entry()])  # patch replaces OLD at line 15
-    right = ["x"] * 14 + [OLD]
-    shifted = ["x"] * 12 + [OLD, "    a = 1", "    b = 2"]
-    assert build_review(report, diff, "h", lambda path: right) is not None
-    assert build_review(report, diff, "h", lambda path: shifted) is None
-    assert build_review(report, diff, "h", lambda path: None) is None

@@ -6,13 +6,7 @@ from secagent.report.sarif_out import to_sarif
 
 SERVICE = "app/medicare/demo/service.py"
 OLD = "    return db.execute(text(f\"SELECT * FROM items WHERE name = '{q}'\"))"
-NEW = '    return db.execute(text("SELECT * FROM items WHERE name = :q"), {"q": q})'
-
-
-def patch(line: int, old=(OLD,), new=(NEW,)) -> str:
-    body = "".join(f"-{x}\n" for x in old) + "".join(f"+{x}\n" for x in new)
-    return (f"--- a/{SERVICE}\n+++ b/{SERVICE}\n"
-            f"@@ -{line},{len(old)} +{line},{len(new)} @@\n{body}")
+FIX = "Dùng tham số ràng buộc: text(\"... WHERE name = :q\") với {\"q\": q}"
 
 
 def meta(**kw) -> Meta:
@@ -32,21 +26,21 @@ def entry(verdict="TP", source="semgrep", line=15, **kw) -> ReportEntry:
             "severity": "HIGH", "cwe": "CWE-89", "owasp": "A05", "reasoning": "SQL ghép chuỗi",
             "evidence": [Evidence(file=SERVICE, start_line=line, end_line=line)],
             "exploit_scenario": "q = ' OR 1=1 --",
-            "fix": Fix(description="Dùng tham số ràng buộc", patch=patch(line)),
+            "fix": Fix(description=FIX),
             "file": SERVICE, "line": line}
     data.update(kw)
     return ReportEntry(**data)
 
 
 def test_markdown_report():
-    fenced = entry(fix=Fix(description="d", patch=patch(15) + "+```\n"))
+    tp = entry()
     fp = entry("FP", line=3, reasoning="Hằng số, không phải dữ liệu người dùng", fix=None)
     agent = entry(source="agent", finding_id="agent:1", finding_ids=[], title="IDOR khi xuất")
-    text = render_markdown(Report(meta=meta(), findings=[fenced, agent, fp]), head_sha="abc123")
+    text = render_markdown(Report(meta=meta(), findings=[tp, agent, fp]), head_sha="abc123")
     assert text.splitlines()[0] == MARKER
-    assert "````diff" in text and "\n````" in text
+    assert f"**Đề xuất sửa:** {FIX}" in text and "```" not in text
     assert "<details>" in text and "Hằng số, không phải dữ liệu người dùng" in text
-    assert "IDOR khi xuất" in text and "claude-sonnet-5-5" in text and "chưa kiểm chứng" in text
+    assert "IDOR khi xuất" in text and "claude-sonnet-5-5" in text
     assert text.index("<details>") > text.index("SQL ghép chuỗi")
 
 
@@ -78,31 +72,21 @@ def test_sarif_out_only_agent_findings():
     assert location == {"artifactLocation": {"uri": SERVICE}, "region": {"startLine": 15}}
 
 
-def test_build_review_suggestion():
+def test_build_review_comments_on_the_vulnerable_line():
     diff = PrDiff({SERVICE: FileDiff(SERVICE, {14, 15})})
-    head = ["x"] * 14 + [OLD]
-    review = build_review(Report(meta=meta(), findings=[entry()]), diff, "abc123",
-                          lambda path: head)
+    review = build_review(Report(meta=meta(), findings=[entry()]), diff, "abc123")
     (comment,) = review["comments"]
     assert review["commit_id"] == "abc123" and review["event"] == "COMMENT"
     assert "secagent-review:abc123" in review["body"]
-    assert comment["path"] == SERVICE and comment["line"] == 15 and comment["side"] == "RIGHT"
-    assert "start_line" not in comment
-    assert f"```suggestion\n{NEW}\n```" in comment["body"]
+    assert comment == {"path": SERVICE, "line": 15, "side": "RIGHT", "body": comment["body"]}
+    body = comment["body"]
+    assert "SQL ghép chuỗi" in body and f"**Đề xuất sửa:** {FIX}" in body and "CWE-89" in body
+    assert "```" not in body  # words only: the developer writes the code
 
 
-def test_build_review_multi_line_and_outside_the_pr():
-    two = entry(fix=Fix(description="d", patch=patch(14, old=("a", OLD), new=(NEW,))))
-    review = build_review(Report(meta=meta(), findings=[two]),
-                          PrDiff({SERVICE: FileDiff(SERVICE, {14, 15})}), "h",
-                          lambda path: ["x"] * 13 + ["a", OLD])
-    (comment,) = review["comments"]
-    assert (comment["start_line"], comment["line"]) == (14, 15)
+def test_build_review_skips_lines_outside_the_pr_and_non_tp():
     outside = PrDiff({SERVICE: FileDiff(SERVICE, {30})})
-    head = ["x"] * 14 + [OLD]
-    assert build_review(Report(meta=meta(), findings=[entry()]), outside, "h",
-                        lambda path: head) is None
-    fp = entry("FP")
-    assert build_review(Report(meta=meta(), findings=[fp]),
-                        PrDiff({SERVICE: FileDiff(SERVICE, {15})}), "h",
-                        lambda path: head) is None
+    assert build_review(Report(meta=meta(), findings=[entry()]), outside, "h") is None
+    inside = PrDiff({SERVICE: FileDiff(SERVICE, {15})})
+    for verdict in ("FP", "NEEDS_REVIEW"):
+        assert build_review(Report(meta=meta(), findings=[entry(verdict)]), inside, "h") is None

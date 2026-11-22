@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,17 +54,6 @@ def _requirements(fs: RepoFS, raw: str, use_requirements: bool, trace: Trace) ->
         return None
 
 
-def head_reader(repo: Path, rev: str) -> Callable[[str], list[str] | None]:
-    """Lines of a file at the PR head commit (suggestions are anchored there), or None."""
-    def read(path: str) -> list[str] | None:
-        done = subprocess.run(["git", "-C", str(repo), "show", f"{rev}:{path}"],
-                              capture_output=True, check=False)
-        if done.returncode != 0:
-            return None
-        return done.stdout.decode("utf-8", errors="replace").splitlines()
-    return read
-
-
 def prepare(repo: Path, base: str, head: str, sarif_dir: Path, requirements_path: str,
             use_requirements: bool, trace: Trace) -> Prepared:
     findings, errors = load_findings(sarif_dir)
@@ -94,7 +81,7 @@ def write_outputs(raw: Report, prepared: Prepared, out: Path, head: str) -> Repo
                                    newline="")
     (out / "agent.sarif").write_text(json.dumps(to_sarif(report), indent=2, ensure_ascii=False),
                                      encoding="utf-8", newline="")
-    review = build_review(report, prepared.diff, head, head_reader(prepared.repo, head))
+    review = build_review(report, prepared.diff, head)
     if review is not None:
         (out / "review.json").write_text(json.dumps(review, indent=2, ensure_ascii=False),
                                          encoding="utf-8", newline="")
