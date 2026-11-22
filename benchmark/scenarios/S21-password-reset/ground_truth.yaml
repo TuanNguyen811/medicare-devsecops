@@ -1,0 +1,26 @@
+findings:
+  - id: S21-1
+    title: Token đặt lại mật khẩu không hết hạn và không bị hủy sau khi dùng, dùng lại được nhiều lần
+    category: logic
+    severity: high
+    cwe: [CWE-640, CWE-613, CWE-324]
+    file: app/medicare/auth/reset.py
+    lines: [51, 62]
+    also:
+      - {file: app/medicare/auth/router.py, lines: [143, 157]}
+      - {file: app/medicare/auth/reset.py, lines: [34, 35]}
+    routes: ["GET /reset-password", "POST /reset-password"]
+    rules: []
+    violated_rule: R-18
+  - id: S21-2
+    title: Phản hồi yêu cầu đặt lại mật khẩu khác nhau tùy email có tài khoản hay không (dò tài khoản)
+    category: logic
+    severity: medium
+    cwe: [CWE-204, CWE-203, CWE-200]
+    file: app/medicare/auth/router.py
+    lines: [124, 130]
+    also:
+      - {file: app/medicare/auth/reset.py, lines: [25, 32]}
+    routes: ["POST /forgot-password"]
+    rules: []
+    violated_rule: R-18

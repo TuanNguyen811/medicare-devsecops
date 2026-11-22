@@ -1,0 +1,14 @@
+{
+  "C1": {
+    "block": true,
+    "blocking": [
+      "semgrep:python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text:app/medicare/report/service.py:61"
+    ]
+  },
+  "C1+DAST": {
+    "block": true,
+    "blocking": [
+      "semgrep:python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text:app/medicare/report/service.py:61"
+    ]
+  }
+}

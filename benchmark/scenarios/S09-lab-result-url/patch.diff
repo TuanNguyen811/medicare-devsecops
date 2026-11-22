@@ -1,0 +1,397 @@
+diff --git a/app/medicare/audit/service.py b/app/medicare/audit/service.py
+index b2f37ca..9c0beac 100644
+--- a/app/medicare/audit/service.py
++++ b/app/medicare/audit/service.py
+@@ -12,6 +12,8 @@ CREATE_RECORD = "CREATE_RECORD"
+ UPDATE_RECORD = "UPDATE_RECORD"
+ VIEW_PRESCRIPTION = "VIEW_PRESCRIPTION"
+ CREATE_PRESCRIPTION = "CREATE_PRESCRIPTION"
++ATTACH_LAB_RESULT = "ATTACH_LAB_RESULT"
++VIEW_LAB_RESULT = "VIEW_LAB_RESULT"
+ 
+ 
+ def log_access(
+diff --git a/app/medicare/record/lab.py b/app/medicare/record/lab.py
+new file mode 100644
+index 0000000..896bd06
+--- /dev/null
++++ b/app/medicare/record/lab.py
+@@ -0,0 +1,89 @@
++"""Lab reports published by the laboratory system (LIS) and attached to a visit record.
++
++The LIS publishes each finished report at a URL; the doctor pastes that URL and the
++server downloads the report once and keeps a copy, so it stays readable after the LIS
++purges old reports.
++"""
++
++import urllib.request
++from urllib.parse import urlsplit
++
++from sqlalchemy import select
++from sqlalchemy.orm import Session
++
++from medicare import policy
++from medicare.audit import service as audit
++from medicare.auth.models import User
++from medicare.common import metrics
++from medicare.common.errors import NotFound
++from medicare.patient.models import Patient
++from medicare.record.models import LabResult, MedicalRecord
++
++ENTITY = "record"
++MAX_BYTES = 10 * 1024 * 1024
++FETCH_TIMEOUT = 15
++ALLOWED_TYPES = {"application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg"}
++
++
++class LabResultError(ValueError):
++    """The report could not be attached; the message is user-facing."""
++
++
++def download(url: str) -> tuple[bytes, str]:
++    """Fetch a published report; returns (content, content type)."""
++    parts = urlsplit(url)
++    if parts.scheme not in ("http", "https") or not parts.hostname:
++        raise LabResultError("Đường dẫn phải bắt đầu bằng http:// hoặc https://")
++    request = urllib.request.Request(url, headers={"User-Agent": "MediCare-HMS"})
++    try:
++        with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT) as resp:
++            content_type = resp.headers.get_content_type()
++            content = resp.read(MAX_BYTES + 1)
++    except (OSError, ValueError) as exc:
++        raise LabResultError("Không tải được kết quả từ đường dẫn này") from exc
++    if content_type not in ALLOWED_TYPES:
++        raise LabResultError("Kết quả phải là file PDF hoặc ảnh PNG/JPEG")
++    if len(content) > MAX_BYTES:
++        raise LabResultError("File kết quả vượt quá 10 MB")
++    return content, content_type
++
++
++def attach(
++    db: Session, user: User, record: MedicalRecord, title: str, url: str, ip: str | None
++) -> LabResult:
++    """Download the report at `url` and attach it to `record` (caller checked R-02)."""
++    title, url = title.strip(), url.strip()
++    if not 1 <= len(title) <= 200:
++        raise LabResultError("Tên xét nghiệm: bắt buộc, tối đa 200 ký tự")
++    if len(url) > 500:
++        raise LabResultError("Đường dẫn quá dài")
++    content, content_type = download(url)
++    result = LabResult(record_id=record.id, title=title, source_url=url,
++                       content_type=content_type, content=content, created_by_id=user.id)
++    db.add(result)
++    db.flush()
++    audit.log_access(db, user, audit.ATTACH_LAB_RESULT, ENTITY, record.id, ip)
++    return result
++
++
++def list_for_record(db: Session, record_id: int) -> list:
++    """Id, title and time of each report; the file content is not loaded."""
++    stmt = (
++        select(LabResult.id, LabResult.title, LabResult.created_at)
++        .where(LabResult.record_id == record_id)
++        .order_by(LabResult.created_at, LabResult.id)
++    )
++    return list(db.execute(stmt))
++
++
++def get_for(db: Session, user: User, result_id: int, ip: str | None) -> LabResult:
++    """A report is part of the record: same visibility and auditing (R-02, R-05, R-15)."""
++    result = db.get(LabResult, result_id)
++    if result is None:
++        raise NotFound
++    record = db.get(MedicalRecord, result.record_id)
++    if not policy.can_view_record(user, db.get(Patient, record.patient_id)):
++        metrics.authz_denied("record")
++        raise NotFound
++    audit.log_access(db, user, audit.VIEW_LAB_RESULT, ENTITY, record.id, ip)
++    return result
+diff --git a/app/medicare/record/models.py b/app/medicare/record/models.py
+index a441a07..869eedc 100644
+--- a/app/medicare/record/models.py
++++ b/app/medicare/record/models.py
+@@ -1,7 +1,7 @@
+ from datetime import date, datetime
+ from typing import TYPE_CHECKING
+ 
+-from sqlalchemy import DateTime, ForeignKey, String, Text, func
++from sqlalchemy import DateTime, ForeignKey, LargeBinary, String, Text, func
+ from sqlalchemy.orm import Mapped, mapped_column, relationship
+ 
+ from medicare.db import Base
+@@ -31,3 +31,20 @@ class MedicalRecord(Base):
+ 
+     doctor: Mapped["User"] = relationship(lazy="joined")
+     patient: Mapped["Patient"] = relationship(lazy="joined")
++
++
++class LabResult(Base):
++    """A lab report (PDF or image) published by the laboratory system, attached to a visit."""
++
++    __tablename__ = "lab_results"
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    record_id: Mapped[int] = mapped_column(ForeignKey("medical_records.id"), index=True)
++    title: Mapped[str] = mapped_column(String(200))
++    source_url: Mapped[str] = mapped_column(String(500))
++    content_type: Mapped[str] = mapped_column(String(50))
++    content: Mapped[bytes] = mapped_column(LargeBinary)
++    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), server_default=func.now()
++    )
+diff --git a/app/medicare/record/router.py b/app/medicare/record/router.py
+index e2a709e..7e6dba9 100644
+--- a/app/medicare/record/router.py
++++ b/app/medicare/record/router.py
+@@ -15,7 +15,7 @@ from medicare.common.templating import flash, render
+ from medicare.db import get_db
+ from medicare.patient.models import Patient
+ from medicare.prescription import service as prescription_service
+-from medicare.record import service
++from medicare.record import lab, service
+ from medicare.record.schemas import FIELD_LABELS, RecordForm, form_errors
+ 
+ router = APIRouter()
+@@ -112,10 +112,47 @@ def record_detail(
+         "can_write": policy.can_write_record(user, patient),
+         "can_prescribe": policy.can_prescribe(user, patient),
+         "prescriptions": prescription_service.list_for_record(db, record.id),
++        "lab_results": lab.list_for_record(db, record.id),
+         "breadcrumbs": _crumbs(patient, (f"Phiếu khám #{record.id}", None)),
+     })
+ 
+ 
++@router.post("/records/{record_id}/lab-results", dependencies=[Depends(verify_csrf)])
++def attach_lab_result(
++    request: Request,
++    record_id: ObjectId,
++    title: str = Form(""),
++    url: str = Form(""),
++    user: User = Depends(doctor_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    record = service.get_writable_record(db, user, record_id)
++    try:
++        lab.attach(db, user, record, title, url, _ip(request))
++    except lab.LabResultError as exc:
++        flash(request, str(exc), "danger")
++        return RedirectResponse(f"/records/{record.id}", status_code=303)
++    db.commit()
++    flash(request, "Đã đính kèm kết quả xét nghiệm")
++    return RedirectResponse(f"/records/{record.id}", status_code=303)
++
++
++@router.get("/lab-results/{result_id}")
++def download_lab_result(
++    request: Request,
++    result_id: ObjectId,
++    user: User = Depends(get_current_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    result = lab.get_for(db, user, result_id, _ip(request))
++    db.commit()
++    filename = f"ket-qua-xet-nghiem-{result.id}.{lab.ALLOWED_TYPES[result.content_type]}"
++    return Response(result.content, media_type=result.content_type, headers={
++        "Content-Disposition": f'attachment; filename="{filename}"',
++        "X-Content-Type-Options": "nosniff",
++    })
++
++
+ @router.get("/records/{record_id}/edit")
+ def edit_record_form(
+     request: Request,
+diff --git a/app/medicare/templates/record/detail.html b/app/medicare/templates/record/detail.html
+index 2fd21d9..6399643 100644
+--- a/app/medicare/templates/record/detail.html
++++ b/app/medicare/templates/record/detail.html
+@@ -20,6 +20,26 @@
+     </dl>
+   </div>
+ </div>
++<div class="card mc-card mt-3">
++  <div class="card-header">Kết quả xét nghiệm</div>
++  <ul class="list-group list-group-flush">
++    {% for r in lab_results %}
++    <li class="list-group-item"><a href="/lab-results/{{ r.id }}"><i class="bi bi-file-earmark-medical"></i> {{ r.title }}</a> <span class="text-secondary small">{{ r.created_at | datetime_vn }}</span></li>
++    {% else %}
++    <li class="list-group-item text-secondary">Chưa có kết quả xét nghiệm</li>
++    {% endfor %}
++  </ul>
++  {% if can_write %}
++  <div class="card-body border-top">
++    <form class="row g-2 align-items-end" method="post" action="/records/{{ record.id }}/lab-results">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <div class="col-md-4"><label class="form-label small" for="lab-title">Tên xét nghiệm</label><input class="form-control form-control-sm" id="lab-title" name="title" maxlength="200" placeholder="Công thức máu" required></div>
++      <div class="col-md-6"><label class="form-label small" for="lab-url">Đường dẫn kết quả (từ hệ thống xét nghiệm)</label><input class="form-control form-control-sm" id="lab-url" name="url" type="url" maxlength="500" required></div>
++      <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100" type="submit"><i class="bi bi-paperclip"></i> Đính kèm</button></div>
++    </form>
++  </div>
++  {% endif %}
++</div>
+ <div class="card mc-card mt-3">
+   <div class="card-header">Đơn thuốc</div>
+   <ul class="list-group list-group-flush">
+diff --git a/app/migrations/versions/0004_lab_results.py b/app/migrations/versions/0004_lab_results.py
+new file mode 100644
+index 0000000..c0675d1
+--- /dev/null
++++ b/app/migrations/versions/0004_lab_results.py
+@@ -0,0 +1,34 @@
++"""lab_results: lab reports attached to a medical record
++
++Revision ID: 0004
++Revises: 0003
++"""
++import sqlalchemy as sa
++from alembic import op
++
++revision = '0004'
++down_revision = '0003'
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.create_table('lab_results',
++    sa.Column('id', sa.Integer(), nullable=False),
++    sa.Column('record_id', sa.Integer(), nullable=False),
++    sa.Column('title', sa.String(length=200), nullable=False),
++    sa.Column('source_url', sa.String(length=500), nullable=False),
++    sa.Column('content_type', sa.String(length=50), nullable=False),
++    sa.Column('content', sa.LargeBinary(), nullable=False),
++    sa.Column('created_by_id', sa.Integer(), nullable=False),
++    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
++    sa.ForeignKeyConstraint(['created_by_id'], ['users.id'], name=op.f('fk_lab_results_created_by_id_users')),
++    sa.ForeignKeyConstraint(['record_id'], ['medical_records.id'], name=op.f('fk_lab_results_record_id_medical_records')),
++    sa.PrimaryKeyConstraint('id', name=op.f('pk_lab_results'))
++    )
++    op.create_index(op.f('ix_lab_results_record_id'), 'lab_results', ['record_id'])
++
++
++def downgrade() -> None:
++    op.drop_index(op.f('ix_lab_results_record_id'), table_name='lab_results')
++    op.drop_table('lab_results')
+diff --git a/app/tests/test_lab_results.py b/app/tests/test_lab_results.py
+new file mode 100644
+index 0000000..f0b9f1d
+--- /dev/null
++++ b/app/tests/test_lab_results.py
+@@ -0,0 +1,117 @@
++from email.message import Message
++
++import pytest
++from sqlalchemy import select
++
++from medicare.audit.models import AuditLog
++from medicare.auth.models import Role
++from medicare.record import lab
++from medicare.record.models import LabResult
++from tests.conftest import csrf_token, login
++from tests.factories import make_department, make_patient, make_record, make_user
++
++PDF = b"%PDF-1.7\n% ket qua xet nghiem\n"
++LIS_URL = "https://lis.medicare.local/reports/2026/XN000123.pdf"
++
++
++class FakeResponse:
++    def __init__(self, body: bytes, content_type: str):
++        self.body = body
++        self.headers = Message()
++        self.headers["Content-Type"] = content_type
++
++    def read(self, n: int = -1) -> bytes:
++        return self.body if n < 0 else self.body[:n]
++
++    def __enter__(self):
++        return self
++
++    def __exit__(self, *exc):
++        return False
++
++
++@pytest.fixture
++def lis(monkeypatch):
++    """Stand-in for the laboratory system: serves one published report."""
++    served = {"body": PDF, "type": "application/pdf", "requested": []}
++
++    def fake_urlopen(request, timeout=None):
++        served["requested"].append(request.full_url)
++        return FakeResponse(served["body"], served["type"])
++
++    monkeypatch.setattr(lab.urllib.request, "urlopen", fake_urlopen)
++    return served
++
++
++def ward(db):
++    dept = make_department(db)
++    doc = make_user(db, Role.DOCTOR, department=dept)
++    patient = make_patient(db, department=dept, attending=doc)
++    return dept, doc, patient, make_record(db, patient, doc)
++
++
++def attach(client, record, title="Công thức máu", url=LIS_URL):
++    data = {"title": title, "url": url, "csrf_token": csrf_token(client, f"/records/{record.id}")}
++    return client.post(f"/records/{record.id}/lab-results", data=data, follow_redirects=False)
++
++
++def test_attending_doctor_attaches_lab_result(client, db, lis):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    r = attach(client, record)
++    assert r.status_code == 303 and r.headers["location"] == f"/records/{record.id}"
++    assert lis["requested"] == [LIS_URL]
++    result = db.scalar(select(LabResult).where(LabResult.record_id == record.id))
++    assert result.content == PDF and result.content_type == "application/pdf"
++    assert result.source_url == LIS_URL and result.created_by_id == doc.id
++    page = client.get(f"/records/{record.id}").text
++    assert "Công thức máu" in page and f"/lab-results/{result.id}" in page
++
++
++def test_lab_result_download_is_audited(client, db, lis):
++    dept, doc, _, record = ward(db)
++    login(client, doc)
++    attach(client, record)
++    result = db.scalar(select(LabResult).where(LabResult.record_id == record.id))
++    client.cookies.clear()
++    nurse = make_user(db, Role.NURSE, department=dept)
++    login(client, nurse)
++    r = client.get(f"/lab-results/{result.id}")
++    assert r.status_code == 200 and r.content == PDF
++    assert r.headers["content-type"] == "application/pdf"
++    assert r.headers["content-disposition"].startswith("attachment;")
++    rows = db.scalars(select(AuditLog).where(AuditLog.action == "VIEW_LAB_RESULT")).all()
++    assert [(a.actor_id, a.entity_id) for a in rows] == [(nurse.id, record.id)]
++
++
++def test_unsupported_content_type_is_rejected(client, db, lis):
++    _, doc, _, record = ward(db)
++    lis["body"], lis["type"] = b"<html></html>", "text/html"
++    login(client, doc)
++    assert attach(client, record).status_code == 303
++    assert db.scalar(select(LabResult).where(LabResult.record_id == record.id)) is None
++    assert "Kết quả phải là file PDF" in client.get(f"/records/{record.id}").text
++
++
++def test_only_attending_doctor_attaches(client, db, lis):
++    dept, _, _, record = ward(db)
++    login(client, make_user(db, Role.DOCTOR, department=dept))
++    assert attach(client, record).status_code == 404
++    client.cookies.clear()
++    login(client, make_user(db, Role.NURSE, department=dept))
++    assert attach(client, record).status_code == 403
++    assert lis["requested"] == []
++
++
++def test_lab_result_hidden_outside_clinical_scope(client, db, lis):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    attach(client, record)
++    result = db.scalar(select(LabResult).where(LabResult.record_id == record.id))
++    for role in (Role.RECEPTIONIST, Role.ADMIN):
++        client.cookies.clear()
++        login(client, make_user(db, role))
++        assert client.get(f"/lab-results/{result.id}").status_code == 404
++    client.cookies.clear()
++    login(client, make_user(db, Role.DOCTOR, department=make_department(db, "NGOAI")))
++    assert client.get(f"/lab-results/{result.id}").status_code == 404

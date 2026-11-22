@@ -1,0 +1,10 @@
+[
+  "app/medicare/audit/service.py",
+  "app/medicare/record/export.py",
+  "app/medicare/record/letterheads/benh-vien.txt",
+  "app/medicare/record/letterheads/phong-kham-ngoai-gio.txt",
+  "app/medicare/record/router.py",
+  "app/medicare/templates/record/detail.html",
+  "app/medicare/templates/record/print.html",
+  "app/tests/test_record_export.py"
+]

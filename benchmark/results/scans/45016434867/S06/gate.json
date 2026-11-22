@@ -1,0 +1,14 @@
+{
+  "C1": {
+    "block": true,
+    "blocking": [
+      "semgrep:security.semgrep.medicare.jinja-safe-filter:app/medicare/templates/record/detail.html:29"
+    ]
+  },
+  "C1+DAST": {
+    "block": true,
+    "blocking": [
+      "semgrep:security.semgrep.medicare.jinja-safe-filter:app/medicare/templates/record/detail.html:29"
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+findings:
+  - id: S17-1
+    title: >-
+      Mass assignment khi tự sửa hồ sơ: mọi trường gửi lên (role, department_id, patient_id…)
+      được gán thẳng vào tài khoản, người dùng tự nâng quyền thành ADMIN
+    category: logic
+    severity: critical
+    cwe: [CWE-915, CWE-269, CWE-639, CWE-284]
+    file: app/medicare/auth/router.py
+    lines: [82, 83]
+    also:
+      - {file: app/medicare/auth/schemas.py, lines: [9, 9]}
+    routes: ["POST /account/profile"]
+    rules: []
+    violated_rule: [R-16, R-01]

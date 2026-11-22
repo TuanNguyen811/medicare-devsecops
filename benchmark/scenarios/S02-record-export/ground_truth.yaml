@@ -1,0 +1,25 @@
+findings:
+  - id: S02-1
+    title: Xuất bệnh án tải phiếu khám theo id mà không kiểm tra policy.can_view_record (IDOR)
+    category: logic
+    severity: high
+    cwe: [CWE-639, CWE-862, CWE-863, CWE-285]
+    file: app/medicare/record/export.py
+    lines: [38, 42]
+    also:
+      - {file: app/medicare/record/router.py, lines: [127, 131]}
+    routes: ["GET /records/{record_id}/export"]
+    rules: []
+    violated_rule: [R-01, R-02]
+  - id: S02-2
+    title: Tham số letterhead ghép thẳng vào thư mục tiêu đề in rồi đọc file, không đối chiếu danh sách cho phép (path traversal)
+    category: pattern
+    severity: high
+    cwe: [CWE-22, CWE-23, CWE-73, CWE-36]
+    file: app/medicare/record/export.py
+    lines: [27, 30]
+    also:
+      - {file: app/medicare/record/router.py, lines: [126, 133]}
+    routes: ["GET /records/{record_id}/export"]
+    rules: []
+    violated_rule: R-14

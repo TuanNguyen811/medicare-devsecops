@@ -1,0 +1,442 @@
+diff --git a/app/medicare/record/models.py b/app/medicare/record/models.py
+index a441a07..845bcaf 100644
+--- a/app/medicare/record/models.py
++++ b/app/medicare/record/models.py
+@@ -31,3 +31,15 @@ class MedicalRecord(Base):
+ 
+     doctor: Mapped["User"] = relationship(lazy="joined")
+     patient: Mapped["Patient"] = relationship(lazy="joined")
++
++
++class SlipTemplate(Base):
++    """A doctor's own layout for the printed examination slip (Jinja/HTML)."""
++
++    __tablename__ = "slip_templates"
++
++    doctor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
++    body: Mapped[str] = mapped_column(Text)
++    updated_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
++    )
+diff --git a/app/medicare/record/printing.py b/app/medicare/record/printing.py
+new file mode 100644
+index 0000000..8e3f2c4
+--- /dev/null
++++ b/app/medicare/record/printing.py
+@@ -0,0 +1,97 @@
++"""Printed examination slip ("phiếu khám") with a layout each doctor can customize."""
++
++from datetime import date
++
++from jinja2 import Environment, TemplateSyntaxError
++from sqlalchemy.orm import Session
++
++from medicare.auth.models import Role, User
++from medicare.common.templating import date_vn
++from medicare.patient.models import Patient
++from medicare.record.models import MedicalRecord, SlipTemplate
++
++MAX_TEMPLATE_LENGTH = 20_000
++GENDERS = {"M": "Nam", "F": "Nữ"}
++
++DEFAULT_TEMPLATE = """\
++<h2 style="text-align:center">PHIẾU KHÁM BỆNH</h2>
++<p style="text-align:center">Số: {{ record.id }}</p>
++<p>Họ tên người bệnh: <b>{{ patient.full_name }}</b> - Mã BN: {{ patient.code }}</p>
++<p>Ngày sinh: {{ patient.date_of_birth }} - Giới tính: {{ patient.gender }}</p>
++<p>Khoa: {{ patient.department }}</p>
++<p>Ngày khám: {{ record.visit_date }}</p>
++<p>Triệu chứng: {{ record.symptoms }}</p>
++<p>Chẩn đoán: {{ record.diagnosis_code }} - {{ record.diagnosis_text }}</p>
++<p>Lời dặn: {{ record.notes }}</p>
++<p style="text-align:right">Ngày {{ today }}<br>Bác sĩ khám bệnh<br><br><br>
++{{ doctor.full_name }}</p>
++"""
++
++# Variables a slip template can use (shown on the settings page).
++VARIABLES = {
++    "patient": ("code", "full_name", "date_of_birth", "gender", "department"),
++    "record": ("id", "visit_date", "symptoms", "diagnosis_code", "diagnosis_text", "notes"),
++    "doctor": ("full_name",),
++    "today": (),
++}
++
++_env = Environment(autoescape=True)
++
++
++class SlipTemplateError(ValueError):
++    """Template rejected on save; the message is user-facing."""
++
++
++def validate(body: str) -> None:
++    if len(body) > MAX_TEMPLATE_LENGTH:
++        raise SlipTemplateError(f"Mẫu in tối đa {MAX_TEMPLATE_LENGTH} ký tự")
++    try:
++        _env.parse(body)
++    except TemplateSyntaxError as exc:
++        raise SlipTemplateError(f"Mẫu in sai cú pháp ở dòng {exc.lineno}") from exc
++
++
++def get_custom(db: Session, user: User) -> SlipTemplate | None:
++    return db.get(SlipTemplate, user.id) if user.role == Role.DOCTOR else None
++
++
++def save_custom(db: Session, user: User, body: str) -> None:
++    """Store the doctor's own template; an empty body goes back to the default."""
++    current = db.get(SlipTemplate, user.id)
++    if not body.strip():
++        if current is not None:
++            db.delete(current)
++    elif current is None:
++        db.add(SlipTemplate(doctor_id=user.id, body=body))
++    else:
++        current.body = body
++    db.flush()
++
++
++def _context(record: MedicalRecord, patient: Patient) -> dict:
++    # Plain values only: CCCD and BHYT numbers never reach a slip (R-11).
++    return {
++        "patient": {
++            "code": patient.code,
++            "full_name": patient.full_name,
++            "date_of_birth": date_vn(patient.date_of_birth),
++            "gender": GENDERS.get(patient.gender, ""),
++            "department": patient.department.name if patient.department else "",
++        },
++        "record": {
++            "id": record.id,
++            "visit_date": date_vn(record.visit_date),
++            "symptoms": record.symptoms,
++            "diagnosis_code": record.diagnosis_code,
++            "diagnosis_text": record.diagnosis_text,
++            "notes": record.notes,
++        },
++        "doctor": {"full_name": record.doctor.full_name},
++        "today": date_vn(date.today()),
++    }
++
++
++def render_slip(db: Session, user: User, record: MedicalRecord, patient: Patient) -> str:
++    custom = get_custom(db, user)
++    body = custom.body if custom is not None else DEFAULT_TEMPLATE
++    return _env.from_string(body).render(_context(record, patient))
+diff --git a/app/medicare/record/router.py b/app/medicare/record/router.py
+index e2a709e..d79345a 100644
+--- a/app/medicare/record/router.py
++++ b/app/medicare/record/router.py
+@@ -15,7 +15,7 @@ from medicare.common.templating import flash, render
+ from medicare.db import get_db
+ from medicare.patient.models import Patient
+ from medicare.prescription import service as prescription_service
+-from medicare.record import service
++from medicare.record import printing, service
+ from medicare.record.schemas import FIELD_LABELS, RecordForm, form_errors
+ 
+ router = APIRouter()
+@@ -116,6 +116,57 @@ def record_detail(
+     })
+ 
+ 
++@router.get("/records/{record_id}/print")
++def print_slip(
++    request: Request,
++    record_id: ObjectId,
++    user: User = Depends(get_current_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    record = service.get_record_for(db, user, record_id, _ip(request))
++    db.commit()
++    patient = db.get(Patient, record.patient_id)
++    slip = printing.render_slip(db, user, record, patient)
++    return render(request, "record/slip.html", {"record": record, "slip": slip})
++
++
++def _slip_template_page(request, *, body, is_custom, errors=None, status_code=200):
++    return render(request, "record/slip_template.html", {
++        "body": body, "is_custom": is_custom, "errors": errors or [],
++        "variables": printing.VARIABLES, "max_length": printing.MAX_TEMPLATE_LENGTH,
++        "breadcrumbs": [("Trang chủ", "/"), ("Mẫu in phiếu khám", None)],
++    }, status_code=status_code)
++
++
++@router.get("/account/print-template")
++def slip_template_form(
++    request: Request,
++    user: User = Depends(doctor_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    custom = printing.get_custom(db, user)
++    body = custom.body if custom is not None else printing.DEFAULT_TEMPLATE
++    return _slip_template_page(request, body=body, is_custom=custom is not None)
++
++
++@router.post("/account/print-template", dependencies=[Depends(verify_csrf)])
++def save_slip_template(
++    request: Request,
++    body: str = Form(""),
++    user: User = Depends(doctor_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    try:
++        printing.validate(body)
++    except printing.SlipTemplateError as exc:
++        return _slip_template_page(request, body=body, is_custom=True, errors=[str(exc)],
++                                   status_code=400)
++    printing.save_custom(db, user, body)
++    db.commit()
++    flash(request, "Đã lưu mẫu in phiếu khám" if body.strip() else "Đã dùng lại mẫu in mặc định")
++    return RedirectResponse("/account/print-template", status_code=303)
++
++
+ @router.get("/records/{record_id}/edit")
+ def edit_record_form(
+     request: Request,
+diff --git a/app/medicare/templates/base.html b/app/medicare/templates/base.html
+index a678d05..9bab2e8 100644
+--- a/app/medicare/templates/base.html
++++ b/app/medicare/templates/base.html
+@@ -46,6 +46,9 @@
+         {% if role in ("ADMIN", "RECEPTIONIST", "DOCTOR", "NURSE", "PATIENT") %}
+         <li class="nav-item"><a class="nav-link" href="/appointments"><i class="bi bi-calendar-check"></i> Lịch hẹn</a></li>
+         {% endif %}
++        {% if role == "DOCTOR" %}
++        <li class="nav-item"><a class="nav-link" href="/account/print-template"><i class="bi bi-printer"></i> Mẫu phiếu khám</a></li>
++        {% endif %}
+         {% if role in ("ADMIN", "RECEPTIONIST", "PATIENT") %}
+         <li class="nav-item"><a class="nav-link" href="/invoices"><i class="bi bi-receipt"></i> Hóa đơn</a></li>
+         {% endif %}
+diff --git a/app/medicare/templates/record/detail.html b/app/medicare/templates/record/detail.html
+index 2fd21d9..f7e37e9 100644
+--- a/app/medicare/templates/record/detail.html
++++ b/app/medicare/templates/record/detail.html
+@@ -4,6 +4,7 @@
+ <div class="d-flex justify-content-between align-items-center mb-3">
+   <h1 class="h5 mb-0">Phiếu khám #{{ record.id }} <span class="text-secondary">{{ patient.code }} - {{ patient.full_name }}</span></h1>
+   <div class="d-flex gap-2">
++    <a class="btn btn-outline-secondary btn-sm" href="/records/{{ record.id }}/print" target="_blank" rel="noopener"><i class="bi bi-printer"></i> In phiếu khám</a>
+     {% if can_prescribe %}<a class="btn btn-outline-primary btn-sm" href="/records/{{ record.id }}/prescriptions/new"><i class="bi bi-capsule"></i> Kê đơn</a>{% endif %}
+     {% if can_write %}<a class="btn btn-primary btn-sm" href="/records/{{ record.id }}/edit"><i class="bi bi-pencil"></i> Sửa</a>{% endif %}
+   </div>
+diff --git a/app/medicare/templates/record/slip.html b/app/medicare/templates/record/slip.html
+new file mode 100644
+index 0000000..6717c7c
+--- /dev/null
++++ b/app/medicare/templates/record/slip.html
+@@ -0,0 +1,19 @@
++<!doctype html>
++<html lang="vi">
++<head>
++  <meta charset="utf-8">
++  <title>Phiếu khám #{{ record.id }}</title>
++  <style>
++    body { font-family: "Times New Roman", serif; font-size: 13pt; max-width: 760px; margin: 24px auto; color: #000; }
++    .toolbar { font-family: sans-serif; font-size: 11pt; margin-bottom: 16px; }
++    @media print { .toolbar { display: none; } body { margin: 0; } }
++  </style>
++</head>
++<body>
++  <div class="toolbar">
++    <a href="/records/{{ record.id }}">Quay lại phiếu khám</a>
++    · Dùng lệnh In của trình duyệt (Ctrl+P) để in phiếu.
++  </div>
++  {{ slip | safe }}
++</body>
++</html>
+diff --git a/app/medicare/templates/record/slip_template.html b/app/medicare/templates/record/slip_template.html
+new file mode 100644
+index 0000000..793c67a
+--- /dev/null
++++ b/app/medicare/templates/record/slip_template.html
+@@ -0,0 +1,39 @@
++{% extends "base.html" %}
++{% block title %}Mẫu in phiếu khám{% endblock %}
++{% block content %}
++<h1 class="h5 mb-3">Mẫu in phiếu khám {% if not is_custom %}<span class="badge text-bg-secondary">Mặc định</span>{% endif %}</h1>
++{% if errors %}
++<div class="alert alert-danger py-2" role="alert">
++  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
++</div>
++{% endif %}
++<div class="row g-3">
++  <div class="col-lg-8">
++    <div class="card mc-card">
++      <div class="card-body">
++        <form method="post" action="/account/print-template">
++          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++          <label class="form-label" for="body">Nội dung mẫu (HTML, chèn dữ liệu bằng <code>{{ "{{ biến }}" }}</code>)</label>
++          <textarea class="form-control font-monospace" id="body" name="body" rows="18" maxlength="{{ max_length }}">{{ body }}</textarea>
++          <div class="form-text">Để trống rồi lưu để dùng lại mẫu mặc định.</div>
++          <button class="btn btn-primary btn-sm mt-2" type="submit">Lưu mẫu in</button>
++        </form>
++      </div>
++    </div>
++  </div>
++  <div class="col-lg-4">
++    <div class="card mc-card">
++      <div class="card-header">Biến dùng được</div>
++      <ul class="list-group list-group-flush small">
++        {% for name, fields in variables.items() %}
++          {% if fields %}
++            {% for f in fields %}<li class="list-group-item font-monospace">{{ name }}.{{ f }}</li>{% endfor %}
++          {% else %}
++            <li class="list-group-item font-monospace">{{ name }}</li>
++          {% endif %}
++        {% endfor %}
++      </ul>
++    </div>
++  </div>
++</div>
++{% endblock %}
+diff --git a/app/migrations/versions/0004_slip_templates.py b/app/migrations/versions/0004_slip_templates.py
+new file mode 100644
+index 0000000..67eb737
+--- /dev/null
++++ b/app/migrations/versions/0004_slip_templates.py
+@@ -0,0 +1,26 @@
++"""slip_templates: per-doctor examination slip layout
++
++Revision ID: 0004
++Revises: 0003
++"""
++import sqlalchemy as sa
++from alembic import op
++
++revision = '0004'
++down_revision = '0003'
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.create_table('slip_templates',
++    sa.Column('doctor_id', sa.Integer(), nullable=False),
++    sa.Column('body', sa.Text(), nullable=False),
++    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
++    sa.ForeignKeyConstraint(['doctor_id'], ['users.id'], name=op.f('fk_slip_templates_doctor_id_users')),
++    sa.PrimaryKeyConstraint('doctor_id', name=op.f('pk_slip_templates'))
++    )
++
++
++def downgrade() -> None:
++    op.drop_table('slip_templates')
+diff --git a/app/tests/test_slip_template.py b/app/tests/test_slip_template.py
+new file mode 100644
+index 0000000..3bdc25c
+--- /dev/null
++++ b/app/tests/test_slip_template.py
+@@ -0,0 +1,114 @@
++from sqlalchemy import select
++
++from medicare.audit.models import AuditLog
++from medicare.auth.models import Role
++from medicare.record.models import SlipTemplate
++from tests.conftest import csrf_token, login
++from tests.factories import make_department, make_patient, make_record, make_user
++
++CUSTOM = """<h3>KHOA NỘI - PHIẾU KHÁM</h3>
++<p>{{ patient.code }} / {{ patient.full_name }}</p>
++<p>{{ record.diagnosis_code }}: {{ record.diagnosis_text }}</p>
++"""
++
++
++def ward(db, code="NOI"):
++    dept = make_department(db, code)
++    doc = make_user(db, Role.DOCTOR, department=dept)
++    patient = make_patient(db, department=dept, attending=doc)
++    return dept, doc, patient, make_record(db, patient, doc)
++
++
++def save(client, body):
++    data = {"body": body, "csrf_token": csrf_token(client, "/account/print-template")}
++    return client.post("/account/print-template", data=data, follow_redirects=False)
++
++
++def test_default_slip(client, db):
++    _, doc, patient, record = ward(db)
++    login(client, doc)
++    r = client.get(f"/records/{record.id}/print")
++    assert r.status_code == 200
++    assert "PHIẾU KHÁM BỆNH" in r.text and patient.full_name in r.text
++    assert "J06.9 - Viêm đường hô hấp trên cấp" in r.text and "Khoa NOI" in r.text
++    assert patient.national_id not in r.text
++
++
++def test_printing_is_audited(client, db):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    client.get(f"/records/{record.id}/print")
++    rows = list(db.scalars(select(AuditLog).where(AuditLog.action == "VIEW_RECORD",
++                                                  AuditLog.entity_id == record.id)))
++    assert len(rows) == 1 and rows[0].actor_id == doc.id
++
++
++def test_doctor_saves_custom_template_and_prints_with_it(client, db):
++    _, doc, patient, record = ward(db)
++    login(client, doc)
++    r = save(client, CUSTOM)
++    assert r.status_code == 303 and r.headers["location"] == "/account/print-template"
++    assert db.get(SlipTemplate, doc.id).body == CUSTOM
++    slip = client.get(f"/records/{record.id}/print").text
++    assert "KHOA NỘI - PHIẾU KHÁM" in slip
++    assert f"{patient.code} / {patient.full_name}" in slip
++    assert "PHIẾU KHÁM BỆNH" not in slip
++
++
++def test_template_is_per_doctor(client, db):
++    dept, doc, _, record = ward(db)
++    db.add(SlipTemplate(doctor_id=doc.id, body=CUSTOM))
++    db.flush()
++    login(client, make_user(db, Role.DOCTOR, department=dept))
++    slip = client.get(f"/records/{record.id}/print").text
++    assert "PHIẾU KHÁM BỆNH" in slip and "KHOA NỘI - PHIẾU KHÁM" not in slip
++
++
++def test_empty_template_restores_default(client, db):
++    _, doc, _, _ = ward(db)
++    db.add(SlipTemplate(doctor_id=doc.id, body=CUSTOM))
++    db.flush()
++    login(client, doc)
++    assert save(client, "   ").status_code == 303
++    assert db.get(SlipTemplate, doc.id) is None
++
++
++def test_template_with_syntax_error_rejected(client, db):
++    _, doc, _, _ = ward(db)
++    login(client, doc)
++    r = save(client, "<p>{{ patient.full_name </p>")
++    assert r.status_code == 400 and "sai cú pháp" in r.text
++    assert db.get(SlipTemplate, doc.id) is None
++
++
++def test_settings_page_shows_default_and_variables(client, db):
++    _, doc, _, _ = ward(db)
++    login(client, doc)
++    page = client.get("/account/print-template")
++    assert page.status_code == 200 and "Mặc định" in page.text
++    assert "patient.full_name" in page.text and "record.diagnosis_code" in page.text
++    assert 'href="/account/print-template"' in client.get("/").text
++
++
++def test_only_doctors_customize(client, db):
++    dept, _, _, _ = ward(db)
++    for role in (Role.NURSE, Role.RECEPTIONIST, Role.ADMIN):
++        client.cookies.clear()
++        login(client, make_user(db, role, department=dept))
++        assert client.get("/account/print-template").status_code == 403
++        r = client.post("/account/print-template",
++                        data={"body": CUSTOM, "csrf_token": csrf_token(client, "/")})
++        assert r.status_code == 403
++
++
++def test_print_follows_record_access(client, db):
++    _, _, patient, record = ward(db)
++    other_doc = make_user(db, Role.DOCTOR, department=make_department(db, "NGOAI"))
++    login(client, other_doc)
++    assert client.get(f"/records/{record.id}/print").status_code == 404
++    client.cookies.clear()
++    login(client, make_user(db, Role.PATIENT, patient=patient))
++    assert client.get(f"/records/{record.id}/print").status_code == 200
++    client.cookies.clear()
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert client.get(f"/records/{record.id}/print").status_code == 404

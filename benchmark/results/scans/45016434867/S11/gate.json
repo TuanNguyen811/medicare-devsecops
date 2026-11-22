@@ -1,0 +1,14 @@
+{
+  "C1": {
+    "block": true,
+    "blocking": [
+      "trivy:CVE-2020-14343:app/uv.lock:1"
+    ]
+  },
+  "C1+DAST": {
+    "block": true,
+    "blocking": [
+      "trivy:CVE-2020-14343:app/uv.lock:1"
+    ]
+  }
+}

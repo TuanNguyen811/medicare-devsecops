@@ -1,0 +1,76 @@
+{
+  "C1": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "bandit:B107:app/medicare/auth/router.py:134",
+        "severity": "LOW"
+      },
+      {
+        "id": "gitleaks:generic-api-key:app/tests/test_password_reset.py:15",
+        "severity": "HIGH"
+      }
+    ]
+  },
+  "C1+DAST": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "bandit:B107:app/medicare/auth/router.py:134",
+        "severity": "LOW"
+      },
+      {
+        "id": "gitleaks:generic-api-key:app/tests/test_password_reset.py:15",
+        "severity": "HIGH"
+      },
+      {
+        "id": "zap:10020:dast:GET /:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10020:dast:GET /forgot-password:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10020:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10021:dast:GET /:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /forgot-password:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /health:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /login:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10038:dast:GET /forgot-password:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:GET /reset-password:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /forgot-password:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /reset-password:0",
+        "severity": "MEDIUM"
+      }
+    ]
+  }
+}

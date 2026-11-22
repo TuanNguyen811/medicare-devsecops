@@ -1,0 +1,15 @@
+findings:
+  - id: S05-1
+    title: Mẫu in do bác sĩ nhập được dựng bằng jinja2 Environment thường (không sandbox) qua from_string, dẫn tới SSTI và thực thi mã trên server
+    category: pattern
+    severity: critical
+    cwe: [CWE-1336, CWE-94, CWE-74, CWE-79]
+    file: app/medicare/record/printing.py
+    lines: [94, 97]
+    also:
+      - {file: app/medicare/record/printing.py, lines: [38, 38]}
+      - {file: app/medicare/record/router.py, lines: [129, 129]}
+      - {file: app/medicare/record/router.py, lines: [160, 164]}
+    routes: ["GET /records/{record_id}/print", "POST /account/print-template"]
+    rules: []
+    violated_rule: null

@@ -1,0 +1,13 @@
+findings:
+  - id: S23-1
+    title: Bác sĩ tự gán mình làm bác sĩ phụ trách cho bất kỳ bệnh nhân nào (kể cả khoa khác), từ đó đọc và sửa được bệnh án
+    category: logic
+    severity: high
+    cwe: [CWE-285, CWE-639, CWE-862, CWE-863]
+    file: app/medicare/patient/service.py
+    lines: [129, 136]
+    also:
+      - {file: app/medicare/patient/router.py, lines: [185, 193]}
+    routes: ["POST /patients/{patient_id}/claim"]
+    rules: []
+    violated_rule: [R-02, R-03]

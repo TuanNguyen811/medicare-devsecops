@@ -1,0 +1,26 @@
+findings:
+  - id: S20-1
+    title: Số lượng dòng dịch vụ không kiểm tra số nguyên dương, số lượng âm làm giảm tổng hóa đơn
+    category: logic
+    severity: high
+    cwe: [CWE-20, CWE-1284, CWE-840]
+    file: app/medicare/billing/service.py
+    lines: [115, 118]
+    also:
+      - {file: app/medicare/billing/service.py, lines: [130, 135]}
+      - {file: app/medicare/billing/router.py, lines: [80, 88]}
+    routes: ["POST /invoices/{invoice_id}/lines"]
+    rules: []
+    violated_rule: R-17
+  - id: S20-2
+    title: Trạng thái hóa đơn lấy từ request, cho phép chuyển ngược PAID về UNPAID ngoài luồng UNPAID → PAID
+    category: logic
+    severity: medium
+    cwe: [CWE-840, CWE-841]
+    file: app/medicare/billing/service.py
+    lines: [148, 154]
+    also:
+      - {file: app/medicare/billing/router.py, lines: [97, 107]}
+    routes: ["POST /invoices/{invoice_id}/status"]
+    rules: []
+    violated_rule: R-17

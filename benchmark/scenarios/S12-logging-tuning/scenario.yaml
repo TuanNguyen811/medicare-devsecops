@@ -1,0 +1,9 @@
+id: S12
+title: Tối ưu logging
+split: test
+kind: vuln
+commit_message: Log JSON cho vận hành, ghi sự kiện xem và sửa bệnh án, dọn bản ghi xem trùng lặp trong nhật ký truy cập
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

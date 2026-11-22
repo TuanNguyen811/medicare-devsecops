@@ -1,0 +1,13 @@
+findings:
+  - id: S08-1
+    title: API key và secret key của tổng đài SMS ghi cứng trong mã nguồn
+    category: pattern
+    severity: high
+    cwe: [CWE-798, CWE-259, CWE-321]
+    file: app/medicare/appointment/sms.py
+    lines: [13, 14]
+    also:
+      - {file: app/medicare/appointment/sms.py, lines: [36, 37]}
+    routes: []
+    rules: [generic-api-key]
+    violated_rule: R-09

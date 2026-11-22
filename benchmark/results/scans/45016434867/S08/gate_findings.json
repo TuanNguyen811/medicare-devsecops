@@ -1,0 +1,88 @@
+{
+  "C1": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "bandit:B105:app/medicare/appointment/sms.py:14",
+        "severity": "LOW"
+      },
+      {
+        "id": "bandit:B310:app/medicare/appointment/sms.py:50",
+        "severity": "LOW"
+      },
+      {
+        "id": "gitleaks:generic-api-key:app/medicare/appointment/sms.py:13",
+        "severity": "HIGH"
+      },
+      {
+        "id": "gitleaks:generic-api-key:app/medicare/appointment/sms.py:14",
+        "severity": "HIGH"
+      }
+    ]
+  },
+  "C1+DAST": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "bandit:B105:app/medicare/appointment/sms.py:14",
+        "severity": "LOW"
+      },
+      {
+        "id": "bandit:B310:app/medicare/appointment/sms.py:50",
+        "severity": "LOW"
+      },
+      {
+        "id": "gitleaks:generic-api-key:app/medicare/appointment/sms.py:13",
+        "severity": "HIGH"
+      },
+      {
+        "id": "gitleaks:generic-api-key:app/medicare/appointment/sms.py:14",
+        "severity": "HIGH"
+      },
+      {
+        "id": "zap:10020:dast:GET /:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10020:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10021:dast:GET /:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /health:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /login:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10038:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments/{appointment_id}/remind:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+        "severity": "MEDIUM"
+      }
+    ]
+  }
+}

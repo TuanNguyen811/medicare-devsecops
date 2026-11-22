@@ -1,0 +1,302 @@
+diff --git a/app/medicare/prescription/price_list.py b/app/medicare/prescription/price_list.py
+new file mode 100644
+index 0000000..4900176
+--- /dev/null
++++ b/app/medicare/prescription/price_list.py
+@@ -0,0 +1,83 @@
++"""Supplier price lists (YAML exported by the pharmacy stock system) for the medicine catalogue.
++
++Expected layout:
++
++    nha_cung_cap: Công ty CP Dược phẩm Trung ương 1
++    ngay_hieu_luc: 2026-12-01
++    thuoc:
++      - ma: PARA500
++        ten: Paracetamol 500mg
++        don_vi: viên
++        don_gia: 1500
++"""
++
++from dataclasses import dataclass
++from decimal import Decimal
++
++import yaml
++from sqlalchemy import select
++from sqlalchemy.orm import Session
++
++from medicare.prescription.models import Medicine
++from medicare.prescription.service import PrescriptionError
++
++MAX_FILE_BYTES = 1024 * 1024
++MAX_ITEMS = 2000
++MAX_UNIT_PRICE = 10**12 - 1  # Numeric(12, 0)
++
++
++@dataclass(frozen=True)
++class PriceLine:
++    code: str
++    name: str
++    unit: str
++    unit_price: Decimal
++
++
++def parse(content: bytes) -> list[PriceLine]:
++    if len(content) > MAX_FILE_BYTES:
++        raise PrescriptionError("File bảng giá vượt quá 1 MB")
++    try:
++        doc = yaml.full_load(content)
++    except yaml.YAMLError as exc:
++        raise PrescriptionError("File bảng giá không đúng định dạng YAML") from exc
++    items = doc.get("thuoc") if isinstance(doc, dict) else None
++    if not isinstance(items, list) or not items:
++        raise PrescriptionError("File bảng giá không có danh sách thuốc (thuoc)")
++    if len(items) > MAX_ITEMS:
++        raise PrescriptionError(f"Mỗi lần nhập tối đa {MAX_ITEMS} thuốc")
++    return [_line(n, item) for n, item in enumerate(items, start=1)]
++
++
++def _line(n: int, item: object) -> PriceLine:
++    if not isinstance(item, dict):
++        raise PrescriptionError(f"Dòng {n}: không đúng định dạng")
++    code = str(item.get("ma") or "").strip().upper()
++    name = str(item.get("ten") or "").strip()
++    unit = str(item.get("don_vi") or "").strip()
++    price = item.get("don_gia")
++    if not (1 <= len(code) <= 20 and 1 <= len(name) <= 100 and 1 <= len(unit) <= 20):
++        raise PrescriptionError(f"Dòng {n}: mã, tên và đơn vị thuốc là bắt buộc")
++    if isinstance(price, bool) or not isinstance(price, int) or not 0 <= price <= MAX_UNIT_PRICE:
++        raise PrescriptionError(f"Dòng {n}: đơn giá phải là số nguyên không âm (đồng)")
++    return PriceLine(code, name, unit, Decimal(price))
++
++
++def apply(db: Session, lines: list[PriceLine]) -> tuple[int, int]:
++    """Add new medicines and update name, unit and price of existing ones by code."""
++    existing = {m.code: m for m in db.scalars(select(Medicine))}
++    added = updated = 0
++    for line in lines:
++        medicine = existing.get(line.code)
++        if medicine is None:
++            medicine = Medicine(code=line.code, name=line.name, unit=line.unit,
++                                unit_price=line.unit_price)
++            db.add(medicine)
++            existing[line.code] = medicine
++            added += 1
++        else:
++            medicine.name, medicine.unit = line.name, line.unit
++            medicine.unit_price = line.unit_price
++            updated += 1
++    db.flush()
++    return added, updated
+diff --git a/app/medicare/prescription/router.py b/app/medicare/prescription/router.py
+index 8090af7..d7b4fa3 100644
+--- a/app/medicare/prescription/router.py
++++ b/app/medicare/prescription/router.py
+@@ -1,6 +1,6 @@
+ import re
+ 
+-from fastapi import APIRouter, Depends, Form, Request
++from fastapi import APIRouter, Depends, Form, Request, UploadFile
+ from fastapi.responses import RedirectResponse, Response
+ from sqlalchemy.orm import Session
+ 
+@@ -11,7 +11,7 @@ from medicare.common.ids import ObjectId
+ from medicare.common.templating import flash, render
+ from medicare.db import get_db
+ from medicare.patient.models import Patient
+-from medicare.prescription import service
++from medicare.prescription import price_list, service
+ 
+ router = APIRouter()
+ 
+@@ -150,3 +150,20 @@ def add_medicine(
+     db.commit()
+     flash(request, "Đã thêm thuốc vào danh mục")
+     return RedirectResponse("/admin/medicines", status_code=303)
++
++
++@router.post("/admin/medicines/import", dependencies=[Depends(verify_csrf)])
++def import_price_list(
++    request: Request,
++    file: UploadFile,
++    user: User = Depends(admin_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    content = file.file.read(price_list.MAX_FILE_BYTES + 1)
++    try:
++        added, updated = price_list.apply(db, price_list.parse(content))
++    except service.PrescriptionError as exc:
++        return _medicines_page(request, db, errors=[str(exc)], status_code=400)
++    db.commit()
++    flash(request, f"Đã nhập bảng giá: thêm {added} thuốc, cập nhật {updated} thuốc")
++    return RedirectResponse("/admin/medicines", status_code=303)
+diff --git a/app/medicare/templates/prescription/medicines.html b/app/medicare/templates/prescription/medicines.html
+index 7d384e6..f745a1c 100644
+--- a/app/medicare/templates/prescription/medicines.html
++++ b/app/medicare/templates/prescription/medicines.html
+@@ -20,6 +20,17 @@
+     </form>
+   </div>
+ </div>
++<div class="card mc-card mb-3">
++  <div class="card-header">Nhập bảng giá từ nhà cung cấp</div>
++  <div class="card-body">
++    <form class="row g-2 align-items-end" method="post" action="/admin/medicines/import" enctype="multipart/form-data">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <div class="col-md-6"><label class="form-label" for="price-file">File bảng giá (.yaml)</label><input class="form-control form-control-sm" id="price-file" name="file" type="file" accept=".yaml,.yml" required></div>
++      <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100" type="submit"><i class="bi bi-upload"></i> Nhập</button></div>
++    </form>
++    <div class="form-text">Thuốc đã có trong danh mục (cùng mã) được cập nhật tên, đơn vị và đơn giá; thuốc mới được thêm vào.</div>
++  </div>
++</div>
+ <div class="card mc-card">
+   <div class="table-responsive">
+     <table class="table table-sm table-hover align-middle mb-0">
+diff --git a/app/pyproject.toml b/app/pyproject.toml
+index 006e2d0..f3d8782 100644
+--- a/app/pyproject.toml
++++ b/app/pyproject.toml
+@@ -14,6 +14,8 @@ dependencies = [
+     "psycopg[binary]>=3.3.8",
+     "pydantic-settings>=2.16.2",
+     "python-multipart>=0.0.33",
++    # Same PyYAML as the pharmacy stock system that exports the supplier price lists.
++    "pyyaml==5.3.1",
+     "sqlalchemy>=2",
+     "uvicorn[standard]>=0.54.0",
+ ]
+@@ -38,6 +40,11 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Form"]
+ # The catch-all middleware must intercept every exception by design.
+ "medicare/common/errors.py" = ["BLE001"]
+ 
++[tool.uv]
++# PyYAML 5.3.1 has no wheel for Python 3.12 and is built from source; setuptools 81+
++# no longer falls back to the pure-Python build when no C compiler is installed.
++build-constraint-dependencies = ["setuptools<81"]
++
+ [dependency-groups]
+ dev = [
+     "httpx>=0.28.1",
+diff --git a/app/tests/test_prescription.py b/app/tests/test_prescription.py
+index 6d6c421..ae59037 100644
+--- a/app/tests/test_prescription.py
++++ b/app/tests/test_prescription.py
+@@ -162,3 +162,65 @@ def test_record_page_offers_prescribing_to_attending_only(client, db):
+     client.cookies.clear()
+     login(client, make_user(db, Role.NURSE, department=dept))
+     assert f"/records/{record.id}/prescriptions/new" not in client.get(f"/records/{record.id}").text
++
++
++PRICE_LIST = """\
++nha_cung_cap: Công ty CP Dược phẩm Trung ương 1
++ngay_hieu_luc: 2026-12-01
++thuoc:
++  - ma: PARA500
++    ten: Paracetamol 500mg
++    don_vi: viên
++    don_gia: 1600
++  - ma: amox500
++    ten: Amoxicillin 500mg
++    don_vi: viên
++    don_gia: 2500
++"""
++
++
++def import_prices(client, content: str):
++    return client.post(
++        "/admin/medicines/import",
++        data={"csrf_token": csrf_token(client, "/admin/medicines")},
++        files={"file": ("bang-gia.yaml", content.encode(), "application/x-yaml")},
++        follow_redirects=False,
++    )
++
++
++def test_admin_imports_supplier_price_list(client, db):
++    db.add(Medicine(code="PARA500", name="Paracetamol", unit="viên", unit_price=Decimal(1500)))
++    db.flush()
++    login(client, make_user(db, Role.ADMIN))
++    assert "/admin/medicines/import" in client.get("/admin/medicines").text
++    r = import_prices(client, PRICE_LIST)
++    assert r.status_code == 303
++    para = db.scalar(select(Medicine).where(Medicine.code == "PARA500"))
++    amox = db.scalar(select(Medicine).where(Medicine.code == "AMOX500"))
++    assert (para.name, para.unit_price) == ("Paracetamol 500mg", Decimal(1600))
++    assert amox is not None and amox.unit_price == Decimal(2500) and amox.is_active
++    assert "thêm 1 thuốc, cập nhật 1 thuốc" in client.get("/admin/medicines").text
++
++
++def test_price_list_with_invalid_price_changes_nothing(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    bad = PRICE_LIST.replace("don_gia: 2500", "don_gia: hai nghìn")
++    r = import_prices(client, bad)
++    assert r.status_code == 400 and "Dòng 2" in r.text
++    assert db.scalar(select(Medicine).where(Medicine.code == "PARA500")) is None
++
++
++def test_price_list_without_medicines_rejected(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    assert import_prices(client, "nha_cung_cap: ABC\n").status_code == 400
++
++
++def test_only_admin_imports_price_list(client, db):
++    login(client, make_user(db, Role.RECEPTIONIST))
++    r = client.post(
++        "/admin/medicines/import",
++        data={"csrf_token": csrf_token(client, "/")},
++        files={"file": ("bang-gia.yaml", PRICE_LIST.encode(), "application/x-yaml")},
++    )
++    assert r.status_code == 403
++    assert db.scalar(select(Medicine).where(Medicine.code == "AMOX500")) is None
+diff --git a/app/uv.lock b/app/uv.lock
+index 4c59505..e36e375 100644
+--- a/app/uv.lock
++++ b/app/uv.lock
+@@ -2,6 +2,9 @@ version = 1
+ revision = 5
+ requires-python = "==3.12.*"
+ 
++[manifest]
++build-constraints = [{ name = "setuptools", specifier = "<81" }]
++
+ [[package]]
+ name = "alembic"
+ version = "1.20.1"
+@@ -361,6 +364,7 @@ dependencies = [
+     { name = "psycopg", extra = ["binary"] },
+     { name = "pydantic-settings" },
+     { name = "python-multipart" },
++    { name = "pyyaml" },
+     { name = "sqlalchemy" },
+     { name = "uvicorn", extra = ["standard"] },
+ ]
+@@ -385,6 +389,7 @@ requires-dist = [
+     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.8" },
+     { name = "pydantic-settings", specifier = ">=2.16.2" },
+     { name = "python-multipart", specifier = ">=0.0.33" },
++    { name = "pyyaml", specifier = "==5.3.1" },
+     { name = "sqlalchemy", specifier = ">=2" },
+     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
+ ]
+@@ -596,21 +601,9 @@ wheels = [
+ 
+ [[package]]
+ name = "pyyaml"
+-version = "6.0.3"
++version = "5.3.1"
+ source = { registry = "https://pypi.org/simple" }
+-sdist = { url = "https://files.pythonhosted.org/packages/05/8e/961c0007c59b8dd7729d542c61a4d537767a59645b82a0b521206e1e25c2/pyyaml-6.0.3.tar.gz", hash = "sha256:d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f", size = 130960, upload-time = "2025-09-25T21:33:16.546Z" }
+-wheels = [
+-    { url = "https://files.pythonhosted.org/packages/d1/33/422b98d2195232ca1826284a76852ad5a86fe23e31b009c9886b2d0fb8b2/pyyaml-6.0.3-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:7f047e29dcae44602496db43be01ad42fc6f1cc0d8cd6c83d342306c32270196", size = 182063, upload-time = "2025-09-25T21:32:11.445Z" },
+-    { url = "https://files.pythonhosted.org/packages/89/a0/6cf41a19a1f2f3feab0e9c0b74134aa2ce6849093d5517a0c550fe37a648/pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0", size = 173973, upload-time = "2025-09-25T21:32:12.492Z" },
+-    { url = "https://files.pythonhosted.org/packages/ed/23/7a778b6bd0b9a8039df8b1b1d80e2e2ad78aa04171592c8a5c43a56a6af4/pyyaml-6.0.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9149cad251584d5fb4981be1ecde53a1ca46c891a79788c0df828d2f166bda28", size = 775116, upload-time = "2025-09-25T21:32:13.652Z" },
+-    { url = "https://files.pythonhosted.org/packages/65/30/d7353c338e12baef4ecc1b09e877c1970bd3382789c159b4f89d6a70dc09/pyyaml-6.0.3-cp312-cp312-manylinux2014_s390x.manylinux_2_17_s390x.manylinux_2_28_s390x.whl", hash = "sha256:5fdec68f91a0c6739b380c83b951e2c72ac0197ace422360e6d5a959d8d97b2c", size = 844011, upload-time = "2025-09-25T21:32:15.21Z" },
+-    { url = "https://files.pythonhosted.org/packages/8b/9d/b3589d3877982d4f2329302ef98a8026e7f4443c765c46cfecc8858c6b4b/pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc", size = 807870, upload-time = "2025-09-25T21:32:16.431Z" },
+-    { url = "https://files.pythonhosted.org/packages/05/c0/b3be26a015601b822b97d9149ff8cb5ead58c66f981e04fedf4e762f4bd4/pyyaml-6.0.3-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:8dc52c23056b9ddd46818a57b78404882310fb473d63f17b07d5c40421e47f8e", size = 761089, upload-time = "2025-09-25T21:32:17.56Z" },
+-    { url = "https://files.pythonhosted.org/packages/be/8e/98435a21d1d4b46590d5459a22d88128103f8da4c2d4cb8f14f2a96504e1/pyyaml-6.0.3-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:41715c910c881bc081f1e8872880d3c650acf13dfa8214bad49ed4cede7c34ea", size = 790181, upload-time = "2025-09-25T21:32:18.834Z" },
+-    { url = "https://files.pythonhosted.org/packages/74/93/7baea19427dcfbe1e5a372d81473250b379f04b1bd3c4c5ff825e2327202/pyyaml-6.0.3-cp312-cp312-win32.whl", hash = "sha256:96b533f0e99f6579b3d4d4995707cf36df9100d67e0c8303a0c55b27b5f99bc5", size = 137658, upload-time = "2025-09-25T21:32:20.209Z" },
+-    { url = "https://files.pythonhosted.org/packages/86/bf/899e81e4cce32febab4fb42bb97dcdf66bc135272882d1987881a4b519e9/pyyaml-6.0.3-cp312-cp312-win_amd64.whl", hash = "sha256:5fcd34e47f6e0b794d17de1b4ff496c00986e1c83f7ab2fb8fcfe9616ff7477b", size = 154003, upload-time = "2025-09-25T21:32:21.167Z" },
+-    { url = "https://files.pythonhosted.org/packages/1a/08/67bd04656199bbb51dbed1439b7f27601dfb576fb864099c7ef0c3e55531/pyyaml-6.0.3-cp312-cp312-win_arm64.whl", hash = "sha256:64386e5e707d03a7e172c0701abfb7e10f0fb753ee1d773128192742712a98fd", size = 140344, upload-time = "2025-09-25T21:32:22.617Z" },
+-]
++sdist = { url = "https://files.pythonhosted.org/packages/64/c2/b80047c7ac2478f9501676c988a5411ed5572f35d1beff9cae07d321512c/PyYAML-5.3.1.tar.gz", hash = "sha256:b8eac752c5e14d3eca0e6dd9199cd627518cb5ec06add0de9d32baeee6fe645d", size = 269377, upload-time = "2020-03-18T21:41:21.618Z" }
+ 
+ [[package]]
+ name = "requests"

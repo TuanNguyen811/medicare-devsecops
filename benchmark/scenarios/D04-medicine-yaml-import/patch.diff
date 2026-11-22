@@ -1,0 +1,284 @@
+diff --git a/app/medicare/prescription/router.py b/app/medicare/prescription/router.py
+index 8090af7..cf146a3 100644
+--- a/app/medicare/prescription/router.py
++++ b/app/medicare/prescription/router.py
+@@ -1,6 +1,6 @@
+ import re
+ 
+-from fastapi import APIRouter, Depends, Form, Request
++from fastapi import APIRouter, Depends, Form, Request, UploadFile
+ from fastapi.responses import RedirectResponse, Response
+ from sqlalchemy.orm import Session
+ 
+@@ -150,3 +150,20 @@ def add_medicine(
+     db.commit()
+     flash(request, "Đã thêm thuốc vào danh mục")
+     return RedirectResponse("/admin/medicines", status_code=303)
++
++
++@router.post("/admin/medicines/import", dependencies=[Depends(verify_csrf)])
++def import_medicines(
++    request: Request,
++    file: UploadFile,
++    user: User = Depends(admin_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    content = file.file.read(service.IMPORT_MAX_BYTES + 1)
++    try:
++        added, updated = service.import_medicines(db, content)
++    except service.PrescriptionError as exc:
++        return _medicines_page(request, db, errors=[str(exc)], status_code=400)
++    db.commit()
++    flash(request, f"Đã nhập danh mục: thêm {added}, cập nhật {updated} thuốc")
++    return RedirectResponse("/admin/medicines", status_code=303)
+diff --git a/app/medicare/prescription/service.py b/app/medicare/prescription/service.py
+index 9037824..649e030 100644
+--- a/app/medicare/prescription/service.py
++++ b/app/medicare/prescription/service.py
+@@ -1,5 +1,7 @@
+ from decimal import Decimal
+ 
++import yaml
++from pydantic import BaseModel, ConfigDict, Field, ValidationError
+ from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
+@@ -14,6 +16,8 @@ from medicare.record.models import MedicalRecord
+ 
+ ENTITY = "prescription"
+ MAX_ITEMS = 20
++IMPORT_MAX_BYTES = 256 * 1024
++IMPORT_MAX_ROWS = 2000
+ 
+ 
+ class PrescriptionError(ValueError):
+@@ -111,3 +115,63 @@ def add_medicine(db: Session, code: str, name: str, unit: str, unit_price: str)
+     db.add(medicine)
+     db.flush()
+     return medicine
++
++
++class MedicineRow(BaseModel):
++    """One entry of a catalogue file; strict, so YAML booleans or dates are not coerced."""
++
++    model_config = ConfigDict(strict=True, extra="forbid", str_strip_whitespace=True)
++
++    code: str = Field(min_length=1, max_length=20)
++    name: str = Field(min_length=1, max_length=100)
++    unit: str = Field(min_length=1, max_length=20)
++    unit_price: int = Field(ge=0, le=999_999_999_999)
++
++
++def import_medicines(db: Session, content: bytes) -> tuple[int, int]:
++    """Add or update catalogue entries from a YAML file; all rows or none.
++
++    Expected layout:
++        medicines:
++          - {code: PARA500, name: Paracetamol 500mg, unit: viên, unit_price: 1500}
++    Returns (added, updated).
++    """
++    if len(content) > IMPORT_MAX_BYTES:
++        raise PrescriptionError(f"Tệp quá lớn (tối đa {IMPORT_MAX_BYTES // 1024} KB)")
++    try:
++        data = yaml.safe_load(content.decode("utf-8"))
++    except (UnicodeDecodeError, yaml.YAMLError):
++        raise PrescriptionError("Tệp không phải YAML hợp lệ (mã hóa UTF-8)") from None
++    rows = data.get("medicines") if isinstance(data, dict) else None
++    if not isinstance(rows, list) or not rows:
++        raise PrescriptionError("Tệp phải có danh sách thuốc dưới khóa medicines")
++    if len(rows) > IMPORT_MAX_ROWS:
++        raise PrescriptionError(f"Tối đa {IMPORT_MAX_ROWS} thuốc mỗi lần nhập")
++    parsed: dict[str, MedicineRow] = {}
++    for number, row in enumerate(rows, start=1):
++        try:
++            item = MedicineRow.model_validate(row)
++        except ValidationError:
++            raise PrescriptionError(
++                f"Thuốc thứ {number}: cần đủ code, name, unit, unit_price (số nguyên, đồng)"
++            ) from None
++        code = item.code.upper()
++        if code in parsed:
++            raise PrescriptionError(f"Thuốc thứ {number}: mã {code} bị lặp trong tệp")
++        parsed[code] = item
++    existing = {
++        m.code: m for m in db.scalars(select(Medicine).where(Medicine.code.in_(parsed)))
++    }
++    added = updated = 0
++    for code, item in parsed.items():
++        medicine = existing.get(code)
++        if medicine is None:
++            db.add(Medicine(code=code, name=item.name, unit=item.unit,
++                            unit_price=Decimal(item.unit_price)))
++            added += 1
++        else:
++            medicine.name, medicine.unit = item.name, item.unit
++            medicine.unit_price = Decimal(item.unit_price)
++            updated += 1
++    db.flush()
++    return added, updated
+diff --git a/app/medicare/templates/prescription/medicines.html b/app/medicare/templates/prescription/medicines.html
+index 7d384e6..ea866ef 100644
+--- a/app/medicare/templates/prescription/medicines.html
++++ b/app/medicare/templates/prescription/medicines.html
+@@ -20,6 +20,17 @@
+     </form>
+   </div>
+ </div>
++<div class="card mc-card mb-3">
++  <div class="card-header">Nhập danh mục từ tệp YAML</div>
++  <div class="card-body">
++    <form class="row g-2 align-items-end" method="post" action="/admin/medicines/import" enctype="multipart/form-data">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <div class="col-md-6"><label class="form-label" for="file">Tệp .yaml (tối đa 256 KB)</label><input class="form-control form-control-sm" id="file" name="file" type="file" accept=".yaml,.yml" required></div>
++      <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100" type="submit"><i class="bi bi-upload"></i> Nhập</button></div>
++    </form>
++    <div class="form-text">Mỗi thuốc gồm <code>code</code>, <code>name</code>, <code>unit</code>, <code>unit_price</code> dưới khóa <code>medicines</code>. Thuốc trùng mã được cập nhật tên, đơn vị và đơn giá.</div>
++  </div>
++</div>
+ <div class="card mc-card">
+   <div class="table-responsive">
+     <table class="table table-sm table-hover align-middle mb-0">
+diff --git a/app/pyproject.toml b/app/pyproject.toml
+index 006e2d0..52b2387 100644
+--- a/app/pyproject.toml
++++ b/app/pyproject.toml
+@@ -13,6 +13,7 @@ dependencies = [
+     "prometheus-client>=0.23",
+     "psycopg[binary]>=3.3.8",
+     "pydantic-settings>=2.16.2",
++    "pyyaml>=6.0.2",
+     "python-multipart>=0.0.33",
+     "sqlalchemy>=2",
+     "uvicorn[standard]>=0.54.0",
+diff --git a/app/tests/test_medicine_import.py b/app/tests/test_medicine_import.py
+new file mode 100644
+index 0000000..f19cb0c
+--- /dev/null
++++ b/app/tests/test_medicine_import.py
+@@ -0,0 +1,106 @@
++from decimal import Decimal
++
++from sqlalchemy import select
++
++from medicare.auth.models import Role
++from medicare.prescription.models import Medicine
++from tests.conftest import csrf_token, login
++from tests.factories import make_department, make_user
++
++CATALOGUE = """\
++medicines:
++  - code: para500
++    name: Paracetamol 500mg
++    unit: viên
++    unit_price: 1500
++  - code: ORS
++    name: Oresol 245
++    unit: gói
++    unit_price: 3000
++"""
++
++
++def upload(client, content, filename="danh-muc.yaml"):
++    if isinstance(content, str):
++        content = content.encode("utf-8")
++    return client.post(
++        "/admin/medicines/import",
++        data={"csrf_token": csrf_token(client, "/admin/medicines")},
++        files={"file": (filename, content, "application/yaml")},
++        follow_redirects=False,
++    )
++
++
++def medicine(db, code):
++    return db.scalar(select(Medicine).where(Medicine.code == code))
++
++
++def test_admin_imports_catalogue(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    r = upload(client, CATALOGUE)
++    assert r.status_code == 303 and r.headers["location"] == "/admin/medicines"
++    para = medicine(db, "PARA500")
++    assert para.name == "Paracetamol 500mg" and para.unit_price == Decimal(1500)
++    assert medicine(db, "ORS").unit == "gói"
++    assert "thêm 2, cập nhật 0 thuốc" in client.get("/admin/medicines").text
++
++
++def test_import_updates_existing_codes(client, db):
++    db.add(Medicine(code="ORS", name="Oresol", unit="gói", unit_price=Decimal(2500)))
++    db.flush()
++    login(client, make_user(db, Role.ADMIN))
++    assert upload(client, CATALOGUE).status_code == 303
++    ors = medicine(db, "ORS")
++    db.refresh(ors)
++    assert ors.name == "Oresol 245" and ors.unit_price == Decimal(3000)
++
++
++def test_invalid_row_imports_nothing(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    bad = CATALOGUE + "  - code: SMEC\n    name: Smecta\n    unit: gói\n"
++    r = upload(client, bad)
++    assert r.status_code == 400 and "Thuốc thứ 3" in r.text
++    assert medicine(db, "PARA500") is None
++
++
++def test_price_must_be_whole_dong(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    r = upload(client, CATALOGUE.replace("unit_price: 1500", "unit_price: 1500.5"))
++    assert r.status_code == 400 and medicine(db, "PARA500") is None
++
++
++def test_duplicate_code_in_file(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    r = upload(client, CATALOGUE.replace("code: ORS", "code: PARA500"))
++    assert r.status_code == 400 and "bị lặp" in r.text
++
++
++def test_not_yaml_or_wrong_layout(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    r = upload(client, "medicines: [unclosed\n")
++    assert r.status_code == 400 and "không phải YAML hợp lệ" in r.text
++    r = upload(client, "- code: PARA500\n")
++    assert r.status_code == 400 and "khóa medicines" in r.text
++
++
++def test_file_size_limited(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    r = upload(client, "#" * (256 * 1024 + 1))
++    assert r.status_code == 400 and "Tệp quá lớn" in r.text
++
++
++def test_only_admin_imports(client, db):
++    login(client, make_user(db, Role.DOCTOR, department=make_department(db)))
++    r = client.post(
++        "/admin/medicines/import",
++        data={"csrf_token": csrf_token(client, "/")},
++        files={"file": ("danh-muc.yaml", CATALOGUE.encode(), "application/yaml")},
++    )
++    assert r.status_code == 403 and medicine(db, "PARA500") is None
++
++
++def test_import_without_csrf_is_403(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    r = client.post("/admin/medicines/import",
++                    files={"file": ("danh-muc.yaml", CATALOGUE.encode(), "application/yaml")})
++    assert r.status_code == 403
+diff --git a/app/uv.lock b/app/uv.lock
+index 4c59505..8e5d03a 100644
+--- a/app/uv.lock
++++ b/app/uv.lock
+@@ -361,6 +361,7 @@ dependencies = [
+     { name = "psycopg", extra = ["binary"] },
+     { name = "pydantic-settings" },
+     { name = "python-multipart" },
++    { name = "pyyaml" },
+     { name = "sqlalchemy" },
+     { name = "uvicorn", extra = ["standard"] },
+ ]
+@@ -385,6 +386,7 @@ requires-dist = [
+     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.8" },
+     { name = "pydantic-settings", specifier = ">=2.16.2" },
+     { name = "python-multipart", specifier = ">=0.0.33" },
++    { name = "pyyaml", specifier = ">=6.0.2" },
+     { name = "sqlalchemy", specifier = ">=2" },
+     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
+ ]

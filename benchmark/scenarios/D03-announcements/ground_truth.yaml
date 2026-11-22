@@ -1,0 +1,4 @@
+# Mồi nhử: nội dung thông báo được bleach.clean với allowlist thẻ, thuộc tính (a: href, title) và
+# giao thức (http, https, mailto), strip=True, trước khi lưu; chỉ bản đã làm sạch được render bằng
+# |safe. Chỉ ADMIN đăng và gỡ, có CSRF. Không có lỗ hổng.
+findings: []

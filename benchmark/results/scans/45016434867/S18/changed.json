@@ -1,0 +1,10 @@
+[
+  "app/medicare/appointment/models.py",
+  "app/medicare/appointment/router.py",
+  "app/medicare/appointment/service.py",
+  "app/medicare/templates/appointment/list.html",
+  "app/medicare/templates/appointment/quick.html",
+  "app/migrations/versions/0004_appointment_duration.py",
+  "app/tests/test_appointment.py",
+  "app/tests/test_models.py"
+]

@@ -1,0 +1,9 @@
+id: D03
+title: Thông báo nội bộ trên trang chủ
+split: test
+kind: decoy
+commit_message: Quản trị viên đăng thông báo có định dạng, hiển thị trên trang chủ
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

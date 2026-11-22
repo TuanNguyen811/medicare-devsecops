@@ -1,0 +1,15 @@
+findings:
+  - id: S13-1
+    title: Lỗi khi kiểm tra phiên (ví dụ giá trị ca làm việc tự gửi lúc đăng nhập) thì vẫn cho qua với người dùng của phiên, bỏ qua kiểm tra hạn phiên, session_version và is_active
+    category: logic
+    severity: high
+    cwe: [CWE-636, CWE-755, CWE-280, CWE-613, CWE-287]
+    file: app/medicare/common/auth.py
+    lines: [115, 120]
+    also:
+      - {file: app/medicare/common/auth.py, lines: [79, 79]}
+      - {file: app/medicare/common/auth.py, lines: [88, 90]}
+      - {file: app/medicare/auth/router.py, lines: [38, 38]}
+    routes: ["POST /login"]
+    rules: []
+    violated_rule: [R-08, R-16]

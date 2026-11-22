@@ -1,0 +1,5 @@
+# Mồi nhử: subprocess.run với danh sách đối số, không qua shell; đường dẫn công cụ lấy từ cấu hình,
+# mã thẻ khớp regex BHYT, họ tên và ngày sinh đi dưới dạng --ten=giá-trị nên không thành tùy chọn
+# riêng; có timeout, không trả stdout/stderr thô cho người dùng. Chỉ lễ tân/quản trị, có CSRF.
+# Không có lỗ hổng.
+findings: []

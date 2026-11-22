@@ -1,0 +1,30 @@
+findings:
+  - id: S03-1
+    title: Token JWT của API di động được giải mã với verify_signature=False, ai cũng giả mạo được token của người khác
+    category: pattern
+    severity: critical
+    cwe: [CWE-347, CWE-287, CWE-345, CWE-290]
+    file: app/medicare/mobile/tokens.py
+    lines: [41, 44]
+    also:
+      - {file: app/medicare/mobile/tokens.py, lines: [53, 53]}
+    routes:
+      - "GET /api/v1/mobile/me"
+      - "GET /api/v1/mobile/appointments"
+      - "GET /api/v1/mobile/patients/{patient_id}/records"
+      - "GET /api/v1/mobile/records/{record_id}"
+    rules: []
+    violated_rule: [R-01, R-02, R-07, R-08]
+  - id: S03-2
+    title: Khóa ký JWT viết cứng trong mã nguồn thay vì đọc từ biến môi trường
+    category: pattern
+    severity: high
+    cwe: [CWE-798, CWE-321, CWE-259, CWE-522]
+    file: app/medicare/mobile/tokens.py
+    lines: [17, 17]
+    also:
+      - {file: app/medicare/mobile/tokens.py, lines: [36, 36]}
+      - {file: app/medicare/mobile/tokens.py, lines: [42, 42]}
+    routes: []
+    rules: [generic-api-key]
+    violated_rule: R-09

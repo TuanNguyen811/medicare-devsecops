@@ -1,0 +1,10 @@
+[
+  "app/medicare/auth/admin_router.py",
+  "app/medicare/auth/models.py",
+  "app/medicare/auth/remember.py",
+  "app/medicare/auth/router.py",
+  "app/medicare/common/auth.py",
+  "app/medicare/templates/login.html",
+  "app/migrations/versions/0004_remember_tokens.py",
+  "app/tests/test_remember_me.py"
+]

@@ -1,0 +1,27 @@
+findings:
+  - id: S04-1
+    title: File YAML tải lên được giải tuần tự bằng yaml.load với yaml.Loader (không an toàn), cho phép thực thi mã
+    category: pattern
+    severity: high
+    cwe: [CWE-502, CWE-20]
+    file: app/medicare/prescription/legacy_import.py
+    lines: [40, 40]
+    also:
+      - {file: app/medicare/prescription/legacy_import.py, lines: [58, 58]}
+      - {file: app/medicare/prescription/router.py, lines: [181, 181]}
+    routes: ["POST /admin/medicines/import"]
+    rules: []
+    violated_rule: null
+  - id: S04-2
+    title: File XML tải lên được phân tích bằng lxml với resolve_entities=True, thực thể ngoài được nạp (XXE)
+    category: pattern
+    severity: high
+    cwe: [CWE-611, CWE-776, CWE-827]
+    file: app/medicare/prescription/legacy_import.py
+    lines: [49, 50]
+    also:
+      - {file: app/medicare/prescription/legacy_import.py, lines: [60, 60]}
+      - {file: app/medicare/prescription/router.py, lines: [181, 181]}
+    routes: ["POST /admin/medicines/import"]
+    rules: []
+    violated_rule: R-14

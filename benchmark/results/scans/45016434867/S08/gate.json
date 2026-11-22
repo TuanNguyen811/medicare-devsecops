@@ -1,0 +1,16 @@
+{
+  "C1": {
+    "block": true,
+    "blocking": [
+      "gitleaks:generic-api-key:app/medicare/appointment/sms.py:13",
+      "gitleaks:generic-api-key:app/medicare/appointment/sms.py:14"
+    ]
+  },
+  "C1+DAST": {
+    "block": true,
+    "blocking": [
+      "gitleaks:generic-api-key:app/medicare/appointment/sms.py:13",
+      "gitleaks:generic-api-key:app/medicare/appointment/sms.py:14"
+    ]
+  }
+}

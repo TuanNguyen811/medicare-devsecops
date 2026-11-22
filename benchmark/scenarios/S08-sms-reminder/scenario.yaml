@@ -1,0 +1,9 @@
+id: S08
+title: Gửi SMS nhắc lịch
+split: test
+kind: vuln
+commit_message: Lễ tân gửi SMS nhắc lịch khám cho bệnh nhân qua tổng đài eSMS
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: [S08-1]
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

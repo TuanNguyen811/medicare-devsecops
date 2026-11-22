@@ -1,0 +1,212 @@
+diff --git a/app/medicare/auth/router.py b/app/medicare/auth/router.py
+index a3dae36..032747c 100644
+--- a/app/medicare/auth/router.py
++++ b/app/medicare/auth/router.py
+@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
+ from medicare.auth.models import User
+ from medicare.common import metrics
+ from medicare.common.auth import (
++    DEFAULT_SHIFT,
+     authenticate,
+     get_current_user,
+     revoke_sessions,
+@@ -34,6 +35,7 @@ def login(
+     request: Request,
+     username: str = Form(""),
+     password: str = Form(""),
++    shift: str = Form(DEFAULT_SHIFT),
+     db: Session = Depends(get_db),
+ ) -> Response:
+     user = None
+@@ -45,7 +47,7 @@ def login(
+     db.commit()  # persists the failed-attempt counter and lock
+     if user is None:
+         return render(request, "login.html", {"error": LOGIN_ERROR})
+-    start_session(request, user)
++    start_session(request, user, shift)
+     return RedirectResponse("/", status_code=303)
+ 
+ 
+diff --git a/app/medicare/common/auth.py b/app/medicare/common/auth.py
+index b57552e..0f58b08 100644
+--- a/app/medicare/common/auth.py
++++ b/app/medicare/common/auth.py
+@@ -1,3 +1,4 @@
++import logging
+ import time
+ from collections.abc import Callable
+ from datetime import datetime, timedelta
+@@ -12,9 +13,17 @@ from medicare.common.csrf import rotate_csrf_token
+ from medicare.common.passwords import hash_password, verify_password
+ from medicare.db import get_db
+ 
++logger = logging.getLogger("medicare.auth")
++
+ MAX_FAILED_LOGINS = 5
+ LOCK_DURATION = timedelta(minutes=15)
+ 
++# Absolute session lifetime by shift. "hc" (office hours) uses SESSION_MAX_AGE; staff on
++# 12-hour shifts or 24-hour duty choose a longer one at login so they are not signed out
++# in the middle of a shift.
++SHIFT_MAX_AGE = {"hc": None, "12h": 12 * 3600, "24h": 24 * 3600}
++DEFAULT_SHIFT = "hc"
++
+ # Verified against when the username is unknown, so response time does not reveal
+ # whether an account exists. Computed once at import.
+ _DUMMY_HASH = hash_password("dummy-password-for-timing")
+@@ -61,12 +70,13 @@ def authenticate(db: Session, username: str, password: str, now: datetime) -> Us
+     return user
+ 
+ 
+-def start_session(request: Request, user: User) -> None:
++def start_session(request: Request, user: User, shift: str = DEFAULT_SHIFT) -> None:
+     """Fresh session after authentication (R-08: no fixation)."""
+     request.session.clear()
+     request.session["user_id"] = user.id
+     request.session["sv"] = user.session_version
+     request.session["iat"] = int(_now())
++    request.session["shift"] = shift if user.role != Role.PATIENT else DEFAULT_SHIFT
+     rotate_csrf_token(request)
+ 
+ 
+@@ -75,22 +85,40 @@ def revoke_sessions(user: User) -> None:
+     user.session_version += 1
+ 
+ 
+-def _session_valid(request: Request, user: User | None) -> bool:
+-    if user is None or not user.is_active:
+-        return False
+-    if request.session.get("sv") != user.session_version:
+-        return False
++def _max_age(request: Request) -> int:
++    shift_age = SHIFT_MAX_AGE[request.session.get("shift", DEFAULT_SHIFT)]
++    return shift_age or request.app.state.settings.session_max_age
++
++
++def _session_user(request: Request, db: Session) -> User | None:
++    """The session's user, or None when the session can no longer be used.
++
++    The cookie is checked first, so expired sessions never cost a database query.
++    """
++    user_id = request.session.get("user_id")
+     issued_at = request.session.get("iat")
+-    max_age = request.app.state.settings.session_max_age
++    if not isinstance(user_id, int) or not isinstance(issued_at, int):
++        return None
+     # Absolute lifetime: the signed cookie is re-issued on every response, so its
+     # max_age alone would only be an idle timeout.
+-    return isinstance(issued_at, int) and 0 <= _now() - issued_at <= max_age
++    if not 0 <= _now() - issued_at <= _max_age(request):
++        return None
++    user = db.get(User, user_id)
++    if user is None or not user.is_active or request.session.get("sv") != user.session_version:
++        return None
++    return user
+ 
+ 
+ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+-    user_id = request.session.get("user_id")
+-    user = db.get(User, user_id) if isinstance(user_id, int) else None
+-    if not _session_valid(request, user):
++    try:
++        user = _session_user(request, db)
++    except Exception as exc:  # noqa: BLE001
++        # A fault in the check itself must not sign staff out in the middle of a shift:
++        # keep the session's user and let the next request check again.
++        logger.warning("Session check failed: %s", type(exc).__name__)
++        user_id = request.session.get("user_id")
++        user = db.get(User, user_id) if isinstance(user_id, int) else None
++    if user is None:
+         request.session.clear()
+         raise LoginRequired
+     request.state.current_user = user
+diff --git a/app/medicare/templates/login.html b/app/medicare/templates/login.html
+index 1cc5c9d..974c3db 100644
+--- a/app/medicare/templates/login.html
++++ b/app/medicare/templates/login.html
+@@ -19,6 +19,15 @@
+         <label class="form-label" for="password">Mật khẩu</label>
+         <input class="form-control" id="password" name="password" type="password" maxlength="128" autocomplete="current-password" required>
+       </div>
++      <div class="mb-3">
++        <label class="form-label" for="shift">Ca làm việc</label>
++        <select class="form-select" id="shift" name="shift">
++          <option value="hc" selected>Hành chính</option>
++          <option value="12h">Ca 12 giờ</option>
++          <option value="24h">Trực 24 giờ</option>
++        </select>
++        <div class="form-text">Phiên đăng nhập hết hạn khi hết ca. Bệnh nhân giữ mặc định.</div>
++      </div>
+       <button class="btn btn-primary w-100" type="submit">Đăng nhập</button>
+     </form>
+     <p class="text-secondary small text-center mt-3 mb-0">Chỉ dành cho nhân viên và bệnh nhân đã được cấp tài khoản</p>
+diff --git a/app/tests/test_session_security.py b/app/tests/test_session_security.py
+index 05ccc67..7a91d0d 100644
+--- a/app/tests/test_session_security.py
++++ b/app/tests/test_session_security.py
+@@ -9,7 +9,7 @@ from medicare.auth.models import Role
+ from medicare.common import auth as auth_module
+ from medicare.common.auth import authenticate
+ from tests.conftest import csrf_token, login
+-from tests.factories import TEST_PASSWORD, make_user
++from tests.factories import TEST_PASSWORD, make_patient, make_user
+ 
+ 
+ def _second_client(app, client) -> TestClient:
+@@ -69,3 +69,56 @@ def test_session_has_absolute_lifetime(app, client, db, monkeypatch):
+     real_now = auth_module._now
+     monkeypatch.setattr(auth_module, "_now", lambda: real_now() + max_age + 1)
+     assert client.get("/", follow_redirects=False).status_code == 303
++
++
++def _login_for_shift(client, user, shift):
++    r = client.post(
++        "/login",
++        data={"username": user.username, "password": TEST_PASSWORD, "shift": shift,
++              "csrf_token": csrf_token(client)},
++        follow_redirects=False,
++    )
++    assert r.status_code == 303
++
++
++def test_duty_shift_keeps_session_for_24_hours(app, client, db, monkeypatch):
++    _login_for_shift(client, make_user(db, Role.DOCTOR), "24h")
++    real_now = auth_module._now
++    monkeypatch.setattr(auth_module, "_now", lambda: real_now() + 20 * 3600)
++    assert client.get("/", follow_redirects=False).status_code == 200
++    monkeypatch.setattr(auth_module, "_now", lambda: real_now() + 24 * 3600 + 1)
++    assert client.get("/", follow_redirects=False).status_code == 303
++
++
++def test_twelve_hour_shift_lifetime(app, client, db, monkeypatch):
++    _login_for_shift(client, make_user(db, Role.NURSE), "12h")
++    real_now = auth_module._now
++    monkeypatch.setattr(auth_module, "_now", lambda: real_now() + 12 * 3600 + 1)
++    assert client.get("/", follow_redirects=False).status_code == 303
++
++
++def test_patient_session_uses_default_lifetime(app, client, db, monkeypatch):
++    patient_user = make_user(db, Role.PATIENT, patient=make_patient(db))
++    _login_for_shift(client, patient_user, "24h")
++    real_now = auth_module._now
++    max_age = app.state.settings.session_max_age
++    monkeypatch.setattr(auth_module, "_now", lambda: real_now() + max_age + 1)
++    assert client.get("/", follow_redirects=False).status_code == 303
++
++
++def test_expired_session_does_not_query_users(app, client, db, engine, monkeypatch):
++    login(client, make_user(db, Role.DOCTOR))
++    real_now = auth_module._now
++    max_age = app.state.settings.session_max_age
++    monkeypatch.setattr(auth_module, "_now", lambda: real_now() + max_age + 1)
++    statements: list[str] = []
++
++    def capture(conn, cursor, statement, *args):
++        statements.append(statement)
++
++    event.listen(engine, "before_cursor_execute", capture)
++    try:
++        assert client.get("/", follow_redirects=False).status_code == 303
++    finally:
++        event.remove(engine, "before_cursor_execute", capture)
++    assert not any("FROM users" in s for s in statements)

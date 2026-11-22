@@ -174,14 +174,15 @@ def test_real_patch_applies_and_ground_truth_points_into_it(scenario, tmp_path):
     try:
         sc.materialize(scenario, dest, repo)
         truth = yaml.safe_load((scenario.dir / "ground_truth.yaml").read_text(encoding="utf-8"))
+        added = sc.added_lines(scenario.patch_text())
         for item in truth.get("findings") or []:
-            assert item["file"] in scenario.touched(), item["id"]
-            n_lines = len((dest / item["file"]).read_bytes().splitlines())
-            start, end = item["lines"]
-            assert 1 <= start <= end <= n_lines, item["id"]
-            # the vulnerable range is code this PR added, not pre-existing lines
-            added = sc.added_lines(scenario.patch_text())[item["file"]]
-            assert added & set(range(start, end + 1)), item["id"]
+            for loc in [item, *(item.get("also") or [])]:
+                assert loc["file"] in scenario.touched(), item["id"]
+                n_lines = len((dest / loc["file"]).read_bytes().splitlines())
+                start, end = loc["lines"]
+                assert 1 <= start <= end <= n_lines, item["id"]
+                # every location is code this PR added, not pre-existing lines
+                assert added[loc["file"]] & set(range(start, end + 1)), item["id"]
     finally:
         subprocess.run(["git", "worktree", "remove", "--force", str(dest)],
                        check=False, cwd=repo, capture_output=True)

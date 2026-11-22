@@ -1,0 +1,14 @@
+findings:
+  - id: S09-1
+    title: Server tải URL kết quả xét nghiệm do người dùng nhập, chỉ kiểm tra scheme, không đối chiếu allowlist máy chủ xét nghiệm (SSRF)
+    category: pattern
+    severity: high
+    cwe: [CWE-918, CWE-939, CWE-441]
+    file: app/medicare/record/lab.py
+    lines: [35, 39]
+    also:
+      - {file: app/medicare/record/lab.py, lines: [60, 60]}
+      - {file: app/medicare/record/router.py, lines: [125, 131]}
+    routes: ["POST /records/{record_id}/lab-results"]
+    rules: []
+    violated_rule: R-14

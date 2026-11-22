@@ -307,7 +307,7 @@ Mỗi luật có `annotations.description` ngắn bằng tiếng Việt. Cảnh 
 
 **Nhãn dựa trên số đo:**
 - Sau khi viết xong toàn bộ kịch bản, chạy C1 và C1+DAST.
-- Ghi `measured_detection: {sast_sca: bool, dast: bool}` vào `scenario.yaml` của từng kịch bản.
+- Ghi `measured_detection` vào `scenario.yaml` của từng kịch bản, theo từng lỗi: `scan_run` (lượt quét), `sast_sca` (id các lỗi C1 bắt được), `dast` (id các lỗi chỉ C1+DAST bắt được). Ghi theo lỗi vì một kịch bản có thể có lỗi bị bắt và lỗi bị sót. `evaluate.py` tự tính lại nhóm này từ kết quả quét; trường trong `scenario.yaml` là bản ghi để đọc.
 - Bảng kết quả chia nhóm theo nhãn đo được, không theo nhãn dự đoán.
 
 **Chia dev/test:**
@@ -377,6 +377,7 @@ Chạy `--jobs 3`. `run.py` chạy tiếp được từ chỗ dừng và tự ch
 - **Khớp đáp án:**
   - cùng file, dòng nằm trong vùng lỗi ±3, và cùng nhóm CWE (theo `CWE_GROUPS` của agent). Với phát hiện agent tự tìm, chỉ cần **một** đoạn bằng chứng của nó khớp;
   - với phát hiện không có CWE (Checkov), khớp khi tên rule nằm trong `rules` của đáp án.
+  - một lỗi có thể được chỉ ra ở vài chỗ (nguồn và sink, route thiếu kiểm tra và service, dòng phiên bản trong `uv.lock` và lời gọi hàm bị lỗi). Đáp án ghi các vị trí phụ trong `also: [{file, lines}]`; khớp vị trí nào cũng được, và mỗi lỗi vẫn chỉ tính một TP.
   - với phát hiện của agent, cũng khớp khi cùng vị trí và `violated_rule` của nó nằm trong danh sách quy tắc mà đáp án ghi là bị vi phạm (một lỗi có thể vi phạm nhiều quy tắc, ví dụ S07 vi phạm R-04 và R-17). CWE của một lỗi logic là lựa chọn mang tính diễn giải (tỷ lệ BHYT do client gửi có thể ghi CWE-602, CWE-472 hay CWE-639), còn quy tắc bị vi phạm thì đáp án liệt kê đủ. Quy ước này chốt trên tập dev, trước khi viết tập test.
 - **Phát hiện SAST/IaC có sẵn trong file PR sửa** (ví dụ các finding Checkov của `infra/terraform/main.tf` khi PR thêm tài nguyên vào file đó) được tính như mọi dự đoán: không khớp đáp án thì là FP. Khác với DAST, chúng chỉ xuất hiện khi PR sửa đúng file, và người review PR thật cũng phải xem chúng; bảng kết quả ghi rõ số FP thuộc loại này để không phóng đại mức giảm FP ở RQ1.
 - **Phát hiện DAST có sẵn trên bản gốc S00** (cùng rule ZAP, trên bất kỳ route nào, ví dụ thiếu header CSP) xuất hiện ở mọi kịch bản, vì ZAP quét cả app. Đây là vấn đề có thật nhưng không do PR gây ra. Chúng không tính TP hay FP, được đếm riêng. Benchmark đo những gì mỗi PR đưa vào. Khớp đáp án được xét trước, nên quy ước này không che được lỗi được cài.

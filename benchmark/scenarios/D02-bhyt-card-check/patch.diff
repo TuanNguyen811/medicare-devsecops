@@ -1,0 +1,290 @@
+diff --git a/app/medicare/config.py b/app/medicare/config.py
+index e962d8e..0d9d577 100644
+--- a/app/medicare/config.py
++++ b/app/medicare/config.py
+@@ -18,6 +18,8 @@ class Settings(BaseSettings):
+     # app from another pod set METRICS_HOST to the pod address range they listen on.
+     metrics_port: int | None = Field(default=None, ge=1, le=65535)
+     metrics_host: str = "127.0.0.1"
++    # BHXH card lookup tool installed on the application server.
++    bhyt_cli: str = "/opt/bhxh/bin/tra-cuu-the"
+ 
+     @field_validator("secret_key")
+     @classmethod
+diff --git a/app/medicare/patient/insurance_check.py b/app/medicare/patient/insurance_check.py
+new file mode 100644
+index 0000000..4958eca
+--- /dev/null
++++ b/app/medicare/patient/insurance_check.py
+@@ -0,0 +1,81 @@
++"""BHYT card check through the lookup tool BHXH ships to hospitals.
++
++The tool (`tra-cuu-the`) queries the national insurance portal and prints one JSON
++object on stdout. It is installed on the application server; its path comes from the
++BHYT_CLI setting.
++"""
++
++import json
++import re
++import subprocess
++from dataclasses import dataclass
++from datetime import date
++
++from medicare.validators import is_valid_insurance_number
++
++TIMEOUT_SECONDS = 15
++_DATE_VN = re.compile(r"[0-9]{2}/[0-9]{2}/[0-9]{4}")
++RESULT_MESSAGES = {
++    "000": "Thẻ BHYT còn giá trị sử dụng",
++    "001": "Thẻ BHYT đã hết hạn sử dụng",
++    "002": "Họ tên hoặc ngày sinh không khớp với thông tin thẻ",
++    "003": "Thẻ BHYT không tồn tại hoặc đã bị thu hồi",
++}
++
++
++class InsuranceCheckError(Exception):
++    """The check could not be completed; the message is user-facing."""
++
++
++@dataclass(frozen=True)
++class CheckResult:
++    message: str
++    valid: bool
++    valid_until: str | None
++
++
++def build_command(executable: str, card: str, full_name: str, date_of_birth: date) -> list[str]:
++    """Argument vector for the tool. Every value travels as `--name=value`, so none of
++    them can be read as a separate option."""
++    if not is_valid_insurance_number(card):
++        raise InsuranceCheckError("Mã thẻ BHYT không đúng định dạng")
++    name = " ".join(full_name.split())
++    if not (1 <= len(name) <= 100 and name.isprintable()):
++        raise InsuranceCheckError("Họ tên bệnh nhân không hợp lệ để tra cứu")
++    return [
++        executable,
++        "--json",
++        f"--ma-the={card}",
++        f"--ho-ten={name}",
++        f"--ngay-sinh={date_of_birth:%d/%m/%Y}",
++    ]
++
++
++def check_card(executable: str, card: str, full_name: str, date_of_birth: date) -> CheckResult:
++    command = build_command(executable, card, full_name, date_of_birth)
++    try:
++        proc = subprocess.run(
++            command,
++            capture_output=True,
++            text=True,
++            encoding="utf-8",
++            timeout=TIMEOUT_SECONDS,
++            check=False,
++        )
++    except subprocess.TimeoutExpired:
++        raise InsuranceCheckError("Cổng BHYT không phản hồi, vui lòng thử lại sau") from None
++    except OSError:
++        raise InsuranceCheckError("Máy chủ chưa sẵn sàng công cụ tra cứu BHYT") from None
++    if proc.returncode != 0:
++        raise InsuranceCheckError("Tra cứu thẻ BHYT không thành công, vui lòng thử lại sau")
++    try:
++        data = json.loads(proc.stdout)
++    except ValueError:
++        raise InsuranceCheckError("Cổng BHYT trả về kết quả không đọc được") from None
++    code = data.get("ma_ket_qua") if isinstance(data, dict) else None
++    message = RESULT_MESSAGES.get(code) if isinstance(code, str) else None
++    if message is None:
++        raise InsuranceCheckError("Cổng BHYT trả về kết quả không xác định")
++    until = data.get("den_ngay")
++    valid_until = until if isinstance(until, str) and _DATE_VN.fullmatch(until) else None
++    return CheckResult(message=message, valid=code == "000", valid_until=valid_until)
+diff --git a/app/medicare/patient/router.py b/app/medicare/patient/router.py
+index 00439e7..a546c8a 100644
+--- a/app/medicare/patient/router.py
++++ b/app/medicare/patient/router.py
+@@ -11,7 +11,7 @@ from medicare.common.errors import NotFound
+ from medicare.common.ids import ObjectId
+ from medicare.common.templating import flash, render
+ from medicare.db import get_db
+-from medicare.patient import service
++from medicare.patient import insurance_check, service
+ from medicare.patient.models import Patient
+ from medicare.patient.schemas import FIELD_LABELS, PatientForm, form_errors
+ from medicare.validators import mask
+@@ -180,6 +180,34 @@ def update_patient(
+     return RedirectResponse(f"/patients/{patient.id}", status_code=303)
+ 
+ 
++@router.post("/patients/{patient_id}/insurance-check", dependencies=[Depends(verify_csrf)])
++def check_insurance(
++    request: Request,
++    patient_id: ObjectId,
++    user: User = Depends(editor_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    patient = service.get_patient_for(db, user, patient_id)
++    if not patient.insurance_number:
++        flash(request, "Bệnh nhân chưa có thẻ BHYT", "warning")
++        return RedirectResponse(f"/patients/{patient.id}", status_code=303)
++    try:
++        result = insurance_check.check_card(
++            request.app.state.settings.bhyt_cli,
++            patient.insurance_number,
++            patient.full_name,
++            patient.date_of_birth,
++        )
++    except insurance_check.InsuranceCheckError as exc:
++        flash(request, str(exc), "danger")
++    else:
++        message = result.message
++        if result.valid_until:
++            message += f" (hạn đến {result.valid_until})"
++        flash(request, message, "success" if result.valid else "warning")
++    return RedirectResponse(f"/patients/{patient.id}", status_code=303)
++
++
+ @router.get("/me")
+ def my_profile(
+     request: Request,
+diff --git a/app/medicare/templates/patient/detail.html b/app/medicare/templates/patient/detail.html
+index da4065c..a1f6a52 100644
+--- a/app/medicare/templates/patient/detail.html
++++ b/app/medicare/templates/patient/detail.html
+@@ -5,6 +5,12 @@
+   <h1 class="h5 mb-0">Hồ sơ bệnh nhân <span class="text-secondary">{{ patient.code }}</span></h1>
+   <div class="d-flex gap-2">
+     {% if can_view_records %}<a class="btn btn-outline-primary btn-sm" href="/patients/{{ patient.id }}/records"><i class="bi bi-file-medical"></i> Bệnh án</a>{% endif %}
++    {% if can_edit and patient.insurance_number %}
++    <form method="post" action="/patients/{{ patient.id }}/insurance-check">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-shield-check"></i> Kiểm tra thẻ BHYT</button>
++    </form>
++    {% endif %}
+     {% if can_edit %}<a class="btn btn-primary btn-sm" href="/patients/{{ patient.id }}/edit"><i class="bi bi-pencil"></i> Sửa hồ sơ</a>{% endif %}
+   </div>
+ </div>
+diff --git a/app/tests/test_insurance_check.py b/app/tests/test_insurance_check.py
+new file mode 100644
+index 0000000..938aef0
+--- /dev/null
++++ b/app/tests/test_insurance_check.py
+@@ -0,0 +1,119 @@
++import subprocess
++from datetime import date
++
++import pytest
++
++from medicare.auth.models import Role
++from medicare.patient import insurance_check
++from tests.conftest import csrf_token, login
++from tests.factories import make_patient, make_user
++
++
++class FakeTool:
++    """Stands in for subprocess.run: records the call, answers like the BHXH tool."""
++
++    def __init__(self, stdout="", returncode=0, error=None):
++        self.stdout, self.returncode, self.error = stdout, returncode, error
++        self.calls = []
++
++    def __call__(self, args, **kwargs):
++        self.calls.append((args, kwargs))
++        if self.error is not None:
++            raise self.error
++        return subprocess.CompletedProcess(args, self.returncode, stdout=self.stdout, stderr="")
++
++
++@pytest.fixture
++def tool(monkeypatch):
++    def install(**kwargs):
++        fake = FakeTool(**kwargs)
++        monkeypatch.setattr(insurance_check.subprocess, "run", fake)
++        return fake
++
++    return install
++
++
++def check(client, patient):
++    token = csrf_token(client, f"/patients/{patient.id}")
++    return client.post(f"/patients/{patient.id}/insurance-check", data={"csrf_token": token})
++
++
++def test_valid_card(client, db, tool):
++    fake = tool(stdout='{"ma_ket_qua": "000", "den_ngay": "31/12/2026"}')
++    p = make_patient(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    r = check(client, p)
++    assert r.status_code == 200
++    assert "Thẻ BHYT còn giá trị sử dụng (hạn đến 31/12/2026)" in r.text
++    (args, kwargs), = fake.calls
++    assert args == ["/opt/bhxh/bin/tra-cuu-the", "--json", f"--ma-the={p.insurance_number}",
++                    f"--ho-ten={p.full_name}", "--ngay-sinh=01/01/1990"]
++    assert kwargs["timeout"] == insurance_check.TIMEOUT_SECONDS and not kwargs.get("shell")
++
++
++def test_expired_card_is_a_warning(client, db, tool):
++    tool(stdout='{"ma_ket_qua": "001"}')
++    p = make_patient(db)
++    login(client, make_user(db, Role.ADMIN))
++    r = check(client, p)
++    assert "alert-warning" in r.text and "Thẻ BHYT đã hết hạn sử dụng" in r.text
++
++
++def test_tool_not_installed(client, db, tool):
++    tool(error=FileNotFoundError())
++    p = make_patient(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert "chưa sẵn sàng công cụ tra cứu BHYT" in check(client, p).text
++
++
++def test_portal_timeout(client, db, tool):
++    tool(error=subprocess.TimeoutExpired(cmd="tra-cuu-the", timeout=15))
++    p = make_patient(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert "Cổng BHYT không phản hồi" in check(client, p).text
++
++
++def test_unreadable_answer(client, db, tool):
++    tool(stdout="Service Unavailable", returncode=0)
++    p = make_patient(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert "không đọc được" in check(client, p).text
++
++
++def test_patient_without_card_is_not_looked_up(client, db, tool):
++    fake = tool(stdout='{"ma_ket_qua": "000"}')
++    p = make_patient(db, insurance_number=None)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert "Bệnh nhân chưa có thẻ BHYT" in check(client, p).text
++    assert fake.calls == []
++
++
++def test_check_button_only_for_reception_and_admin(client, db):
++    p = make_patient(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert "Kiểm tra thẻ BHYT" in client.get(f"/patients/{p.id}").text
++    client.cookies.clear()
++    login(client, make_user(db, Role.PATIENT, patient=p))
++    assert "Kiểm tra thẻ BHYT" not in client.get("/me").text
++
++
++def test_doctor_cannot_check_card(client, db, tool):
++    fake = tool(stdout='{"ma_ket_qua": "000"}')
++    p = make_patient(db)
++    login(client, make_user(db, Role.DOCTOR))
++    r = client.post(f"/patients/{p.id}/insurance-check",
++                    data={"csrf_token": csrf_token(client, "/")})
++    assert r.status_code == 403 and fake.calls == []
++
++
++def test_check_without_csrf_is_403(client, db, tool):
++    tool(stdout='{"ma_ket_qua": "000"}')
++    p = make_patient(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert client.post(f"/patients/{p.id}/insurance-check").status_code == 403
++
++
++def test_build_command_formats_birth_date():
++    args = insurance_check.build_command("/opt/tool", "DN4010123456789", "Nguyễn  Văn An",
++                                         date(1985, 3, 7))
++    assert args[3:] == ["--ho-ten=Nguyễn Văn An", "--ngay-sinh=07/03/1985"]

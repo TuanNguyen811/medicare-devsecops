@@ -1,0 +1,9 @@
+id: S03
+title: API cho ứng dụng di động
+split: test
+kind: vuln
+commit_message: API cho ứng dụng di động MediCare (đăng nhập lấy token JWT, xem lịch hẹn và bệnh án)
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: [S03-1, S03-2]
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

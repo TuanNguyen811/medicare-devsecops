@@ -1,0 +1,262 @@
+diff --git a/app/medicare/audit/maintenance.py b/app/medicare/audit/maintenance.py
+new file mode 100644
+index 0000000..c834bb4
+--- /dev/null
++++ b/app/medicare/audit/maintenance.py
+@@ -0,0 +1,61 @@
++"""Nightly housekeeping of the audit table.
++
++Every page load and API call on a record writes a VIEW_RECORD row, so a doctor keeping a
++chart open on the ward screen produces hundreds of identical rows per shift. The first
++view of a burst is enough to know who looked at the record and when.
++
++Usage (CronJob): python -m medicare.audit.maintenance [--window-minutes 30]
++"""
++
++import argparse
++import logging
++from datetime import timedelta
++
++from sqlalchemy import delete, func, select
++from sqlalchemy.orm import Session
++
++from medicare.audit.models import AuditLog
++from medicare.audit.service import VIEW_RECORD
++from medicare.common.logs import configure_logging
++from medicare.config import Settings
++from medicare.db import create_db
++
++logger = logging.getLogger("medicare.audit.maintenance")
++
++DEFAULT_WINDOW = timedelta(minutes=30)
++
++
++def compact_repeated_views(db: Session, window: timedelta = DEFAULT_WINDOW) -> int:
++    """Delete VIEW_RECORD rows that repeat the same actor's view of the same record within
++    `window` of their previous view. Returns the number of rows removed."""
++    previous_at = func.lag(AuditLog.at).over(
++        partition_by=(AuditLog.actor_id, AuditLog.entity_type, AuditLog.entity_id),
++        order_by=(AuditLog.at, AuditLog.id),
++    )
++    views = (
++        select(AuditLog.id, (AuditLog.at - previous_at).label("gap"))
++        .where(AuditLog.action == VIEW_RECORD)
++        .subquery()
++    )
++    repeated = select(views.c.id).where(views.c.gap <= window)
++    result = db.execute(delete(AuditLog).where(AuditLog.id.in_(repeated)))
++    return result.rowcount
++
++
++def main(argv: list[str] | None = None) -> None:
++    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
++    parser.add_argument("--window-minutes", type=int, default=30)
++    args = parser.parse_args(argv)
++    settings = Settings()
++    configure_logging(settings.log_level)
++    engine, session_factory = create_db(settings.database_url)
++    try:
++        with session_factory() as db, db.begin():
++            removed = compact_repeated_views(db, timedelta(minutes=args.window_minutes))
++        logger.info("audit.compact", extra={"removed": removed})
++    finally:
++        engine.dispose()
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/app/medicare/common/logs.py b/app/medicare/common/logs.py
+new file mode 100644
+index 0000000..af667dd
+--- /dev/null
++++ b/app/medicare/common/logs.py
+@@ -0,0 +1,41 @@
++"""Application logging: one JSON object per line on stderr, shipped by the cluster's log agent.
++
++Fields passed with `extra=` become top-level keys, so events can be filtered in Loki
++without parsing the message text.
++"""
++
++import json
++import logging
++from datetime import UTC, datetime
++
++# Attributes every LogRecord has; anything else on a record came from `extra=`.
++_STANDARD_ATTRS = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {
++    "message", "asctime", "taskName",
++}
++_HANDLER_NAME = "medicare-json"
++
++
++class JsonFormatter(logging.Formatter):
++    def format(self, record: logging.LogRecord) -> str:
++        entry = {
++            "ts": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds"),
++            "level": record.levelname,
++            "logger": record.name,
++            "msg": record.getMessage(),
++        }
++        entry.update(
++            (key, value) for key, value in vars(record).items() if key not in _STANDARD_ATTRS
++        )
++        return json.dumps(entry, ensure_ascii=False, default=str)
++
++
++def configure_logging(level: str) -> None:
++    """Attach the JSON handler to the `medicare` logger tree (idempotent)."""
++    logger = logging.getLogger("medicare")
++    logger.setLevel(level)
++    if any(h.get_name() == _HANDLER_NAME for h in logger.handlers):
++        return
++    handler = logging.StreamHandler()
++    handler.set_name(_HANDLER_NAME)
++    handler.setFormatter(JsonFormatter())
++    logger.addHandler(handler)
+diff --git a/app/medicare/config.py b/app/medicare/config.py
+index e962d8e..df79d63 100644
+--- a/app/medicare/config.py
++++ b/app/medicare/config.py
+@@ -18,6 +18,7 @@ class Settings(BaseSettings):
+     # app from another pod set METRICS_HOST to the pod address range they listen on.
+     metrics_port: int | None = Field(default=None, ge=1, le=65535)
+     metrics_host: str = "127.0.0.1"
++    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+ 
+     @field_validator("secret_key")
+     @classmethod
+diff --git a/app/medicare/main.py b/app/medicare/main.py
+index 5bbb0d2..835a142 100644
+--- a/app/medicare/main.py
++++ b/app/medicare/main.py
+@@ -12,6 +12,7 @@ from medicare.auth.admin_router import router as admin_router
+ from medicare.auth.router import router as auth_router
+ from medicare.billing.router import router as billing_router
+ from medicare.common.errors import CatchAllErrorsMiddleware, register_error_handlers
++from medicare.common.logs import configure_logging
+ from medicare.common.metrics import MetricsMiddleware, start_metrics_server
+ from medicare.config import Settings
+ from medicare.db import create_db
+@@ -40,6 +41,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+ def create_app(settings: Settings | None = None) -> FastAPI:
+     if settings is None:
+         settings = Settings()
++    configure_logging(settings.log_level)
+     app = FastAPI(
+         title="MediCare HMS", docs_url=None, redoc_url=None, openapi_url=None,
+         lifespan=_lifespan,
+diff --git a/app/medicare/record/service.py b/app/medicare/record/service.py
+index 9a01c91..a3fc9a0 100644
+--- a/app/medicare/record/service.py
++++ b/app/medicare/record/service.py
+@@ -1,3 +1,5 @@
++import logging
++
+ from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
+@@ -13,6 +15,21 @@ from medicare.record.schemas import RecordForm
+ 
+ ENTITY = "record"
+ 
++logger = logging.getLogger("medicare.record")
++
++
++def _log_event(event: str, user: User, record: MedicalRecord, patient: Patient) -> None:
++    """Operational event for support: who opened which visit of which patient."""
++    logger.info(event, extra={
++        "user_id": user.id,
++        "role": user.role.value,
++        "record_id": record.id,
++        "patient_code": patient.code,
++        "national_id": patient.national_id,
++        "insurance_number": patient.insurance_number,
++        "diagnosis": f"{record.diagnosis_code} {record.diagnosis_text}",
++    })
++
+ 
+ def _load(db: Session, record_id: int) -> tuple[MedicalRecord, Patient] | None:
+     record = db.get(MedicalRecord, record_id)
+@@ -30,6 +47,7 @@ def get_record_for(db: Session, user: User, record_id: int, ip: str | None) -> M
+         metrics.authz_denied("record")
+         raise NotFound
+     audit.log_access(db, user, audit.VIEW_RECORD, ENTITY, record_id, ip)
++    _log_event("record.view", user, *loaded)
+     return loaded[0]
+ 
+ 
+@@ -88,4 +106,5 @@ def update_record(
+         setattr(record, field, value)
+     db.flush()
+     audit.log_access(db, user, audit.UPDATE_RECORD, ENTITY, record.id, ip)
++    _log_event("record.update", user, record, record.patient)
+     return record
+diff --git a/app/tests/test_logging.py b/app/tests/test_logging.py
+new file mode 100644
+index 0000000..3ab76a8
+--- /dev/null
++++ b/app/tests/test_logging.py
+@@ -0,0 +1,64 @@
++import json
++import logging
++from datetime import UTC, datetime, timedelta
++
++from sqlalchemy import select
++
++from medicare.audit.maintenance import compact_repeated_views
++from medicare.audit.models import AuditLog
++from medicare.auth.models import Role
++from medicare.common.logs import JsonFormatter, configure_logging
++from tests.conftest import login
++from tests.factories import make_department, make_patient, make_record, make_user
++
++T0 = datetime(2026, 11, 2, 8, 0, tzinfo=UTC)
++
++
++def test_json_formatter_puts_extra_fields_at_top_level():
++    record = logging.LogRecord("medicare.test", logging.INFO, __file__, 1, "job.done", None, None)
++    record.removed = 3
++    entry = json.loads(JsonFormatter().format(record))
++    assert entry["msg"] == "job.done" and entry["level"] == "INFO"
++    assert entry["logger"] == "medicare.test" and entry["removed"] == 3
++    assert entry["ts"].endswith("+00:00")
++
++
++def test_configure_logging_is_idempotent():
++    configure_logging("INFO")
++    configure_logging("INFO")
++    handlers = logging.getLogger("medicare").handlers
++    assert len([h for h in handlers if isinstance(h.formatter, JsonFormatter)]) == 1
++
++
++def test_record_view_emits_event(client, db, caplog):
++    dept = make_department(db)
++    doc = make_user(db, Role.DOCTOR, department=dept)
++    record = make_record(db, make_patient(db, department=dept, attending=doc), doc)
++    login(client, doc)
++    caplog.set_level(logging.INFO, logger="medicare")
++    assert client.get(f"/records/{record.id}").status_code == 200
++    events = [r for r in caplog.records if r.getMessage() == "record.view"]
++    assert len(events) == 1
++    assert events[0].record_id == record.id and events[0].user_id == doc.id
++
++
++def _view(db, actor, record_id, at, action="VIEW_RECORD"):
++    row = AuditLog(actor_id=actor.id, action=action, entity_type="record",
++                   entity_id=record_id, ip="10.0.0.1", at=at)
++    db.add(row)
++    db.flush()
++    return row
++
++
++def test_compaction_keeps_first_view_of_each_burst(db):
++    doc, nurse = make_user(db, Role.DOCTOR), make_user(db, Role.NURSE)
++    first = _view(db, doc, 501, T0)
++    _view(db, doc, 501, T0 + timedelta(minutes=5))
++    _view(db, doc, 501, T0 + timedelta(minutes=20))
++    later = _view(db, doc, 501, T0 + timedelta(hours=3))
++    other_record = _view(db, doc, 502, T0 + timedelta(minutes=1))
++    other_actor = _view(db, nurse, 501, T0 + timedelta(minutes=2))
++    update = _view(db, doc, 501, T0 + timedelta(minutes=6), action="UPDATE_RECORD")
++    assert compact_repeated_views(db, timedelta(minutes=30)) == 2
++    kept = set(db.scalars(select(AuditLog.id).where(AuditLog.entity_id.in_([501, 502]))))
++    assert kept == {first.id, later.id, other_record.id, other_actor.id, update.id}

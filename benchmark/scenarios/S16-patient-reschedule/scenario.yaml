@@ -1,0 +1,9 @@
+id: S16
+title: Bệnh nhân tự đổi lịch hẹn
+split: test
+kind: vuln
+commit_message: Cho phép bệnh nhân tự đổi giờ lịch hẹn đang chờ duyệt, lễ tân đổi lịch còn hiệu lực
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

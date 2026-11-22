@@ -1,0 +1,14 @@
+{
+  "C1": {
+    "block": true,
+    "blocking": [
+      "semgrep:python.lang.security.deserialization.avoid-pyyaml-load.avoid-pyyaml-load:app/medicare/prescription/legacy_import.py:40"
+    ]
+  },
+  "C1+DAST": {
+    "block": true,
+    "blocking": [
+      "semgrep:python.lang.security.deserialization.avoid-pyyaml-load.avoid-pyyaml-load:app/medicare/prescription/legacy_import.py:40"
+    ]
+  }
+}

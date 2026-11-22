@@ -1,0 +1,9 @@
+id: S13
+title: Tối ưu middleware xác thực
+split: test
+kind: vuln
+commit_message: "Xác thực: kiểm tra hạn phiên trước khi truy vấn CSDL, thời hạn phiên theo ca làm việc"
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
+  scan_run: 45016434867
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt
