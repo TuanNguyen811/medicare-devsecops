@@ -5,7 +5,12 @@ from secagent.context.diff import parse_unified_diff
 from secagent.context.sarif import ScanFinding, cluster_findings
 from secagent.llm.base import LLMError
 from secagent.models import Evidence, NewFindingArgs, VerdictArgs
-from secagent.phases.check import build_entries, ensure_coverage, evidence_problems
+from secagent.phases.check import (
+    build_entries,
+    ensure_coverage,
+    evidence_problems,
+    locate_evidence,
+)
 from secagent.phases.review import ReviewContext, ReviewOutcome, run_review
 from secagent.tools.fs import RepoFS
 from secagent.trace import Trace
@@ -229,3 +234,41 @@ def test_zap_fp_anchored_by_route_handler():
                          snippet="def compute_amounts(total, rate):")
     assert fp_is_anchored([at_handler], cluster) is True
     assert fp_is_anchored([elsewhere], cluster) is False
+
+
+LONG = "app/medicare/demo/long.py"
+LONG_CODE = "".join(f"x{i} = {i}\n" for i in range(1, 20)) + (
+    "def quick(user, record):\n"           # line 20
+    "    if not can_view(user, record):\n"  # line 21
+    "        raise NotFound\n"              # line 22
+) + "".join(f"y{i} = {i}\n" for i in range(1, 30))
+
+
+def test_evidence_with_shifted_line_numbers_is_relocated(tmp_path):
+    """A real snippet cited a few lines off is moved to where it is; an invented one is not."""
+    fs = RepoFS(miniapp_repo(tmp_path, {LONG: LONG_CODE}))
+    snippet = "def quick(user, record):\n    if not can_view(user, record):"
+    shifted = Evidence(file=LONG, start_line=26, end_line=27, snippet=snippet)
+    (moved,), problems = locate_evidence([shifted], fs)
+    assert problems == [] and (moved.start_line, moved.end_line) == (20, 21)
+    assert moved.snippet == snippet
+    too_far = Evidence(file=LONG, start_line=40, end_line=41, snippet=snippet)
+    assert locate_evidence([too_far], fs)[1]
+    invented = Evidence(file=LONG, start_line=20, end_line=21,
+                        snippet="def quick(user, record):\n    if not can_prescribe(user):")
+    assert locate_evidence([invented], fs)[1]
+    in_place = Evidence(file=LONG, start_line=21, end_line=22, snippet="raise NotFound")
+    assert locate_evidence([in_place], fs) == ([in_place], [])
+
+
+def test_agent_finding_with_shifted_evidence_stays_tp(tmp_path):
+    ctx = ReviewContext(fs=RepoFS(miniapp_repo(tmp_path, {LONG: LONG_CODE})), diff=DIFF,
+                        clusters=[], requirements=None, settings=settings())
+    found = {"title": "y tá kê đơn", "severity": "HIGH", "confidence": 0.9, "cwe": "CWE-862",
+             "violated_rule": "R-03", "reasoning": "thiếu can_prescribe",
+             "evidence": [{"file": LONG, "start_line": 27, "end_line": 28,
+                           "snippet": ("    if not can_view(user, record):\n"
+                                       "        raise NotFound")}]}
+    (entry,) = build_entries(ctx.clusters, _outcome(new=[found]), ctx.fs)
+    assert entry.verdict == "TP" and (entry.file, entry.line) == (LONG, 21)
+    assert (entry.evidence[0].start_line, entry.evidence[0].end_line) == (21, 22)
