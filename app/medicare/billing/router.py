@@ -1,3 +1,5 @@
+from datetime import date, datetime
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
@@ -7,13 +9,14 @@ from medicare.billing import service
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
 from medicare.common.ids import ObjectId
-from medicare.common.templating import flash, render
+from medicare.common.templating import VN_TZ, flash, render
 from medicare.db import get_db
 
 router = APIRouter()
 
 receptionist_user = require_roles(Role.RECEPTIONIST)
 invoice_reader = require_roles(Role.RECEPTIONIST, Role.ADMIN, Role.PATIENT)
+billing_staff = require_roles(Role.RECEPTIONIST, Role.ADMIN)
 
 STATUS_LABELS = {"UNPAID": ("Chưa thanh toán", "warning"), "PAID": ("Đã thanh toán", "success")}
 
@@ -43,8 +46,40 @@ def list_invoices(
         "invoices": service.list_invoices(db, user),
         "pending": service.pending_records(db) if is_reception else [],
         "is_reception": is_reception,
+        "is_billing_staff": user.role in (Role.RECEPTIONIST, Role.ADMIN),
         "status_labels": STATUS_LABELS,
         "breadcrumbs": [("Trang chủ", "/"), ("Hóa đơn", None)],
+    })
+
+
+def _parse_day(value: str, default: date) -> date:
+    try:
+        day = date.fromisoformat(value.strip())
+    except ValueError:
+        return default
+    return day if date.min < day < date.max else default
+
+
+@router.get("/invoices/unpaid")
+def unpaid_invoices(
+    request: Request,
+    date_from: str = "",
+    date_to: str = "",
+    user: User = Depends(billing_staff),
+    db: Session = Depends(get_db),
+) -> Response:
+    today = datetime.now(VN_TZ).date()
+    first_day = _parse_day(date_from, today.replace(day=1))
+    last_day = _parse_day(date_to, today)
+    if first_day > last_day:
+        first_day, last_day = last_day, first_day
+    return render(request, "billing/unpaid.html", {
+        "report": service.unpaid_between(db, first_day, last_day),
+        "date_from": first_day,
+        "date_to": last_day,
+        "limit": service.UNPAID_LIMIT,
+        "breadcrumbs": [("Trang chủ", "/"), ("Hóa đơn", "/invoices"),
+                        ("Hóa đơn chưa thanh toán", None)],
     })
 
 

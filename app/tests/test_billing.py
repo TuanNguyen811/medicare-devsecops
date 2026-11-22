@@ -1,4 +1,5 @@
 import itertools
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -6,6 +7,7 @@ from sqlalchemy import select
 from medicare.audit.models import AuditLog
 from medicare.auth.models import Role
 from medicare.billing.models import Invoice, InvoiceStatus
+from medicare.common.templating import VN_TZ
 from medicare.prescription.models import Prescription, PrescriptionItem
 from tests.conftest import csrf_token, login
 from tests.factories import make_department, make_medicine, make_patient, make_record, make_user
@@ -167,3 +169,71 @@ def test_patient_cannot_mark_paid(client, db):
     login(client, make_user(db, Role.PATIENT, patient=me))
     r = client.post(f"/invoices/{inv.id}/pay", data={"csrf_token": csrf_token(client, "/")})
     assert r.status_code == 403
+
+
+def issued_invoice(db, issued_at, patient_amount, status=InvoiceStatus.UNPAID):
+    patient, record = visit(db, drug_cost=0)
+    inv = Invoice(record_id=record.id, patient_id=patient.id,
+                  created_by_id=make_user(db, Role.RECEPTIONIST).id,
+                  total_amount=Decimal(150000), coverage_rate=Decimal(0),
+                  insurance_amount=Decimal(150000) - patient_amount,
+                  patient_amount=patient_amount, status=status, created_at=issued_at)
+    db.add(inv)
+    db.flush()
+    return inv
+
+
+def vn_time(day, hour=9):
+    return datetime(2025, 3, day, hour, tzinfo=VN_TZ)
+
+
+def unpaid(client, **params):
+    return client.get("/invoices/unpaid", params=params)
+
+
+def test_unpaid_invoices_filtered_by_issue_date_with_total_due(client, db):
+    first = issued_invoice(db, vn_time(3), Decimal(30000))
+    late_evening = issued_invoice(db, vn_time(10, hour=23), Decimal(45000))
+    too_late = issued_invoice(db, vn_time(11, hour=0), Decimal(70000))
+    paid = issued_invoice(db, vn_time(5), Decimal(90000), status=InvoiceStatus.PAID)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    r = unpaid(client, date_from="2025-03-01", date_to="2025-03-10")
+    assert r.status_code == 200
+    assert f"/invoices/{first.id}" in r.text and f"/invoices/{late_evening.id}" in r.text
+    assert f"/invoices/{too_late.id}" not in r.text and f"/invoices/{paid.id}" not in r.text
+    assert "(2 hóa đơn)" in r.text and "75.000 ₫" in r.text
+
+
+def test_unpaid_reversed_range_is_swapped(client, db):
+    inv = issued_invoice(db, vn_time(4), Decimal(20000))
+    login(client, make_user(db, Role.ADMIN))
+    html = unpaid(client, date_from="2025-03-31", date_to="2025-03-01").text
+    assert f"/invoices/{inv.id}" in html and 'value="2025-03-01"' in html
+
+
+def test_unpaid_accepts_out_of_range_dates(client, db):
+    inv = issued_invoice(db, vn_time(4), Decimal(20000))
+    login(client, make_user(db, Role.RECEPTIONIST))
+    r = unpaid(client, date_from="0001-01-02", date_to="9999-12-30")
+    assert r.status_code == 200 and f"/invoices/{inv.id}" in r.text
+    for value in ("0001-01-01", "9999-12-31", "99999-01-01", "03/2025", ""):
+        assert unpaid(client, date_from=value, date_to=value).status_code == 200
+
+
+def test_unpaid_page_for_billing_staff_only(client, db):
+    me, _ = visit(db, drug_cost=0)
+    for user in (make_user(db, Role.DOCTOR), make_user(db, Role.PATIENT, patient=me),
+                 make_user(db, Role.NURSE, department=make_department(db, "KX"))):
+        client.cookies.clear()
+        login(client, user)
+        assert unpaid(client).status_code == 403
+    assert 'href="/invoices/unpaid"' not in client.get("/").text
+
+
+def test_unpaid_page_linked_from_invoice_list(client, db):
+    me, _ = visit(db, drug_cost=0)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    assert 'href="/invoices/unpaid"' in client.get("/invoices").text
+    client.cookies.clear()
+    login(client, make_user(db, Role.PATIENT, patient=me))
+    assert 'href="/invoices/unpaid"' not in client.get("/invoices").text

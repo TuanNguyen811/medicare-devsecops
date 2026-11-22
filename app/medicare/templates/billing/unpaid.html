@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Hóa đơn chưa thanh toán{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Hóa đơn chưa thanh toán</h1>
+<div class="card mc-card">
+  <div class="card-body pb-0">
+    <form class="row g-2 align-items-center mb-3" method="get" action="/invoices/unpaid">
+      <div class="col-auto"><label class="col-form-label col-form-label-sm" for="date_from">Từ ngày</label></div>
+      <div class="col-auto"><input class="form-control form-control-sm" type="date" id="date_from" name="date_from" value="{{ date_from.isoformat() }}"></div>
+      <div class="col-auto"><label class="col-form-label col-form-label-sm" for="date_to">đến ngày</label></div>
+      <div class="col-auto"><input class="form-control form-control-sm" type="date" id="date_to" name="date_to" value="{{ date_to.isoformat() }}"></div>
+      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-funnel"></i> Lọc</button></div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead><tr><th>Số HĐ</th><th>Bệnh nhân</th><th>Ngày lập</th><th class="text-end">Tổng tiền</th><th class="text-end">BHYT chi trả</th><th class="text-end">Người bệnh trả</th></tr></thead>
+      <tbody>
+        {% for inv in report.invoices %}
+        <tr>
+          <td><a href="/invoices/{{ inv.id }}">#{{ inv.id }}</a></td>
+          <td>{{ inv.patient.code }} - {{ inv.patient.full_name }}</td>
+          <td>{{ inv.created_at | datetime_vn }}</td>
+          <td class="text-end">{{ inv.total_amount | vnd }}</td>
+          <td class="text-end">{{ inv.insurance_amount | vnd }}</td>
+          <td class="text-end">{{ inv.patient_amount | vnd }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-secondary py-3">Không có hóa đơn chưa thanh toán từ {{ date_from | date_vn }} đến {{ date_to | date_vn }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><th colspan="5" class="text-end">Tổng người bệnh còn phải trả ({{ report.count }} hóa đơn)</th><th class="text-end">{{ report.total_due | vnd }}</th></tr>
+      </tfoot>
+    </table>
+  </div>
+  {% if report.count > report.invoices | length %}
+  <div class="card-footer small text-secondary">Đang hiển thị {{ limit }} hóa đơn cũ nhất; thu hẹp khoảng ngày để xem các hóa đơn còn lại.</div>
+  {% endif %}
+</div>
+{% endblock %}
