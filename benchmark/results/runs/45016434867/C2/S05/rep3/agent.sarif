@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-1336",
+              "name": "secagent/CWE-1336",
+              "shortDescription": {
+                "text": "SSTI dẫn tới RCE: render mẫu phiếu khám do bác sĩ nhập bằng Jinja2 Environment không sandbox"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-1336"
+                ],
+                "security-severity": "9.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-1336",
+          "level": "error",
+          "message": {
+            "text": "SSTI dẫn tới RCE: render mẫu phiếu khám do bác sĩ nhập bằng Jinja2 Environment không sandbox: printing.py dùng jinja2.Environment(autoescape=True) thường (không phải SandboxedEnvironment) rồi gọi _env.from_string(body).render(...) với body là dữ liệu do bác sĩ nhập và lưu trong DB. validate() chỉ kiểm tra độ dài và cú pháp, không hạn chế truy cập thuộc tính. Người dùng có thể dùng {{ cycler.__init__.__globals__.os.popen('...').read() }} để thực thi lệnh trên server, đọc SECRET_KEY, DB và toàn bộ PII. Output còn được chèn qua |safe nên cũng cho phép HTML/JS tùy ý."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/record/printing.py"
+                },
+                "region": {
+                  "startLine": 97
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "9.5",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        }
+      ]
+    }
+  ]
+}

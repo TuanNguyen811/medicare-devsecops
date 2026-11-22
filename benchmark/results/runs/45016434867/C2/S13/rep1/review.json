@@ -1,0 +1,13 @@
+{
+  "commit_id": "2b78fd13b8509cc8d1677a89eb254ad588eb55b8",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/common/auth.py",
+      "line": 115,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — get_current_user fail-open: lỗi khi kiểm tra session thì bỏ qua mọi kiểm tra; shift không được validate\nCWE-636 · vi phạm R-08\n\nKhi _session_user ném exception, nhánh except lấy user trực tiếp bằng db.get theo user_id mà không kiểm tra is_active, session_version (sv) hay thời hạn tuyệt đối (iat). Giá trị shift từ form được lưu vào session mà không validate; shift lạ khiến SHIFT_MAX_AGE[...] ném KeyError ở mọi request, nên session đó luôn đi vào nhánh fail-open: không bao giờ hết hạn và không bị revoke_sessions / khóa tài khoản vô hiệu hóa.\n\n**Đề xuất sửa:** Trong get_current_user (app/medicare/common/auth.py) bỏ nhánh fallback: khi có exception thì xóa session và raise LoginRequired (fail-closed), chỉ log lỗi. Trong router login / start_session, validate shift theo allowlist SHIFT_MAX_AGE (giá trị lạ thì dùng DEFAULT_SHIFT hoặc trả 422); trong _max_age dùng .get với mặc định thay vì index trực tiếp."
+    }
+  ],
+  "body": "<!-- secagent-review:2b78fd13b8509cc8d1677a89eb254ad588eb55b8 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

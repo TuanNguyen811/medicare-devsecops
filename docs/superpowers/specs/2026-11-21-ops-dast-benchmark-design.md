@@ -329,7 +329,7 @@ Mọi cấu hình có AI chạy `secagent` ở chế độ `claude-mcp` (mục 4
 | C1 | 6 nhóm công cụ quét, **kể cả CodeQL** | GitHub Actions (`benchmark-scan.yml`) | 1 |
 | C1+DAST | C1 + ZAP 5 vai trò | GitHub Actions | 1 |
 | **C2** | C1+DAST + secagent đầy đủ | Máy | 3 trên tập test, 1 trên tập dev |
-| C3 | như C2, `--strategy single-shot` (gọi LLM một lần, không dùng công cụ) | Máy | 1 trên tập test |
+| C3 | như C2, `--strategy single-shot` (mỗi lô phát hiện gọi LLM một lần, đưa sẵn diff, không có công cụ đọc code) | Máy | 1 trên tập test |
 | C4 | như C2, `--no-requirements` | Máy | 1 trên tập test |
 | C5 | như C2, `--no-ast-tools` | Máy | 1 trên tập test |
 | C2-api | như C2, chế độ `anthropic`, `openai` hoặc `gemini` bằng key, cùng script | GitHub hoặc máy | 3, khi có key |

@@ -1,0 +1,19 @@
+{
+  "commit_id": "d3be9b5eff5275c5762dc7d0514be6a3f4aed8b1",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/service.py",
+      "line": 22,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — PHI/PII (CCCD, số bảo hiểm, chẩn đoán) bị ghi vào log ứng dụng\nCWE-532\n\n_log_event ghi national_id, insurance_number, diagnosis và patient_code vào log JSON mỗi lần xem/sửa hồ sơ; log được gửi tới Loki, ngoài kiểm soát truy cập của policy.can_*, và không bị giới hạn retention như bảng audit.\n\n**Đề xuất sửa:** Trong record/service.py::_log_event chỉ ghi các ID nội bộ (user_id, role, record_id); bỏ national_id, insurance_number, diagnosis, patient_code. Có thể thêm bộ lọc trong JsonFormatter (common/logs.py) để che các khóa nhạy cảm."
+    },
+    {
+      "path": "app/medicare/audit/maintenance.py",
+      "line": 41,
+      "side": "RIGHT",
+      "body": "**secagent · TP · MEDIUM** — Job compaction xóa bản ghi audit VIEW_RECORD (mất tính toàn vẹn nhật ký audit)\nCWE-779\n\ncompact_repeated_views thực hiện DELETE trên AuditLog. Dùng lag theo cửa sổ trượt nên chuỗi xem liên tục (mỗi lần cách <30 phút) bị xóa gần hết, chỉ giữ lần đầu; mất thời điểm truy cập thực tế vào hồ sơ bệnh án, trái yêu cầu audit append-only.\n\n**Đề xuất sửa:** Không DELETE bản ghi audit; thay vào đó giảm ghi trùng tại nguồn trong audit.log_access (throttle) hoặc chuyển sang lưu trữ/archive có kiểm soát. Nếu vẫn gộp, dùng cửa sổ cố định và cần phê duyệt tuân thủ, tài khoản DB của job chỉ có quyền hạn chế."
+    }
+  ],
+  "body": "<!-- secagent-review:d3be9b5eff5275c5762dc7d0514be6a3f4aed8b1 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

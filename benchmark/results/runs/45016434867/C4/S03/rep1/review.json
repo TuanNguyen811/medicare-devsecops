@@ -1,0 +1,25 @@
+{
+  "commit_id": "014c582fd9d46e8d550b2803505070dbb0ca8b12",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/mobile/tokens.py",
+      "line": 43,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — python.jwt.security.unverified-jwt-decode.unverified-jwt-decode (semgrep)\nCWE-347\n\nread_token gọi jwt.decode với verify_signature=False nên chữ ký không được kiểm tra. Kẻ tấn công tự tạo token với sub bất kỳ (kể cả admin), sv=session_version đoán được, và exp hợp lệ để chiếm quyền bất kỳ user, truy cập hồ sơ bệnh án.\n\n**Đề xuất sửa:** Trong read_token bỏ verify_signature=False (để mặc định xác minh chữ ký), giữ algorithms=[JWT_ALGORITHM] và require [sub, exp, sv]; dùng secret từ Settings. Thêm test token giả/không chữ ký bị 401."
+    },
+    {
+      "path": "app/medicare/mobile/tokens.py",
+      "line": 17,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — generic-api-key (gitleaks)\nCWE-798\n\nJWT_SECRET được hard-code trong source (tokens.py:17, Gitleaks phát hiện). Ai đọc được repo đều có thể ký token hợp lệ cho bất kỳ user nào.\n\n**Đề xuất sửa:** Xoá secret khỏi tokens.py; thêm trường jwt_secret vào medicare.config.Settings, đọc từ biến môi trường/secret manager (ngẫu nhiên ≥32 byte), fail-fast khi thiếu. Xoay (rotate) secret đã bị lộ trong lịch sử git."
+    },
+    {
+      "path": "app/medicare/mobile/tokens.py",
+      "line": 36,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — python.jwt.security.jwt-hardcode.jwt-python-hardcoded-secret (semgrep)\nCWE-798\n\nissue_token ký JWT bằng JWT_SECRET hard-code, cùng nguyên nhân với F2.\n\n**Đề xuất sửa:** Nạp secret từ Settings/biến môi trường thay vì hằng số trong source; rotate secret hiện tại."
+    }
+  ],
+  "body": "<!-- secagent-review:014c582fd9d46e8d550b2803505070dbb0ca8b12 -->\nAI Security Agent nêu 3 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

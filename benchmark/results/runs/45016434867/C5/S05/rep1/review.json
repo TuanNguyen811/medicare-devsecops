@@ -1,0 +1,19 @@
+{
+  "commit_id": "c4b6f8b71ce1f78097dead91f2752533c965ee12",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/printing.py",
+      "line": 97,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — SSTI: render mẫu Jinja do bác sĩ nhập bằng Environment không sandbox\nCWE-1336\n\nprinting.py dùng jinja2.Environment(autoescape=True) thường (không SandboxedEnvironment) và gọi _env.from_string(body).render(...) với body do bác sĩ gửi qua POST /account/print-template. validate() chỉ parse cú pháp, không hạn chế thuộc tính/gọi hàm. Bác sĩ có thể dùng {{ ''.__class__.__mro__[1].__subclasses__() }} để thực thi mã tùy ý trên server (RCE), đọc biến môi trường (SECRET_KEY, DB URL) và toàn bộ dữ liệu bệnh án.\n\n**Đề xuất sửa:** Trong printing.py thay Environment bằng jinja2.sandbox.ImmutableSandboxedEnvironment(autoescape=True) cho cả validate() và render_slip(); chặn truy cập thuộc tính dạng dunder. Tốt hơn nữa: bỏ Jinja do người dùng nhập, dùng mẫu chỉ có placeholder được allowlist (string.Template/thay thế biến cố định). Thêm timeout/giới hạn tài nguyên khi render và test payload SSTI."
+    },
+    {
+      "path": "app/medicare/templates/record/slip.html",
+      "line": 17,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — security.semgrep.medicare.jinja-safe-filter (semgrep)\nCWE-79\n\nslip.html chèn {{ slip | safe }}, trong đó slip là đầu ra của mẫu HTML do người dùng viết; nội dung này không được sanitize nên cho phép script tùy ý (stored XSS/HTML injection) trong origin của ứng dụng. Ngoài ra còn kết hợp với SSTI.\n\n**Đề xuất sửa:** Không dùng |safe trên đầu ra của mẫu do người dùng nhập. Sanitize HTML bằng allowlist thẻ/thuộc tính (ví dụ bleach/nh3) trong printing.render_slip, hoặc chỉ cho phép định dạng hạn chế; đồng thời thêm CSP chặn script inline cho trang in."
+    }
+  ],
+  "body": "<!-- secagent-review:c4b6f8b71ce1f78097dead91f2752533c965ee12 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

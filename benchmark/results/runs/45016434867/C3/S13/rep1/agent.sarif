@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-636",
+              "name": "secagent/CWE-636",
+              "shortDescription": {
+                "text": "Fail-open trong get_current_user kết hợp `shift` không được kiểm tra: phiên không bao giờ hết hạn và không bị thu hồi"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-636"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-636",
+          "level": "error",
+          "message": {
+            "text": "Fail-open trong get_current_user kết hợp `shift` không được kiểm tra: phiên không bao giờ hết hạn và không bị thu hồi: Tham số `shift` từ form được lưu thẳng vào session trong start_session mà không đối chiếu với SHIFT_MAX_AGE (chỉ ép về mặc định cho PATIENT). Khi shift là giá trị lạ (ví dụ \"x\"), `_max_age` thực hiện `SHIFT_MAX_AGE[...]` và ném KeyError. `get_current_user` bắt mọi Exception rồi fail-open: lấy user theo `user_id` trong session mà bỏ qua kiểm tra hạn phiên (`iat`), `is_active` và `session_version`. Hậu quả: phiên không bao giờ hết hạn, vẫn sống sau logout, đổi mật khẩu (revoke_sessions) hoặc khi tài khoản bị khóa/vô hiệu hóa. Điều này phá vỡ R-08 và R-18 (thu hồi phiên). Bệnh nhân cũng bị ảnh hưởng vì chỉ lúc login shift mới được ép về mặc định, nhưng với PATIENT giá trị đã bị ghi đè nên không bị; mọi vai trò nhân viên (kể cả ADMIN) thì có. Ngoài ra bất kỳ nhân viên nào cũng tự chọn được phiên 24h."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/common/auth.py"
+                },
+                "region": {
+                  "startLine": 88
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

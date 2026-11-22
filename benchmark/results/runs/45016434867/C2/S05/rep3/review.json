@@ -1,0 +1,19 @@
+{
+  "commit_id": "c4b6f8b71ce1f78097dead91f2752533c965ee12",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/printing.py",
+      "line": 97,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — SSTI dẫn tới RCE: render mẫu phiếu khám do bác sĩ nhập bằng Jinja2 Environment không sandbox\nCWE-1336 · vi phạm R-10\n\nprinting.py dùng jinja2.Environment(autoescape=True) thường (không phải SandboxedEnvironment) rồi gọi _env.from_string(body).render(...) với body là dữ liệu do bác sĩ nhập và lưu trong DB. validate() chỉ kiểm tra độ dài và cú pháp, không hạn chế truy cập thuộc tính. Người dùng có thể dùng {{ cycler.__init__.__globals__.os.popen('...').read() }} để thực thi lệnh trên server, đọc SECRET_KEY, DB và toàn bộ PII. Output còn được chèn qua |safe nên cũng cho phép HTML/JS tùy ý.\n\n**Đề xuất sửa:** Trong printing.py thay Environment bằng jinja2.sandbox.ImmutableSandboxedEnvironment (autoescape=True) cho cả validate() và render_slip(); cân nhắc bỏ globals mặc định (cycler, joiner, namespace, lipsum). Tốt hơn là bỏ hẳn Jinja cho người dùng: dùng cú pháp placeholder đơn giản thay thế từ allowlist VARIABLES (string.Template/regex), và escape giá trị. Sanitize HTML đầu ra bằng allowlist (ví dụ bleach/nh3) trước khi chèn vào slip.html."
+    },
+    {
+      "path": "app/medicare/templates/record/slip.html",
+      "line": 17,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — security.semgrep.medicare.jinja-safe-filter (semgrep)\nCWE-79 · vi phạm R-10\n\nslip.html chèn {{ slip | safe }}, trong đó slip là kết quả render từ mẫu do bác sĩ tự nhập HTML tùy ý (kể cả <script>) và lưu DB, không có sanitize. Đây là XSS lưu trữ trên trang chứa dữ liệu bệnh án, cùng origin với session.\n\n**Đề xuất sửa:** Không dùng |safe trên nội dung do người dùng kiểm soát. Sanitize đầu ra trong printing.render_slip bằng allowlist thẻ/thuộc tính (nh3/bleach), cấm script, on*, javascript:, và thêm CSP cho trang in. Hoặc chỉ cho phép placeholder, không cho HTML tự do."
+    }
+  ],
+  "body": "<!-- secagent-review:c4b6f8b71ce1f78097dead91f2752533c965ee12 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

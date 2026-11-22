@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-611",
+              "name": "secagent/CWE-611",
+              "shortDescription": {
+                "text": "XXE: lxml XMLParser bật resolve_entities khi nhập file XML tải lên"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-611"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-611",
+          "level": "error",
+          "message": {
+            "text": "XXE: lxml XMLParser bật resolve_entities khi nhập file XML tải lên: `_parse_xml` tạo `etree.XMLParser(resolve_entities=True)` rồi parse file người dùng tải lên. Comment còn thừa nhận file có DOCTYPE khai báo entity. Kẻ tấn công có thể khai báo external entity `file:///...` (đọc file như biến môi trường chứa SECRET_KEY, mật khẩu DB), và dùng entity lồng nhau (billion laughs) để gây DoS. Nội dung entity được đưa vào trường `ten_thuoc` rồi hiển thị trong danh mục thuốc, nên dữ liệu bị lộ ra. Vi phạm R-14 (không tin đường dẫn/URL từ người dùng) và R-09."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/prescription/legacy_import.py"
+                },
+                "region": {
+                  "startLine": 47
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

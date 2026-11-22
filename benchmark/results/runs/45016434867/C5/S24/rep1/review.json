@@ -1,0 +1,13 @@
+{
+  "commit_id": "f923a006aacf87b9ea10ca8b562026b9468baa0f",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/common/auth.py",
+      "line": 54,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Cookie remember-me (không gắn thiết bị) bỏ qua khóa tài khoản và đếm sai mật khẩu\nCWE-307 · vi phạm R-07\n\nauthenticate() nhận remembered_device do client điều khiển: chỉ cần cookie medicare_remember hợp lệ (bất kỳ token nào còn hạn, của bất kỳ user nào, vì is_remembered_device không gắn token với username đang đăng nhập). Khi đó tài khoản bị khóa vẫn được thử mật khẩu và sai mật khẩu không tăng failed_login_count, nên brute-force không giới hạn. Kẻ tấn công chỉ cần một remember token hợp lệ (tự đăng nhập bằng tài khoản của mình có tích 'ghi nhớ') để vô hiệu hóa R-07 cho mọi tài khoản.\n\n**Đề xuất sửa:** Xóa tham số remembered_device khỏi authenticate() trong app/medicare/common/auth.py và router.login: luôn áp dụng khóa 15 phút và đếm failed_login_count như R-07 bất kể cookie. Không dùng cookie do client gửi để miễn trừ kiểm soát brute-force."
+    }
+  ],
+  "body": "<!-- secagent-review:f923a006aacf87b9ea10ca8b562026b9468baa0f -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

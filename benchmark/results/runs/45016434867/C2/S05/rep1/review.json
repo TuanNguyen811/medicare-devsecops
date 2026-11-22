@@ -1,0 +1,19 @@
+{
+  "commit_id": "c4b6f8b71ce1f78097dead91f2752533c965ee12",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/printing.py",
+      "line": 96,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — Server-Side Template Injection (RCE) qua mẫu in phiếu khám do bác sĩ nhập\nCWE-1336\n\nprinting.py dùng jinja2.Environment thường (không sandbox) và render chuỗi template do người dùng (bác sĩ) cung cấp qua _env.from_string(body).render(). validate() chỉ kiểm tra độ dài và cú pháp. autoescape không ngăn truy cập thuộc tính/đối tượng Python, nên có thể dùng các biểu thức như ''.__class__.__mro__... để thực thi mã tùy ý trên server, đọc SECRET_KEY, DB và toàn bộ dữ liệu bệnh án.\n\n**Đề xuất sửa:** Trong printing.py dùng jinja2.sandbox.SandboxedEnvironment (autoescape=True) thay cho Environment cho cả validate() và render_slip(); chỉ truyền dict giá trị thuần như hiện tại. Tốt hơn: không cho nhập Jinja, chỉ hỗ trợ placeholder thay thế cố định theo allowlist (VARIABLES). Đồng thời giới hạn thời gian/kích thước render và sanitize HTML (allowlist thẻ, bỏ script) trước khi lưu."
+    },
+    {
+      "path": "app/medicare/templates/record/slip.html",
+      "line": 17,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — security.semgrep.medicare.jinja-safe-filter (semgrep)\nCWE-79\n\nslip.html chèn {{ slip | safe }}, trong đó slip là HTML sinh từ mẫu do bác sĩ nhập tự do (không sanitize), nên bác sĩ có thể chèn <script> chạy trong origin của ứng dụng (stored XSS), tại trang chứa dữ liệu bệnh án. Mẫu chỉ áp dụng cho chính bác sĩ xem nhưng vẫn vi phạm quy tắc cấm |safe trên dữ liệu người dùng và kết hợp với SSTI làm tăng rủi ro.\n\n**Đề xuất sửa:** Không dùng |safe trên nội dung mẫu do người dùng nhập. Sanitize HTML của mẫu bằng allowlist thẻ/thuộc tính (ví dụ bleach/nh3) khi lưu và khi render, hoặc chỉ cho placeholder và render phần còn lại đã escape; thêm CSP chặn script inline cho trang /records/{id}/print."
+    }
+  ],
+  "body": "<!-- secagent-review:c4b6f8b71ce1f78097dead91f2752533c965ee12 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

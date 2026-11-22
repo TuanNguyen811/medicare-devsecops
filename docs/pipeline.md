@@ -68,7 +68,7 @@ Gate là script [`security/gate/gate.py`](../security/gate/gate.py), chỉ dùng
 | Chế độ | Chặn khi |
 |---|---|
 | `traditional` (mặc định) | Có bất kỳ phát hiện HIGH/CRITICAL nào |
-| `ai-assisted` (kế hoạch C) | Phát hiện HIGH/CRITICAL được Agent kết luận `TP`/`NEEDS_REVIEW`, hoặc **chưa được Agent thẩm định**. Nếu có nhiều kết luận cho cùng một phát hiện, chỉ cần một kết luận khác `FP` là chặn. Kết luận `FP` miễn chặn mức Critical chỉ khi PR có label `security-reviewed`. Ngoài ra chặn khi Agent tự tìm thêm lỗi HIGH/CRITICAL `TP` với độ tin cậy ≥ 0.7 |
+| `ai-assisted` (kế hoạch C) | Phát hiện HIGH/CRITICAL được Agent kết luận `TP`/`NEEDS_REVIEW`, hoặc **chưa được Agent thẩm định**. Nếu có nhiều kết luận cho cùng một phát hiện, chỉ cần một kết luận khác `FP` là chặn. Kết luận `FP` miễn chặn mức Critical chỉ khi PR có label `security-reviewed`. Ngoài ra chặn khi Agent kết luận `TP` mức HIGH/CRITICAL với độ tin cậy ≥ 0.7, dù là lỗi Agent tự tìm thêm hay một phát hiện của PR (trong phạm vi gate xét) mà công cụ chấm thấp hơn, ví dụ bandit chấm LOW nhưng Agent xác nhận là SSRF; chỉ cần một kết luận như vậy, không phụ thuộc thứ tự các kết luận |
 
 **Fail-safe:**
 - Agent lỗi (mã thoát 2, thiếu hoặc hỏng `report.json`) → gate quay về `traditional`.

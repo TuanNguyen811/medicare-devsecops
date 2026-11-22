@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-840",
+              "name": "secagent/CWE-840",
+              "shortDescription": {
+                "text": "change_status cho phép chuyển PAID → UNPAID, phá luồng hóa đơn một chiều"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-840"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-840",
+          "level": "error",
+          "message": {
+            "text": "change_status cho phép chuyển PAID → UNPAID, phá luồng hóa đơn một chiều: service.change_status chỉ kiểm tra status nằm trong InvoiceStatus và khác trạng thái hiện tại. Vì vậy hóa đơn PAID có thể bị đặt lại UNPAID. R-17 chỉ cho UNPAID → PAID và không được quay ngược. Hóa đơn sau khi đưa về UNPAID lại mở được add_lines, nên tổng tiền của hóa đơn đã thu có thể bị sửa. Việc này cho phép gian lận hoặc biển thủ tiền thu."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/billing/service.py"
+                },
+                "region": {
+                  "startLine": 144
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

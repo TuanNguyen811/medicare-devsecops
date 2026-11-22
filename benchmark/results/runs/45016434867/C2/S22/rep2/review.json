@@ -1,0 +1,19 @@
+{
+  "commit_id": "66d16bfbb9d82b65a03fd9590e105e850d0e1ada",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/patient/router.py",
+      "line": 98,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Export CSV cho DOCTOR/NURSE, lộ CCCD/BHYT không che (vi phạm R-11, R-19, ma trận quyền)\nCWE-285 · vi phạm R-19\n\n/patients/export dùng staff_user (gồm DOCTOR, NURSE) trong khi ma trận chỉ cho ADMIN và RECEPTIONIST xuất. Dòng xuất ghi p.national_id và p.insurance_number nguyên văn, không qua mask, nên bác sĩ/y tá lấy được CCCD/BHYT đầy đủ, trái R-11.\n\n**Đề xuất sửa:** Trong export_patients dùng editor_user (ADMIN, RECEPTIONIST) thay vì staff_user. Nếu mở rộng vai trò, áp dụng validators.mask cho national_id và insurance_number theo vai trò như trang chi tiết (R-11)."
+    },
+    {
+      "path": "app/medicare/common/csv_export.py",
+      "line": 14,
+      "side": "RIGHT",
+      "body": "**secagent · TP · MEDIUM** — CSV injection: csv_response không trung hòa ô bắt đầu bằng = + - @\nCWE-1236 · vi phạm R-19\n\ncsv_response chỉ chuyển str(value) rồi ghi, không xử lý ký tự đầu công thức. Các trường như họ tên, địa chỉ do người dùng nhập có thể là công thức Excel.\n\n**Đề xuất sửa:** Trong csv_export.py thêm hàm trung hòa: nếu chuỗi bắt đầu bằng =, +, -, @, tab hoặc CR/LF thì thêm tiền tố dấu nháy đơn; áp dụng cho mọi ô trước writerow. Cũng làm sạch filename."
+    }
+  ],
+  "body": "<!-- secagent-review:66d16bfbb9d82b65a03fd9590e105e850d0e1ada -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

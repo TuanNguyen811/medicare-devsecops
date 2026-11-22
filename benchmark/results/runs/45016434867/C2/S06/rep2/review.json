@@ -1,0 +1,13 @@
+{
+  "commit_id": "b6844e9bf8b64473bce12659e0f2c70064b13e5b",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/templates/record/detail.html",
+      "line": 29,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — security.semgrep.medicare.jinja-safe-filter (semgrep)\nCWE-79\n\nTrường `note.body` do người dùng gửi lên được render bằng `| safe`. `service.add_note` chỉ strip và kiểm tra độ dài, không làm sạch HTML. Việc \"định dạng\" chỉ thực hiện ở client (JS), nên có thể bị bỏ qua bằng cách POST trực tiếp. Đây là stored XSS: script chạy trong phiên của bệnh nhân, y tá và bác sĩ khác khi xem bệnh án.\n\n**Đề xuất sửa:** Bỏ `| safe` trong detail.html để Jinja tự escape, hoặc làm sạch ở server trước khi lưu trong `record/service.py::add_note` bằng allowlist thẻ (b, i, u, ul, li, p, br) qua thư viện như nh3 hoặc bleach, không cho phép thuộc tính. Không tin sanitize phía client trong rich-note.js."
+    }
+  ],
+  "body": "<!-- secagent-review:b6844e9bf8b64473bce12659e0f2c70064b13e5b -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-502",
+              "name": "secagent/CWE-502",
+              "shortDescription": {
+                "text": "Giải tuần tự không an toàn: yaml.full_load trên file admin tải lên"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-502"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-502",
+          "level": "error",
+          "message": {
+            "text": "Giải tuần tự không an toàn: yaml.full_load trên file admin tải lên: `price_list.parse` dùng `yaml.full_load` cho nội dung file upload. Hàm này không an toàn với dữ liệu không tin cậy, và với PyYAML 5.3.1 cho phép thực thi mã (CVE-2020-14343). Dữ liệu chỉ cần là cấu trúc đơn giản (dict/list/int/str) nên `safe_load` là đủ."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/prescription/price_list.py"
+                },
+                "region": {
+                  "startLine": 40
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

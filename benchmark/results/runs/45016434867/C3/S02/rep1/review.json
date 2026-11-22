@@ -1,0 +1,19 @@
+{
+  "commit_id": "6d5288de01b6f5374d039b0a370279d9bc208e19",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 35,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — IDOR: xuất bệnh án không kiểm tra quyền theo đối tượng\nCWE-639 · vi phạm R-01\n\n`get_record_for_export` lấy bản ghi bằng `db.get(MedicalRecord, record_id)` và chỉ kiểm tra vai trò (DOCTOR/NURSE/PATIENT) ở router, không gọi hàm `policy.can_*` nào. Bất kỳ bác sĩ, y tá khác khoa hay bệnh nhân nào cũng xuất được bệnh án của người khác bằng cách đoán id. Vi phạm R-01, R-02, và R-15 (nên trả 404 khi không có quyền). Audit log còn ghi EXPORT_RECORD cho cả truy cập trái phép.\n\n**Đề xuất sửa:** Trong export.get_record_for_export, tái sử dụng cùng cơ chế như service.get_record_for: lấy patient rồi gọi hàm policy.can_view_record (policy.py) cho user; nếu không có quyền thì raise NotFound (404 giống bản ghi không tồn tại, R-15) và chỉ ghi audit sau khi đã được phép. Bổ sung test cho bác sĩ/y tá khác khoa và bệnh nhân khác."
+    },
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 27,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Path traversal / đọc file tùy ý qua tham số letterhead\nCWE-22 · vi phạm R-14\n\nTham số query `letterhead` do người dùng kiểm soát được nối trực tiếp vào đường dẫn `LETTERHEAD_DIR / name` mà không đối chiếu allowlist. Giá trị như `../../../../etc/passwd` hoặc đường dẫn tuyệt đối sẽ thoát khỏi thư mục letterheads. Nội dung file được đọc rồi chèn vào đầu phiếu (HTML/TXT) và trả về cho client, nên đây là đọc file tùy ý (ví dụ file cấu hình chứa SECRET_KEY, .env). Chỉ bắt FileNotFoundError nên còn gây lỗi 500 với thư mục.\n\n**Đề xuất sửa:** Trong export.py, không ghép đường dẫn từ input. Chỉ chấp nhận `name` nằm trong tập `letterheads()` (allowlist); nếu không thuộc allowlist thì dùng DEFAULT_LETTERHEAD. Có thể thêm kiểm tra `resolve()` nằm trong LETTERHEAD_DIR. Router export_record cũng nên validate tham số trước khi gọi read_letterhead."
+    }
+  ],
+  "body": "<!-- secagent-review:6d5288de01b6f5374d039b0a370279d9bc208e19 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

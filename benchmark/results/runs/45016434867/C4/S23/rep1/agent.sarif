@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-639",
+              "name": "secagent/CWE-639",
+              "shortDescription": {
+                "text": "claim_patient cho phép bác sĩ bất kỳ chiếm quyền phụ trách bệnh nhân (IDOR / bỏ qua policy)"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-639"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-639",
+          "level": "error",
+          "message": {
+            "text": "claim_patient cho phép bác sĩ bất kỳ chiếm quyền phụ trách bệnh nhân (IDOR / bỏ qua policy): service.claim_patient chỉ lấy bệnh nhân theo id rồi gán attending_doctor_id = doctor.id mà không gọi policy.can_view_patient hay kiểm tra cùng khoa. Route chỉ kiểm tra vai trò DOCTOR. Bác sĩ khoa khác chỉ cần POST /patients/{id}/claim với id đoán được để thành bác sĩ phụ trách. Khi đó _is_attending trả True, nên can_view_record, can_write_record và can_prescribe đều qua (R-01, R-02, R-03). Nút ở giao diện được ẩn nhưng server không chặn. Ngoài ra nếu department_id là None thì bị ghi đè bằng khoa của bác sĩ, và việc đổi người phụ trách không được ghi audit log."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/patient/service.py"
+                },
+                "region": {
+                  "startLine": 127
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-1336",
+              "name": "secagent/CWE-1336",
+              "shortDescription": {
+                "text": "Server-Side Template Injection (RCE) qua mẫu in phiếu khám do bác sĩ nhập"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-1336"
+                ],
+                "security-severity": "9.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-1336",
+          "level": "error",
+          "message": {
+            "text": "Server-Side Template Injection (RCE) qua mẫu in phiếu khám do bác sĩ nhập: printing.py dùng jinja2.Environment thường (không sandbox) và render chuỗi template do người dùng (bác sĩ) cung cấp qua _env.from_string(body).render(). validate() chỉ kiểm tra độ dài và cú pháp. autoescape không ngăn truy cập thuộc tính/đối tượng Python, nên có thể dùng các biểu thức như ''.__class__.__mro__... để thực thi mã tùy ý trên server, đọc SECRET_KEY, DB và toàn bộ dữ liệu bệnh án."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/record/printing.py"
+                },
+                "region": {
+                  "startLine": 96
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "9.5",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        }
+      ]
+    }
+  ]
+}

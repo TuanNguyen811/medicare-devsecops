@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-636",
+              "name": "secagent/CWE-636",
+              "shortDescription": {
+                "text": "Fail-open trong get_current_user: shift không hợp lệ làm bỏ qua kiểm tra hết hạn, thu hồi phiên và is_active"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-636"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-636",
+          "level": "error",
+          "message": {
+            "text": "Fail-open trong get_current_user: shift không hợp lệ làm bỏ qua kiểm tra hết hạn, thu hồi phiên và is_active: Giá trị `shift` do client gửi được lưu vào session mà không kiểm tra allowlist. `_max_age` dùng `SHIFT_MAX_AGE[...]` nên một `shift` lạ như \"x\" gây KeyError. `get_current_user` bắt mọi Exception và chuyển sang nhánh dự phòng, nhánh này chỉ làm `db.get(User, user_id)`. Nhánh đó bỏ qua giới hạn thời gian tuyệt đối, kiểm tra `session_version` (thu hồi phiên) và `is_active` (tài khoản bị khóa). Kết quả là phiên không bao giờ hết hạn và không thể bị thu hồi."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/common/auth.py"
+                },
+                "region": {
+                  "startLine": 113
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

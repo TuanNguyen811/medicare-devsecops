@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-840",
+              "name": "secagent/CWE-840",
+              "shortDescription": {
+                "text": "change_status cho phép chuyển hóa đơn PAID → UNPAID (vi phạm luồng R-17)"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-840"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-840",
+          "level": "error",
+          "message": {
+            "text": "change_status cho phép chuyển hóa đơn PAID → UNPAID (vi phạm luồng R-17): service.change_status chỉ kiểm tra status hợp lệ và khác trạng thái hiện tại, nên POST status=UNPAID trên hóa đơn đã PAID sẽ đưa hóa đơn quay ngược lại. R-17 chỉ cho phép UNPAID → PAID, không quay ngược. Sau khi hoàn tác, add_lines lại cho thêm dòng và đổi tổng tiền của hóa đơn đã thu."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/billing/service.py"
+                },
+                "region": {
+                  "startLine": 151
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "commit_id": "6d5288de01b6f5374d039b0a370279d9bc208e19",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — export_record thiếu kiểm tra policy.can_view_record (IDOR bệnh án)\nCWE-639 · vi phạm R-01\n\nget_record_for_export chỉ db.get rồi ghi audit, không gọi policy.can_view_record. Mọi DOCTOR/NURSE/PATIENT đều xuất được bệnh án của bất kỳ bệnh nhân nào (vi phạm R-01, R-02, R-03 và R-15 vì không tồn tại/không có quyền phải cùng 404). Nên dùng service.get_record_for đã có sẵn kiểm tra.\n\n**Đề xuất sửa:** Trong get_record_for_export, nạp bệnh nhân và gọi policy.can_view_record(user, patient) (hoặc tái sử dụng record.service.get_record_for); nếu không có quyền thì raise NotFound giống như không tồn tại, và chỉ ghi audit sau khi qua kiểm tra. Thêm test bệnh nhân/bác sĩ khác khoa nhận 404."
+    },
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 28,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Path traversal qua tham số letterhead trong export_record\nCWE-22 · vi phạm R-14\n\nTham số query `letterhead` đi thẳng vào `LETTERHEAD_DIR / name` mà không đối chiếu allowlist. Có thể dùng `../../...` hoặc đường dẫn tuyệt đối (pathlib bỏ qua thư mục gốc) để đọc file tùy ý, nội dung được in vào phiếu khám trả về cho người dùng.\n\n**Đề xuất sửa:** Trong export.read_letterhead, chỉ chấp nhận `name` nằm trong tập `letterheads()` (allowlist tên file); nếu không thuộc thì dùng DEFAULT_LETTERHEAD hoặc trả 400. Không ghép trực tiếp chuỗi người dùng vào đường dẫn."
+    }
+  ],
+  "body": "<!-- secagent-review:6d5288de01b6f5374d039b0a370279d9bc208e19 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

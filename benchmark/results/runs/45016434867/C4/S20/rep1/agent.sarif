@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-840",
+              "name": "secagent/CWE-840",
+              "shortDescription": {
+                "text": "change_status cho phép đảo hóa đơn PAID về UNPAID rồi sửa dòng dịch vụ/tổng tiền"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-840"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-840",
+          "level": "error",
+          "message": {
+            "text": "change_status cho phép đảo hóa đơn PAID về UNPAID rồi sửa dòng dịch vụ/tổng tiền: Endpoint cũ /pay chỉ cho UNPAID->PAID một chiều (mark_paid ném Conflict nếu đã trả). change_status mới chấp nhận bất kỳ trạng thái hợp lệ nào khác trạng thái hiện tại, kể cả PAID->UNPAID. Lễ tân có thể hoàn tác hóa đơn đã thu tiền, thêm dòng dịch vụ (add_lines chỉ chặn khi status != UNPAID) làm đổi total_amount, rồi thu lại — thao tác gian lận/biển thủ tiền thu, vô hiệu bất biến của hóa đơn đã thanh toán. Không có audit log."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/billing/service.py"
+                },
+                "region": {
+                  "startLine": 144
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.8
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "commit_id": "d3be9b5eff5275c5762dc7d0514be6a3f4aed8b1",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/audit/maintenance.py",
+      "line": 41,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Job maintenance xóa audit log, vi phạm tính bất biến\nCWE-778 · vi phạm R-06\n\ncompact_repeated_views thực hiện delete(AuditLog) trên các dòng VIEW_RECORD. R-06 quy định audit log chỉ được thêm, không có chức năng sửa/xóa; R-05 yêu cầu ghi mọi lần truy cập bệnh án. Xóa các lần xem lặp làm mất dấu vết truy cập (thời điểm, IP) và có thể bị lợi dụng để che giấu việc truy cập trái phép.\n\n**Đề xuất sửa:** Bỏ job xóa audit. Nếu cần giảm lượng ghi, gộp ở thời điểm ghi trong audit.log_access (ví dụ thêm bộ đếm/last_seen) thay vì DELETE. Nếu cần lưu trữ, chuyển sang bảng archive chỉ-thêm, không xóa dữ liệu gốc, và cần phê duyệt R-06."
+    },
+    {
+      "path": "app/medicare/record/service.py",
+      "line": 21,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Ghi PII (CCCD, BHYT, chẩn đoán) vào log trong _log_event\nCWE-532 · vi phạm R-10\n\n_log_event đưa national_id, insurance_number và diagnosis vào extra; JsonFormatter đẩy mọi trường extra lên top-level và ghi ra stderr cho log agent (Loki). Vi phạm R-10 (không ghi PII vào log) và R-11 (không che CCCD/BHYT). Log còn ghi dữ liệu mà bác sĩ/y tá không được xem đầy đủ.\n\n**Đề xuất sửa:** Trong record/service.py::_log_event, bỏ national_id, insurance_number và diagnosis khỏi extra; chỉ giữ user_id, role, record_id và patient_code (hoặc patient id). Nếu cần, thêm bộ lọc trong JsonFormatter để loại các khóa PII."
+    }
+  ],
+  "body": "<!-- secagent-review:d3be9b5eff5275c5762dc7d0514be6a3f4aed8b1 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

@@ -1,0 +1,350 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:41:29+00:00",
+    "duration_s": 44.08,
+    "llm_calls": 22,
+    "tool_calls": 21,
+    "tokens_in": 153462,
+    "tokens_out": 6636,
+    "cost_usd": 0.186792,
+    "step_limit": 46,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Token đặt lại mật khẩu không hết hạn và dùng được nhiều lần",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "cwe": "CWE-640",
+      "owasp": "A07",
+      "violated_rule": "R-18",
+      "reasoning": "RESET_TOKEN_TTL được khai báo nhưng chỉ dùng để in số phút trong email; user_for_token không kiểm tra created_at. reset_password() không xóa/đánh dấu token đã dùng, nên token còn hiệu lực vĩnh viễn và dùng lại được nhiều lần. Vi phạm R-18 (một lần, hết hạn 15 phút).",
+      "evidence": [
+        {
+          "file": "app/medicare/auth/reset.py",
+          "start_line": 50,
+          "end_line": 62,
+          "snippet": "    reset = db.scalar(\n        select(PasswordResetToken).where(PasswordResetToken.token_hash == _digest(token))\n    )\n    if reset is None:\n        return None"
+        }
+      ],
+      "exploit_scenario": "Kẻ có được link cũ (lịch sử trình duyệt, log proxy, email cũ) vài tháng sau vẫn đặt lại được mật khẩu và chiếm tài khoản.",
+      "fix": {
+        "description": "Trong reset.user_for_token, từ chối token có created_at cũ hơn RESET_TOKEN_TTL (so sánh với thời gian hiện tại UTC). Thêm cột used_at hoặc xóa bản ghi PasswordResetToken trong reset.reset_password (cùng transaction) để token chỉ dùng một lần; khi tạo token mới nên vô hiệu hóa các token cũ của user. Bổ sung migration nếu thêm cột và test cho hết hạn/tái sử dụng."
+      },
+      "file": "app/medicare/auth/reset.py",
+      "line": 50
+    },
+    {
+      "finding_id": "agent:2",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Liệt kê tài khoản qua /forgot-password (phản hồi khác nhau)",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "MEDIUM",
+      "cwe": "CWE-204",
+      "owasp": "A07",
+      "violated_rule": "R-18",
+      "reasoning": "Khi email không tồn tại, endpoint trả trang lỗi \"Không tìm thấy tài khoản nào đăng ký với email này\"; khi tồn tại thì redirect 303 kèm flash. Không có xác thực hay rate limit nên kẻ tấn công dò được email nhân viên/bệnh nhân (PII). Vi phạm R-18 và R-07.",
+      "evidence": [
+        {
+          "file": "app/medicare/auth/router.py",
+          "start_line": 122,
+          "end_line": 130,
+          "snippet": "    if len(email) > MAX_EMAIL_LENGTH or not reset.request_reset(db, email, base_url):\n        return render(request, \"forgot_password.html\", {\n            \"email\": email, \"error\": \"Không tìm thấy tài khoản nào đăng ký với email này\",\n        })"
+        }
+      ],
+      "exploit_scenario": "Kẻ tấn công thử danh sách email và phân biệt email hợp lệ qua thông báo lỗi để phục vụ phishing/tấn công mục tiêu.",
+      "fix": {
+        "description": "Trong router.forgot_password, luôn trả cùng một phản hồi (flash thông báo chung 'Nếu email tồn tại, liên kết đã được gửi' + redirect 303 /login) bất kể request_reset trả True hay False; không báo lỗi riêng cho email không tồn tại. Cân nhắc rate limit theo IP/email."
+      },
+      "file": "app/medicare/auth/router.py",
+      "line": 122
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Ứng dụng không có middleware/đặt header bảo mật nào (search không thấy X-Frame-Options/CSP/nosniff), nên trang đăng nhập/đặt lại mật khẩu có thể bị clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm một middleware trong app/medicare/main.py đặt X-Frame-Options: DENY (hoặc CSP frame-ancestors 'none'), X-Content-Type-Options: nosniff và Content-Security-Policy cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /forgot-password:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /forgot-password:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking trong toàn app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware header bảo mật chung trong app/medicare/main.py (X-Frame-Options DENY / frame-ancestors 'none')."
+      },
+      "file": "dast:GET /forgot-password",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking trong toàn app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware header bảo mật chung trong app/medicare/main.py (X-Frame-Options DENY / frame-ancestors 'none')."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /reset-password:0",
+      "finding_ids": [
+        "zap:10038:dast:GET /reset-password:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "App không đặt Content-Security-Policy ở đâu cả; trang reset-password chứa token trong form nên cần CSP.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none') trong middleware header bảo mật ở app/medicare/main.py."
+      },
+      "file": "dast:GET /reset-password",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /forgot-password:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /forgot-password:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "App không đặt Content-Security-Policy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy trong middleware header bảo mật ở app/medicare/main.py."
+      },
+      "file": "dast:POST /forgot-password",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /reset-password:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /reset-password:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "App không đặt Content-Security-Policy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy trong middleware header bảo mật ở app/medicare/main.py."
+      },
+      "file": "dast:POST /reset-password",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header X-Content-Type-Options trong app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware header bảo mật chung ở app/medicare/main.py."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /forgot-password:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /forgot-password:0",
+        "zap:10038:dast:GET /forgot-password:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header X-Content-Type-Options trong app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware header bảo mật chung ở app/medicare/main.py."
+      },
+      "file": "dast:GET /forgot-password",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header X-Content-Type-Options trong app (kể cả /health).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware header bảo mật chung ở app/medicare/main.py."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header X-Content-Type-Options trong app.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware header bảo mật chung ở app/medicare/main.py."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "bandit:B107:app/medicare/auth/router.py:134",
+      "finding_ids": [
+        "bandit:B107:app/medicare/auth/router.py:134"
+      ],
+      "source": "bandit",
+      "title": "B107 (bandit)",
+      "verdict": "FP",
+      "confidence": 0.9,
+      "severity": "LOW",
+      "cwe": "CWE-259",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Giá trị mặc định token=\"\" là tham số query rỗng, không phải mật khẩu; rỗng bị từ chối bởi user_for_token.",
+      "evidence": [
+        {
+          "file": "app/medicare/auth/router.py",
+          "start_line": 134,
+          "end_line": 138,
+          "snippet": "    request: Request, token: str = \"\", db: Session = Depends(get_db)\n) -> Response:\n    if reset.user_for_token(db, token) is None:"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/medicare/auth/router.py",
+      "line": 134
+    },
+    {
+      "finding_id": "gitleaks:generic-api-key:app/tests/test_password_reset.py:15",
+      "finding_ids": [
+        "gitleaks:generic-api-key:app/tests/test_password_reset.py:15"
+      ],
+      "source": "gitleaks",
+      "title": "generic-api-key (gitleaks)",
+      "verdict": "FP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-798",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Dòng 15 trong file test là hằng NEW_PASSWORD (mật khẩu mẫu cho test, dùng trong set_password), không phải secret thật; chỉ chạy trong test.",
+      "evidence": [
+        {
+          "file": "app/tests/test_password_reset.py",
+          "start_line": 12,
+          "end_line": 13,
+          "snippet": "from tests.conftest import csrf_token, login"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/tests/test_password_reset.py",
+      "line": 15
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-640",
+              "name": "secagent/CWE-640",
+              "shortDescription": {
+                "text": "Token đặt lại mật khẩu không bao giờ hết hạn và không dùng một lần"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-640"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "secagent/CWE-204",
+              "name": "secagent/CWE-204",
+              "shortDescription": {
+                "text": "Liệt kê tài khoản (user enumeration) và không giới hạn tần suất ở /forgot-password"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-204"
+                ],
+                "security-severity": "5.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-640",
+          "level": "error",
+          "message": {
+            "text": "Token đặt lại mật khẩu không bao giờ hết hạn và không dùng một lần: RESET_TOKEN_TTL được khai báo và dùng trong nội dung email (\"15 phút\") nhưng user_for_token không kiểm tra created_at. Token cũng không bị xóa/đánh dấu đã dùng sau reset_password, và token cũ của cùng user không bị vô hiệu khi phát token mới. Link rò rỉ (lịch sử mail, log, Referer) có hiệu lực vĩnh viễn và dùng lại được để chiếm tài khoản."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/auth/reset.py"
+                },
+                "region": {
+                  "startLine": 47
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-204",
+          "level": "warning",
+          "message": {
+            "text": "Liệt kê tài khoản (user enumeration) và không giới hạn tần suất ở /forgot-password: Endpoint công khai trả thông báo khác nhau khi email tồn tại hay không, cho phép dò email nhân viên/bệnh nhân. Không có rate limit, có thể spam email tới nạn nhân và tạo token vô hạn."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/auth/router.py"
+                },
+                "region": {
+                  "startLine": 123
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "verdict": "TP",
+            "confidence": 0.85
+          }
+        }
+      ]
+    }
+  ]
+}

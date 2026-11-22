@@ -1,0 +1,252 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:40:40+00:00",
+    "duration_s": 30.92,
+    "llm_calls": 14,
+    "tool_calls": 13,
+    "tokens_in": 64236,
+    "tokens_out": 4549,
+    "cost_usd": 0.109494,
+    "step_limit": 37,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Mass assignment trong update_profile: extra=\"allow\" cho phép tự nâng quyền (role, department_id, patient_id, is_active)",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "CRITICAL",
+      "cwe": "CWE-915",
+      "owasp": "A01",
+      "violated_rule": "R-16",
+      "reasoning": "ProfileForm khai báo extra=\"allow\" nên mọi trường thừa client gửi lên đều được giữ trong model. update_profile dùng form.model_dump(exclude={\"csrf_token\"}) rồi setattr(user, field, value) cho từng mục, nên các trường như role, department_id, patient_id, is_active cũng được ghi vào User. Điều này vi phạm R-16 (chỉ cho phép full_name, phone).",
+      "evidence": [
+        {
+          "file": "app/medicare/auth/schemas.py",
+          "start_line": 8,
+          "end_line": 8,
+          "snippet": "model_config = ConfigDict(str_strip_whitespace=True, extra=\"allow\")"
+        },
+        {
+          "file": "app/medicare/auth/router.py",
+          "start_line": 81,
+          "end_line": 82,
+          "snippet": "for field, value in form.model_dump(exclude={\"csrf_token\"}).items():\n        setattr(user, field, value)"
+        }
+      ],
+      "exploit_scenario": "Y tá đăng nhập rồi gửi POST /account/profile kèm role=ADMIN (hoặc patient_id=<id khác>, department_id) cùng CSRF token hợp lệ. Server setattr các trường này lên User và commit, nên kẻ tấn công thành ADMIN hoặc truy cập hồ sơ bệnh nhân bất kỳ.",
+      "fix": {
+        "description": "Trong app/medicare/auth/schemas.py, đổi ProfileForm sang extra=\"forbid\" hoặc \"ignore\" (csrf_token cần được khai báo hoặc bỏ qua rõ ràng). Trong update_profile ở router.py, không lặp qua model_dump nữa. Chỉ gán tường minh user.full_name = form.full_name và user.phone = form.phone, hoặc lặp trên allowlist cố định {\"full_name\",\"phone\"}. Thêm test gửi role/department_id/patient_id/is_active và kiểm tra các trường này không đổi."
+      },
+      "file": "app/medicare/auth/schemas.py",
+      "line": 8
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Tìm trong repo không thấy X-Frame-Options hay frame-ancestors, nên ứng dụng thật sự thiếu header chống clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware security headers dùng chung trong app factory: X-Frame-Options: DENY và CSP có frame-ancestors 'none'."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có X-Frame-Options hay frame-ancestors nào trong repo, nên trang /login có thể bị nhúng vào iframe.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware security headers dùng chung: X-Frame-Options: DENY và CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /account/profile:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /account/profile:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu, nên các phản hồi đều thiếu CSP.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers dùng chung (default-src 'self', frame-ancestors 'none'), có tính đến script/style CDN của Bootstrap."
+      },
+      "file": "dast:POST /account/profile",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers dùng chung."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers dùng chung."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers dùng chung."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers dùng chung."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở đâu, kể cả với /health. Rủi ro thấp.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers dùng chung."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers dùng chung."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

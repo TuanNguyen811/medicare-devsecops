@@ -86,8 +86,8 @@
 - [x] Chạy `benchmark-scan` cho toàn bộ (run `45016434867`, 145/145 job đạt), rồi ghi `measured_detection` vào `scenario.yaml` (cả tập dev, từ run `45008007877`).
 
 ## Bước 5: Chạy agent và báo cáo
-- [ ] C2 ×3, rồi C3, C4, C5 ×1 (tập test), `--jobs 3`.
-- [ ] `evaluate.py` → `docs/benchmark-results.md`:
+- [x] C2 ×3, rồi C3, C4, C5 ×1 (tập test), `--jobs 3`: 144 lượt, không lượt nào lỗi; kết quả ở `benchmark/results/runs/45016434867/`.
+- [x] `evaluate.py` → `docs/benchmark-results.md` (bảng điểm `benchmark/results/summary/test/`; gate sửa sau khi xem kết quả, báo thêm `summary/test-gate-fix/`):
   - precision, recall, F1 theo cấu hình và theo nhóm;
   - báo nhầm trên mồi nhử và bản sạch;
   - độ ổn định qua 3 lần chạy;

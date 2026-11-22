@@ -1,0 +1,13 @@
+{
+  "commit_id": "8855b63811794a96dac62ae7343dad90b96fa451",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/patient/service.py",
+      "line": 127,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — claim_patient cho phép bất kỳ bác sĩ nào chiếm quyền phụ trách bệnh nhân của khoa khác (IDOR / broken access control)\nCWE-639 · vi phạm R-02\n\nHàm service.claim_patient dùng db.get(Patient, patient_id) trực tiếp, không gọi policy.can_view_patient hay kiểm tra cùng khoa. Route chỉ yêu cầu vai trò DOCTOR. Vì vậy mọi bác sĩ có thể đổi attending_doctor_id của bệnh nhân bất kỳ, kể cả khoa khác hoặc bệnh nhân đã có bác sĩ phụ trách. Sau đó họ trở thành \"bác sĩ phụ trách\", nên được xem, tạo, sửa bệnh án và kê đơn (R-02, R-03), và thấy hồ sơ bệnh nhân. Ma trận phân quyền không cho bác sĩ tự gán phụ trách. Ngoài ra, endpoint trả 303 khi bệnh nhân tồn tại và 404 khi không, nên lộ sự tồn tại của đối tượng mà người đó không có quyền xem (R-15). Nếu patient.department_id là None thì bị gán theo khoa của bác sĩ. Hành động đổi quyền phụ trách cũng không ghi audit log.\n\n**Đề xuất sửa:** Trong service.claim_patient, tải bệnh nhân qua get_patient_for hoặc kiểm tra policy.can_view_patient(doctor, patient). Nếu không có quyền thì raise NotFound (R-15). Thêm hàm policy.can_claim_patient trong app/medicare/policy.py, chỉ cho phép khi bác sĩ cùng khoa với bệnh nhân (cả hai department_id khác rỗng và bằng nhau), và dùng hàm này cả cho cờ can_claim trong _detail_ctx. Không tự gán department_id của bệnh nhân bằng khoa của bác sĩ. Nếu bệnh nhân đã có bác sĩ phụ trách khác thì cần quy trình bàn giao có kiểm soát hoặc do ADMIN/lễ tân thực hiện. Ghi audit log mỗi lần đổi quyền phụ trách. Sửa test test_doctor_takes_over_patient_of_department và thêm test bác sĩ khác khoa nhận 404."
+    }
+  ],
+  "body": "<!-- secagent-review:8855b63811794a96dac62ae7343dad90b96fa451 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

@@ -1,0 +1,336 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:18:08+00:00",
+    "duration_s": 49.28,
+    "llm_calls": 24,
+    "tool_calls": 20,
+    "tokens_in": 107197,
+    "tokens_out": 7669,
+    "cost_usd": 0.131059,
+    "step_limit": 52,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "semgrep:python.jwt.security.unverified-jwt-decode.unverified-jwt-decode:app/medicare/mobile/tokens.py:43",
+      "finding_ids": [
+        "semgrep:python.jwt.security.unverified-jwt-decode.unverified-jwt-decode:app/medicare/mobile/tokens.py:43"
+      ],
+      "source": "semgrep",
+      "title": "python.jwt.security.unverified-jwt-decode.unverified-jwt-decode (semgrep)",
+      "verdict": "TP",
+      "confidence": 0.98,
+      "severity": "CRITICAL",
+      "cwe": "CWE-347",
+      "owasp": "A07",
+      "violated_rule": "R-01",
+      "reasoning": "read_token gọi jwt.decode với verify_signature=False nên chữ ký không được kiểm tra. Bất kỳ ai cũng tự tạo token với sub=<id user> và sv khớp session_version (số nhỏ, đoán được) để truy cập API như user đó, kể cả bác sĩ/ADMIN. Bypass xác thực hoàn toàn, lộ bệnh án.",
+      "evidence": [
+        {
+          "file": "app/medicare/mobile/tokens.py",
+          "start_line": 41,
+          "end_line": 44,
+          "snippet": "options={\"verify_signature\": False, \"verify_exp\": True, \"require\": [\"sub\", \"exp\"]},"
+        }
+      ],
+      "exploit_scenario": "Kẻ tấn công tạo JWT không ký với sub=1, sv=0, exp tương lai, gửi Authorization: Bearer và đọc /api/v1/mobile/records/... của user bất kỳ.",
+      "fix": {
+        "description": "Trong read_token (tokens.py) xoá verify_signature=False để mặc định kiểm tra chữ ký, giữ algorithms=[HS256], require thêm sv; thêm test token giả mạo/sai chữ ký trả 401."
+      },
+      "file": "app/medicare/mobile/tokens.py",
+      "line": 43
+    },
+    {
+      "finding_id": "gitleaks:generic-api-key:app/medicare/mobile/tokens.py:17",
+      "finding_ids": [
+        "bandit:B105:app/medicare/mobile/tokens.py:17",
+        "gitleaks:generic-api-key:app/medicare/mobile/tokens.py:17"
+      ],
+      "source": "gitleaks",
+      "title": "generic-api-key (gitleaks)",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-798",
+      "owasp": "A04",
+      "violated_rule": "R-09",
+      "reasoning": "JWT_SECRET được hard-code trong tokens.py:17 (Bandit và Gitleaks cùng báo). Vi phạm R-09: secret chỉ được đọc từ biến môi trường. Ai có mã nguồn đều ký được token hợp lệ.",
+      "evidence": [
+        {
+          "file": "app/medicare/mobile/tokens.py",
+          "start_line": 36,
+          "end_line": 36,
+          "snippet": "return jwt.encode(claims, JWT_SECRET, algorithm=JWT_ALGORITHM)"
+        }
+      ],
+      "exploit_scenario": "Kẻ tấn công đọc repo, lấy JWT_SECRET, tự ký token với sub của user bất kỳ (bác sĩ/ADMIN) rồi đọc bệnh án.",
+      "fix": {
+        "description": "Xoá secret khỏi mã nguồn; nạp từ biến môi trường qua Settings (medicare/config.py) với một secret JWT riêng, ứng dụng không khởi động nếu thiếu hoặc quá yếu. Xoay (rotate) secret đã lộ và dọn lịch sử git."
+      },
+      "file": "app/medicare/mobile/tokens.py",
+      "line": 17
+    },
+    {
+      "finding_id": "semgrep:python.jwt.security.jwt-hardcode.jwt-python-hardcoded-secret:app/medicare/mobile/tokens.py:36",
+      "finding_ids": [
+        "semgrep:python.jwt.security.jwt-hardcode.jwt-python-hardcoded-secret:app/medicare/mobile/tokens.py:36"
+      ],
+      "source": "semgrep",
+      "title": "python.jwt.security.jwt-hardcode.jwt-python-hardcoded-secret (semgrep)",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-798",
+      "owasp": "A04",
+      "violated_rule": "R-09",
+      "reasoning": "issue_token ký bằng JWT_SECRET hard-code (cùng gốc với F2), vi phạm R-09.",
+      "evidence": [
+        {
+          "file": "app/medicare/mobile/tokens.py",
+          "start_line": 36,
+          "end_line": 36,
+          "snippet": "return jwt.encode(claims, JWT_SECRET, algorithm=JWT_ALGORITHM)"
+        }
+      ],
+      "exploit_scenario": "Như F2: giả mạo token bằng secret lộ trong mã nguồn.",
+      "fix": {
+        "description": "Đọc JWT secret từ biến môi trường qua Settings, không hard-code; rotate secret cũ."
+      },
+      "file": "app/medicare/mobile/tokens.py",
+      "line": 36
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không tìm thấy middleware đặt header bảo mật nào trong code (search rỗng), nên cảnh báo ZAP có khả năng đúng, nhưng liên quan route HTML hiện có chứ không phải mã của PR. Cần xác nhận cấu hình reverse proxy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Như F5: không có X-Frame-Options/CSP trong code; ngoài phạm vi PR, cần kiểm tra proxy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có X-Content-Type-Options trong code; ngoài phạm vi PR, cần kiểm tra proxy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu CSP là cấu hình toàn cục, không do PR; cần xác nhận cấu hình proxy.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu CSP là cấu hình toàn cục, không do PR.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu CSP là cấu hình toàn cục, không do PR.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu CSP là cấu hình toàn cục, không do PR.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu CSP là cấu hình toàn cục, không do PR.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options là cấu hình toàn cục, ngoài PR.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "NEEDS_REVIEW",
+      "confidence": 0.5,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "/health chỉ trả JSON tĩnh; tác động thấp, cấu hình toàn cục ngoài PR.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "bandit:B105:app/medicare/mobile/router.py:55",
+      "finding_ids": [
+        "bandit:B105:app/medicare/mobile/router.py:55"
+      ],
+      "source": "bandit",
+      "title": "B105 (bandit)",
+      "verdict": "FP",
+      "confidence": 0.95,
+      "severity": "LOW",
+      "cwe": "CWE-259",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "\"token_type\" là hằng số kiểu OAuth (\"bearer\"), không phải mật khẩu. Bandit B105 báo nhầm do tên khoá chứa \"token\".",
+      "evidence": [
+        {
+          "file": "app/medicare/mobile/router.py",
+          "start_line": 55,
+          "end_line": 58,
+          "snippet": "\"access_token\": issue_token(user, datetime.now(UTC)),"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/medicare/mobile/router.py",
+      "line": 55
+    }
+  ]
+}

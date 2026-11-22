@@ -1,0 +1,13 @@
+{
+  "commit_id": "8855b63811794a96dac62ae7343dad90b96fa451",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/patient/service.py",
+      "line": 129,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — claim_patient cho phép bác sĩ bất kỳ chiếm quyền phụ trách bệnh nhân của khoa khác (IDOR/leo thang đặc quyền)\nCWE-639 · vi phạm R-02\n\nservice.claim_patient chỉ kiểm tra bệnh nhân tồn tại rồi gán attending_doctor_id = doctor.id, không qua hàm policy.can_*. Vì \"phụ trách\" cấp quyền xem/sửa bệnh án và kê đơn (R-02, R-03), bác sĩ thuộc khoa khác tự cấp cho mình quyền truy cập lâm sàng của bất kỳ bệnh nhân nào chỉ bằng ID. Việc đổi người phụ trách cũng không ghi audit log, và khi department_id rỗng thì còn bị gán sang khoa của bác sĩ.\n\n**Đề xuất sửa:** Thêm hàm policy.can_claim_patient(user, patient) trong app/medicare/policy.py (docstring ghi R-02/R-03): chỉ cho bác sĩ cùng khoa (department_id cả hai khác rỗng và bằng nhau), hoặc theo quy trình do ADMIN duyệt. Gọi hàm này trong service.claim_patient (và dùng cho cờ can_claim trong _detail_ctx); nếu không đủ quyền trả NotFound (404, R-15). Không tự gán department_id từ bác sĩ. Ghi audit log mỗi lần đổi attending_doctor_id."
+    }
+  ],
+  "body": "<!-- secagent-review:8855b63811794a96dac62ae7343dad90b96fa451 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

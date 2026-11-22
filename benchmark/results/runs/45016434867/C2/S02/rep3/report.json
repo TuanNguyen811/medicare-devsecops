@@ -1,0 +1,322 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:17:56+00:00",
+    "duration_s": 41.06,
+    "llm_calls": 17,
+    "tool_calls": 16,
+    "tokens_in": 96988,
+    "tokens_out": 6360,
+    "cost_usd": 0.100828,
+    "step_limit": 40,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:2",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Path traversal qua tham số letterhead",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-22",
+      "owasp": "A01",
+      "violated_rule": "R-14",
+      "reasoning": "read_letterhead ghép trực tiếp tên do người dùng gửi (query letterhead) vào LETTERHEAD_DIR mà không đối chiếu allowlist. Giá trị như ../../../../etc/passwd hoặc đường dẫn tuyệt đối đọc được file bất kỳ (UTF-8) và nội dung được chèn vào phiếu xuất. Vi phạm R-14.",
+      "evidence": [
+        {
+          "file": "app/medicare/record/export.py",
+          "start_line": 27,
+          "end_line": 32,
+          "snippet": "    path = LETTERHEAD_DIR / (name or DEFAULT_LETTERHEAD)\n    try:\n        return path.read_text(encoding=\"utf-8\").strip()"
+        }
+      ],
+      "exploit_scenario": "GET /records/1/export?format=txt&letterhead=../../../../etc/passwd trả nội dung file hệ thống trong phần đầu phiếu; có thể đọc cả file cấu hình chứa secret.",
+      "fix": {
+        "description": "Trong export.read_letterhead, chỉ chấp nhận name nằm trong tập export.letterheads() (allowlist); không hợp lệ thì dùng DEFAULT_LETTERHEAD hoặc trả 400. Không ghép đường dẫn từ input người dùng."
+      },
+      "file": "app/medicare/record/export.py",
+      "line": 27
+    },
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "IDOR: export_record không kiểm tra policy.can_view_record",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "cwe": "CWE-639",
+      "owasp": "A01",
+      "violated_rule": "R-01",
+      "reasoning": "get_record_for_export chỉ gọi db.get(MedicalRecord, record_id) rồi ghi audit, không gọi policy.can_view_record(user, patient). Mọi DOCTOR/NURSE/PATIENT đăng nhập đều xuất được bệnh án của bất kỳ bệnh nhân nào, vi phạm R-01, R-02, R-12. Ngoài ra bệnh án không tồn tại và không có quyền phải cùng trả 404 (R-15).",
+      "evidence": [
+        {
+          "file": "app/medicare/record/export.py",
+          "start_line": 40,
+          "end_line": 46,
+          "snippet": "    record = db.get(MedicalRecord, record_id)\n    if record is None:\n        raise NotFound\n    audit.log_access(db, user, audit.EXPORT_RECORD, ENTITY, record.id, ip)\n    return record, record.patient"
+        }
+      ],
+      "exploit_scenario": "Bệnh nhân A đăng nhập, gọi GET /records/<id người khác>/export?format=txt và tải chẩn đoán, ghi chú của bệnh nhân B bằng cách duyệt id tuần tự.",
+      "fix": {
+        "description": "Trong export.get_record_for_export, sau khi lấy record, gọi policy.can_view_record(user, record.patient); nếu sai hoặc record không tồn tại thì raise NotFound (404 giống nhau, R-15). Chỉ ghi audit EXPORT_RECORD sau khi được phép (hoặc ghi cả lần bị từ chối). Dùng cùng cơ chế như record_detail."
+      },
+      "file": "app/medicare/record/export.py",
+      "line": 40
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm trong repo không có X-Frame-Options hay frame-ancestors, nên ứng dụng thiếu header chống clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware toàn cục trong app chính, đặt X-Frame-Options: DENY và CSP frame-ancestors 'none' cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking nào trong repo, kể cả trang /login.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware security headers chung: X-Frame-Options DENY và CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none')."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm Content-Security-Policy chặt."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm Content-Security-Policy chặt."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm Content-Security-Policy chặt."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.75,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm Content-Security-Policy chặt."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "agent:3",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Header Content-Disposition/export: audit trước khi kiểm tra quyền, nurse khác khoa xuất được",
+      "verdict": "TP",
+      "confidence": 0.4,
+      "severity": "LOW",
+      "cwe": "CWE-862",
+      "owasp": "A01",
+      "violated_rule": null,
+      "reasoning": "Ghi chú phụ: route dùng clinical_user chỉ theo vai trò, không có kiểm tra theo đối tượng; đã nêu ở finding IDOR.",
+      "evidence": [
+        {
+          "file": "app/medicare/record/router.py",
+          "start_line": 122,
+          "end_line": 131,
+          "snippet": "@router.get(\"/records/{record_id}/export\")\ndef export_record("
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Xem fix IDOR: dùng policy.can_view_record."
+      },
+      "file": "app/medicare/record/router.py",
+      "line": 122
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

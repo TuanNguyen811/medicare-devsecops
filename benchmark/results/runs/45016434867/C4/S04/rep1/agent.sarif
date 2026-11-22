@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-611",
+              "name": "secagent/CWE-611",
+              "shortDescription": {
+                "text": "XXE: lxml XMLParser với resolve_entities=True trên file admin upload"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-611"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-611",
+          "level": "error",
+          "message": {
+            "text": "XXE: lxml XMLParser với resolve_entities=True trên file admin upload: _parse_xml bật resolve_entities=True và không tắt no_network/load_dtd, nên DOCTYPE do người upload kiểm soát có thể khai báo external entity (file:///etc/passwd, URL nội bộ) hoặc entity bùng nổ (billion laughs). Nội dung entity được đưa vào ten_thuoc/don_vi và lưu DB, hiển thị lại trong lỗi/danh mục, nên có thể đọc dữ liệu."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/prescription/legacy_import.py"
+                },
+                "region": {
+                  "startLine": 49
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

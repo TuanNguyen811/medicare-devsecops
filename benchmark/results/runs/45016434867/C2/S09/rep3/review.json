@@ -1,0 +1,13 @@
+{
+  "commit_id": "447aa04eed4b584d5ac426a9e9c8740a5af3c847",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/lab.py",
+      "line": 39,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — B310 (bandit)\nCWE-918 · vi phạm R-14\n\ndownload() chỉ kiểm tra scheme http/https và có hostname, không có allowlist host (vi phạm R-14). urlopen cũng tự động theo redirect. Bác sĩ có thể khiến server gọi tới địa chỉ nội bộ (metadata cloud, dịch vụ nội bộ, localhost) — SSRF. Nội dung phản hồi được lưu và có thể tải lại nếu là PDF/ảnh; lỗi/thời gian phản hồi còn cho phép dò mạng nội bộ.\n\n**Đề xuất sửa:** Trong lab.download(): đối chiếu hostname với allowlist cấu hình (ví dụ lis.medicare.local) trước khi gọi; chỉ cho phép https; phân giải DNS và chặn IP private/loopback/link-local; tắt hoặc kiểm tra lại mỗi lần redirect (opener với HTTPRedirectHandler tùy biến) và dùng IP đã kiểm tra khi kết nối."
+    }
+  ],
+  "body": "<!-- secagent-review:447aa04eed4b584d5ac426a9e9c8740a5af3c847 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

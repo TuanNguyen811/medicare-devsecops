@@ -1,0 +1,273 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T12:13:19+00:00",
+    "duration_s": 45.09,
+    "llm_calls": 15,
+    "tool_calls": 14,
+    "tokens_in": 68646,
+    "tokens_out": 5420,
+    "cost_usd": 0.084936,
+    "step_limit": 37,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:2",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Job maintenance xóa audit log, vi phạm tính bất biến",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-778",
+      "owasp": "A09",
+      "violated_rule": "R-06",
+      "reasoning": "compact_repeated_views thực hiện delete(AuditLog) trên các dòng VIEW_RECORD. R-06 quy định audit log chỉ được thêm, không có chức năng sửa/xóa; R-05 yêu cầu ghi mọi lần truy cập bệnh án. Xóa các lần xem lặp làm mất dấu vết truy cập (thời điểm, IP) và có thể bị lợi dụng để che giấu việc truy cập trái phép.",
+      "evidence": [
+        {
+          "file": "app/medicare/audit/maintenance.py",
+          "start_line": 41,
+          "end_line": 41,
+          "snippet": "    result = db.execute(delete(AuditLog).where(AuditLog.id.in_(repeated)))"
+        }
+      ],
+      "exploit_scenario": "Kẻ truy cập trái phép xem hồ sơ nhiều lần trong 30 phút; chỉ lần đầu còn lại, các lần sau bị xóa khỏi audit, mất bằng chứng điều tra.",
+      "fix": {
+        "description": "Bỏ job xóa audit. Nếu cần giảm lượng ghi, gộp ở thời điểm ghi trong audit.log_access (ví dụ thêm bộ đếm/last_seen) thay vì DELETE. Nếu cần lưu trữ, chuyển sang bảng archive chỉ-thêm, không xóa dữ liệu gốc, và cần phê duyệt R-06."
+      },
+      "file": "app/medicare/audit/maintenance.py",
+      "line": 41
+    },
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "Ghi PII (CCCD, BHYT, chẩn đoán) vào log trong _log_event",
+      "verdict": "TP",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "cwe": "CWE-532",
+      "owasp": "A09",
+      "violated_rule": "R-10",
+      "reasoning": "_log_event đưa national_id, insurance_number và diagnosis vào extra; JsonFormatter đẩy mọi trường extra lên top-level và ghi ra stderr cho log agent (Loki). Vi phạm R-10 (không ghi PII vào log) và R-11 (không che CCCD/BHYT). Log còn ghi dữ liệu mà bác sĩ/y tá không được xem đầy đủ.",
+      "evidence": [
+        {
+          "file": "app/medicare/record/service.py",
+          "start_line": 21,
+          "end_line": 31,
+          "snippet": "        \"national_id\": patient.national_id,\n        \"insurance_number\": patient.insurance_number,\n        \"diagnosis\": f\"{record.diagnosis_code} {record.diagnosis_text}\","
+        }
+      ],
+      "exploit_scenario": "Bất kỳ ai có quyền đọc Loki/log cluster đều lấy được CCCD, mã BHYT và chẩn đoán của bệnh nhân sau mỗi lần xem/sửa bệnh án.",
+      "fix": {
+        "description": "Trong record/service.py::_log_event, bỏ national_id, insurance_number và diagnosis khỏi extra; chỉ giữ user_id, role, record_id và patient_code (hoặc patient id). Nếu cần, thêm bộ lọc trong JsonFormatter để loại các khóa PII."
+      },
+      "file": "app/medicare/record/service.py",
+      "line": 21
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Tìm trong repo không thấy X-Frame-Options hay frame-ancestors ở đâu, nên ứng dụng thật sự thiếu header chống clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm một middleware security headers trong app/medicare/main.py (create_app) đặt X-Frame-Options: DENY và CSP có frame-ancestors 'none' cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking nào trong repo; trang /login có thể bị nhúng iframe.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng chung middleware security headers trong main.py::create_app: X-Frame-Options DENY và CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không có Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy (default-src 'self', frame-ancestors 'none') trong middleware security headers ở main.py::create_app."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không có Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers ở main.py::create_app."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không có Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers ở main.py::create_app."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không có Content-Security-Policy ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP trong middleware security headers ở main.py::create_app."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt header nosniff.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở main.py::create_app."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt header nosniff; /health cũng thiếu header này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware security headers áp dụng cho mọi response, gồm /health: X-Content-Type-Options nosniff."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options: nosniff ở đâu.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers ở main.py::create_app."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

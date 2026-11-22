@@ -1,0 +1,270 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "single-shot",
+    "started_at": "2026-11-22T12:25:35+00:00",
+    "duration_s": 40.12,
+    "llm_calls": 13,
+    "tool_calls": 12,
+    "tokens_in": 63871,
+    "tokens_out": 6040,
+    "cost_usd": 0.194902,
+    "step_limit": 2,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "bandit:B310:app/medicare/record/lab.py:39",
+      "finding_ids": [
+        "bandit:B310:app/medicare/record/lab.py:39"
+      ],
+      "source": "bandit",
+      "title": "B310 (bandit)",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "cwe": "CWE-918",
+      "owasp": "A01",
+      "violated_rule": "R-14",
+      "reasoning": "download() nhận URL do bác sĩ nhập và gọi urllib.request.urlopen chỉ sau khi kiểm tra scheme http/https và có hostname. Không có allowlist host (vi phạm R-14), không chặn IP nội bộ/loopback/link-local (ví dụ metadata 169.254.169.254, dịch vụ nội bộ, DB), và urlopen mặc định tự theo redirect nên có thể bị chuyển sang địa chỉ nội bộ. Đây là SSRF. Việc kiểm tra content-type chỉ chặn việc lưu phản hồi sai loại; request vẫn được gửi (blind SSRF), và kẻ tấn công kiểm soát một server nội bộ/ngoài trả PDF/PNG vẫn đọc lại được nội dung qua /lab-results/{id}. Test chỉ dùng URL LIS hợp lệ, không có test cho host nội bộ.",
+      "evidence": [
+        {
+          "file": "app/medicare/record/lab.py",
+          "start_line": 34,
+          "end_line": 39,
+          "snippet": "    parts = urlsplit(url)\n    if parts.scheme not in (\"http\", \"https\") or not parts.hostname:\n        raise LabResultError(\"Đường dẫn phải bắt đầu bằng http:// hoặc https://\")\n    request = urllib.request.Request(url, headers={\"User-Agent\": \"MediCare-HMS\"})\n    try:\n        with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT) as resp:"
+        }
+      ],
+      "exploit_scenario": "Một tài khoản bác sĩ (hoặc phiên bị chiếm) gửi url=http://169.254.169.254/latest/meta-data/... hoặc http://internal-service:8080/..., hoặc một URL ngoài redirect (302) về địa chỉ nội bộ. Server MediCare gửi request từ bên trong mạng, dò quét cổng/dịch vụ nội bộ qua khác biệt thông báo lỗi và thời gian, hoặc lấy dữ liệu nếu đích trả content-type pdf/png.",
+      "fix": {
+        "description": "Trong lab.download(): đối chiếu hostname với allowlist cấu hình qua biến môi trường (ví dụ chỉ lis.medicare.local) trước khi gọi urlopen (R-14). Yêu cầu https. Phân giải DNS và từ chối IP loopback/private/link-local/reserved, rồi kết nối đúng IP đã kiểm tra để tránh DNS rebinding. Tắt hoặc kiểm tra lại từng redirect bằng opener tùy chỉnh (HTTPRedirectHandler) áp cùng allowlist. Thêm test cho host nội bộ, redirect và URL ngoài allowlist."
+      },
+      "file": "app/medicare/record/lab.py",
+      "line": 39
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "ZAP quan sát thực tế phản hồi thiếu X-Frame-Options/frame-ancestors. Không có bằng chứng middleware đặt security header toàn cục (route tải kết quả phải tự đặt nosniff, cho thấy không có cơ chế chung). Ứng dụng có form thay đổi dữ liệu y tế nên clickjacking có ý nghĩa.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware toàn cục trong app factory (app/medicare) đặt X-Frame-Options: DENY và CSP frame-ancestors 'none' cho mọi phản hồi."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Trang /login thiếu header chống clickjacking; trang đăng nhập là mục tiêu UI-redress phổ biến. Cùng nguyên nhân gốc với F2: thiếu middleware security header.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Sửa cùng chỗ với F2: middleware toàn cục đặt X-Frame-Options: DENY và CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.55,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Phản hồi thiếu Content-Security-Policy; không thấy cấu hình CSP toàn cục. Là lỗi cấu hình chung của ứng dụng, không riêng route này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP toàn cục qua middleware (default-src 'self', frame-ancestors 'none'), điều chỉnh cho tài nguyên Bootstrap đang dùng."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.55,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân với F7: không có CSP toàn cục.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Sửa cùng middleware CSP toàn cục như F7."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.55,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân với F7: không có CSP toàn cục.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Sửa cùng middleware CSP toàn cục như F7."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.55,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân với F7: không có CSP toàn cục.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Sửa cùng middleware CSP toàn cục như F7."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.55,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Cùng nguyên nhân với F7: không có CSP toàn cục.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Sửa cùng middleware CSP toàn cục như F7."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.55,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Trang / thiếu X-Content-Type-Options; cùng nguyên nhân với F6.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm X-Content-Type-Options: nosniff."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.5,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "/health thiếu X-Content-Type-Options; rủi ro rất thấp (endpoint không chứa nội dung người dùng) nhưng cùng nguyên nhân với F6, sẽ được sửa bằng middleware chung.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm X-Content-Type-Options: nosniff, áp dụng cả /health."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.6,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Phản hồi /login thiếu X-Content-Type-Options: nosniff; chỉ route tải kết quả xét nghiệm tự đặt header này. Nguyên nhân là thiếu middleware chung. Rủi ro thấp nhưng sửa dễ.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware toàn cục thêm X-Content-Type-Options: nosniff cho mọi phản hồi."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    }
+  ]
+}

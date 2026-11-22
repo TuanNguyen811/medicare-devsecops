@@ -1,0 +1,13 @@
+{
+  "commit_id": "b6844e9bf8b64473bce12659e0f2c70064b13e5b",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/templates/record/detail.html",
+      "line": 29,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — security.semgrep.medicare.jinja-safe-filter (semgrep)\nCWE-79\n\n`note.body | safe` render HTML thô do client gửi. `add_note` trong service.py chỉ strip và kiểm tra độ dài, không sanitize. Kẻ tấn công (bác sĩ phụ trách, hoặc bất kỳ ai gửi POST trực tiếp bỏ qua editor JS) có thể lưu `<script>` hoặc `<img onerror>`. Script chạy trên trình duyệt bệnh nhân, y tá, bác sĩ khác khi xem bệnh án. Ứng dụng cũng không có CSP nên không có lớp phòng thủ nào khác.\n\n**Đề xuất sửa:** Bỏ `| safe` trong detail.html để Jinja tự escape, hoặc sanitize phía server bằng allowlist thẻ (p, b, i, u, ul, li, br) trước khi lưu trong `record/service.py::add_note` (ví dụ dùng thư viện nh3 hoặc bleach), và không cho phép thuộc tính hay URL scheme nguy hiểm. Có thể sanitize lại khi render. Thêm test XSS payload. Thêm header CSP làm lớp bảo vệ bổ sung."
+    }
+  ],
+  "body": "<!-- secagent-review:b6844e9bf8b64473bce12659e0f2c70064b13e5b -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

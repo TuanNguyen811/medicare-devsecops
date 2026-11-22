@@ -1,0 +1,13 @@
+{
+  "commit_id": "2b78fd13b8509cc8d1677a89eb254ad588eb55b8",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/common/auth.py",
+      "line": 113,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Fail-open trong get_current_user: shift không hợp lệ làm bỏ qua kiểm tra hết hạn, thu hồi phiên và is_active\nCWE-636 · vi phạm R-08\n\nGiá trị `shift` do client gửi được lưu vào session mà không kiểm tra allowlist. `_max_age` dùng `SHIFT_MAX_AGE[...]` nên một `shift` lạ như \"x\" gây KeyError. `get_current_user` bắt mọi Exception và chuyển sang nhánh dự phòng, nhánh này chỉ làm `db.get(User, user_id)`. Nhánh đó bỏ qua giới hạn thời gian tuyệt đối, kiểm tra `session_version` (thu hồi phiên) và `is_active` (tài khoản bị khóa). Kết quả là phiên không bao giờ hết hạn và không thể bị thu hồi.\n\n**Đề xuất sửa:** Trong start_session (hoặc router login), kiểm tra shift nằm trong SHIFT_MAX_AGE, nếu không thì dùng DEFAULT_SHIFT. Trong _max_age dùng .get với giá trị mặc định thay vì lập chỉ mục trực tiếp. Xóa try/except fail-open trong get_current_user: khi kiểm tra lỗi thì phải fail-closed (clear session và raise LoginRequired). Chỉ bác bỏ riêng các lỗi DB nếu cần, không bỏ qua kiểm tra sv, is_active và iat. Cân nhắc giới hạn ca dài chỉ cho vai trò nhân viên được cấp phép, không để người dùng tự chọn."
+    }
+  ],
+  "body": "<!-- secagent-review:2b78fd13b8509cc8d1677a89eb254ad588eb55b8 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

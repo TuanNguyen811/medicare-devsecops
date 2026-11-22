@@ -1,0 +1,25 @@
+{
+  "commit_id": "6d5288de01b6f5374d039b0a370279d9bc208e19",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 28,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Path traversal qua tham số letterhead\nCWE-22 · vi phạm R-14\n\nTham số query letterhead do người dùng cung cấp được nối thẳng vào LETTERHEAD_DIR / name mà không đối chiếu allowlist. Có thể dùng ../ hoặc đường dẫn tuyệt đối để đọc file UTF-8 bất kỳ trên server (ví dụ ../../../.env), nội dung được chèn vào phần đầu của file xuất. Vi phạm R-14.\n\n**Đề xuất sửa:** Trong export.read_letterhead, chỉ chấp nhận name nằm trong tập letterheads() (allowlist); nếu không thì dùng DEFAULT_LETTERHEAD. Có thể thêm kiểm tra resolve() nằm trong LETTERHEAD_DIR."
+    },
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Export bệnh án không kiểm tra quyền đối tượng (IDOR)\nCWE-639 · vi phạm R-01\n\nget_record_for_export chỉ db.get(MedicalRecord) rồi trả về; không gọi policy.can_view_record. Route chỉ kiểm tra vai trò (DOCTOR/NURSE/PATIENT), nên bất kỳ bác sĩ/y tá khác khoa hay bệnh nhân khác đều tải được bệnh án của người khác bằng cách đổi record_id. Vi phạm R-01, R-02, R-15; còn ghi audit trước khi kiểm tra quyền.\n\n**Đề xuất sửa:** Trong export.get_record_for_export, dùng cùng đường kiểm tra như service.get_record_for (policy.can_view_record / can_view_patient); nếu không có quyền thì raise NotFound giống hệt bản ghi không tồn tại (R-15), và chỉ ghi audit sau khi kiểm tra quyền thành công."
+    },
+    {
+      "path": "app/medicare/record/router.py",
+      "line": 139,
+      "side": "RIGHT",
+      "body": "**secagent · TP · LOW** — Header Content-Disposition/HTML: xuất HTML không chống XSS rõ ràng cho dữ liệu letterhead đọc tùy ý\nCWE-79\n\nTemplate được render bằng templates.get_template(...).render trực tiếp; cần đảm bảo autoescape bật cho môi trường này (không qua render()). Nếu tắt, các trường như symptoms/notes sẽ gây XSS.\n\n**Đề xuất sửa:** Xác nhận Jinja2 autoescape bật cho .html; thêm header Content-Security-Policy và X-Content-Type-Options: nosniff cho response xuất."
+    }
+  ],
+  "body": "<!-- secagent-review:6d5288de01b6f5374d039b0a370279d9bc208e19 -->\nAI Security Agent nêu 3 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

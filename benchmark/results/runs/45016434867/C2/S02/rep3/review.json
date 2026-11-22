@@ -1,0 +1,25 @@
+{
+  "commit_id": "6d5288de01b6f5374d039b0a370279d9bc208e19",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 27,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Path traversal qua tham số letterhead\nCWE-22 · vi phạm R-14\n\nread_letterhead ghép trực tiếp tên do người dùng gửi (query letterhead) vào LETTERHEAD_DIR mà không đối chiếu allowlist. Giá trị như ../../../../etc/passwd hoặc đường dẫn tuyệt đối đọc được file bất kỳ (UTF-8) và nội dung được chèn vào phiếu xuất. Vi phạm R-14.\n\n**Đề xuất sửa:** Trong export.read_letterhead, chỉ chấp nhận name nằm trong tập export.letterheads() (allowlist); không hợp lệ thì dùng DEFAULT_LETTERHEAD hoặc trả 400. Không ghép đường dẫn từ input người dùng."
+    },
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 40,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — IDOR: export_record không kiểm tra policy.can_view_record\nCWE-639 · vi phạm R-01\n\nget_record_for_export chỉ gọi db.get(MedicalRecord, record_id) rồi ghi audit, không gọi policy.can_view_record(user, patient). Mọi DOCTOR/NURSE/PATIENT đăng nhập đều xuất được bệnh án của bất kỳ bệnh nhân nào, vi phạm R-01, R-02, R-12. Ngoài ra bệnh án không tồn tại và không có quyền phải cùng trả 404 (R-15).\n\n**Đề xuất sửa:** Trong export.get_record_for_export, sau khi lấy record, gọi policy.can_view_record(user, record.patient); nếu sai hoặc record không tồn tại thì raise NotFound (404 giống nhau, R-15). Chỉ ghi audit EXPORT_RECORD sau khi được phép (hoặc ghi cả lần bị từ chối). Dùng cùng cơ chế như record_detail."
+    },
+    {
+      "path": "app/medicare/record/router.py",
+      "line": 122,
+      "side": "RIGHT",
+      "body": "**secagent · TP · LOW** — Header Content-Disposition/export: audit trước khi kiểm tra quyền, nurse khác khoa xuất được\nCWE-862\n\nGhi chú phụ: route dùng clinical_user chỉ theo vai trò, không có kiểm tra theo đối tượng; đã nêu ở finding IDOR.\n\n**Đề xuất sửa:** Xem fix IDOR: dùng policy.can_view_record."
+    }
+  ],
+  "body": "<!-- secagent-review:6d5288de01b6f5374d039b0a370279d9bc208e19 -->\nAI Security Agent nêu 3 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

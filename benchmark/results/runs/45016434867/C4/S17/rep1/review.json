@@ -1,0 +1,13 @@
+{
+  "commit_id": "c195b943bc80e10c3565455ed78bca58393c20bd",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/auth/schemas.py",
+      "line": 8,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — Mass assignment: ProfileForm extra=\"allow\" cho phép tự nâng quyền (role, department_id, password_hash)\nCWE-915\n\nProfileForm cấu hình extra=\"allow\" nên mọi field thừa trong form POST đều được giữ lại. update_profile lặp model_dump(exclude={\"csrf_token\"}) rồi setattr(user, field, value) cho mọi key, nên người dùng đăng nhập có thể ghi đè bất kỳ cột nào của User (role, department_id, password_hash, username, is_active...). Chỉ cần thêm role=admin vào POST.\n\n**Đề xuất sửa:** Trong app/medicare/auth/schemas.py đổi ProfileForm sang extra=\"forbid\" (hoặc ignore). Trong update_profile (app/medicare/auth/router.py) không setattr theo vòng lặp động; chỉ gán tường minh user.full_name = form.full_name và user.phone = form.phone. Thêm test gửi role=admin và xác nhận role không đổi."
+    }
+  ],
+  "body": "<!-- secagent-review:c195b943bc80e10c3565455ed78bca58393c20bd -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

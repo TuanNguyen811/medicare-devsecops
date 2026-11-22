@@ -174,7 +174,7 @@ Tài liệu này có 3 vai trò: (1) Agent đọc được qua công cụ, (2) l
 Chọn chế độ bằng biến repo `SECURITY_GATE_MODE`:
 
 - `traditional`: chặn nếu có bất kỳ phát hiện High/Critical nào (sau khi gộp trùng).
-- `ai-assisted`: chặn nếu có phát hiện High/Critical mà Agent kết luận TP hoặc `NEEDS_REVIEW`, hoặc Agent phát hiện thêm lỗi High/Critical với độ tin cậy ≥ 0,7.
+- `ai-assisted`: chặn nếu có phát hiện High/Critical mà Agent kết luận TP hoặc `NEEDS_REVIEW` hoặc chưa thẩm định, hoặc Agent kết luận TP mức High/Critical với độ tin cậy ≥ 0,7 (lỗi Agent tự tìm thêm, hoặc phát hiện của PR mà công cụ chấm thấp hơn).
 
 Nguyên tắc an toàn:
 

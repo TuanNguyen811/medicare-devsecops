@@ -1,0 +1,13 @@
+{
+  "commit_id": "18982a44942276eae8d97b35abf96eb426b577e6",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/appointment/service.py",
+      "line": 133,
+      "side": "RIGHT",
+      "body": "**secagent · TP · MEDIUM** — Race condition đặt trùng lịch bác sĩ: bỏ unique index, kiểm tra trùng không có khóa\nCWE-362 · vi phạm R-13\n\nPR xóa index unique uq_doctor_slot_active (DB là nguồn sự thật) và thay bằng kiểm tra check-then-insert trong book(): _active_around rồi db.add/flush, không có khóa hàng hay ràng buộc. Hai request đồng thời cùng thấy khung giờ trống và đều insert thành công, vi phạm R-13 (một bác sĩ không có hai lịch hẹn còn hiệu lực trùng giờ).\n\n**Đề xuất sửa:** Trong service.book, khóa hàng bác sĩ (select(User).where(id==doctor_id).with_for_update()) hoặc dùng pg_advisory_xact_lock(doctor_id) trước khi gọi _active_around để tuần tự hóa việc đặt lịch cùng bác sĩ. Hoặc thêm ràng buộc ở DB: EXCLUDE USING gist (doctor_id WITH =, tstzrange(scheduled_at, scheduled_at + duration_minutes * interval '1 minute') WITH &&) WHERE status <> 'CANCELLED' trong migration 0004, và bắt IntegrityError để ném Conflict như trước."
+    }
+  ],
+  "body": "<!-- secagent-review:18982a44942276eae8d97b35abf96eb426b577e6 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

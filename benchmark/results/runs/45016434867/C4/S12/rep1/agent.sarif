@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-532",
+              "name": "secagent/CWE-532",
+              "shortDescription": {
+                "text": "PHI/PII (CCCD, số bảo hiểm, chẩn đoán) bị ghi vào log ứng dụng"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-532"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "secagent/CWE-779",
+              "name": "secagent/CWE-779",
+              "shortDescription": {
+                "text": "Job compaction xóa bản ghi audit VIEW_RECORD (mất tính toàn vẹn nhật ký audit)"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-779"
+                ],
+                "security-severity": "5.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-532",
+          "level": "error",
+          "message": {
+            "text": "PHI/PII (CCCD, số bảo hiểm, chẩn đoán) bị ghi vào log ứng dụng: _log_event ghi national_id, insurance_number, diagnosis và patient_code vào log JSON mỗi lần xem/sửa hồ sơ; log được gửi tới Loki, ngoài kiểm soát truy cập của policy.can_*, và không bị giới hạn retention như bảng audit."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/record/service.py"
+                },
+                "region": {
+                  "startLine": 22
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-779",
+          "level": "warning",
+          "message": {
+            "text": "Job compaction xóa bản ghi audit VIEW_RECORD (mất tính toàn vẹn nhật ký audit): compact_repeated_views thực hiện DELETE trên AuditLog. Dùng lag theo cửa sổ trượt nên chuỗi xem liên tục (mỗi lần cách <30 phút) bị xóa gần hết, chỉ giữ lần đầu; mất thời điểm truy cập thực tế vào hồ sơ bệnh án, trái yêu cầu audit append-only."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/audit/maintenance.py"
+                },
+                "region": {
+                  "startLine": 41
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "verdict": "TP",
+            "confidence": 0.6
+          }
+        }
+      ]
+    }
+  ]
+}

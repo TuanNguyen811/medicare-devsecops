@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-915",
+              "name": "secagent/CWE-915",
+              "shortDescription": {
+                "text": "Mass assignment: ProfileForm extra=\"allow\" cho phép tự nâng quyền (role, department_id, password_hash)"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-915"
+                ],
+                "security-severity": "9.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-915",
+          "level": "error",
+          "message": {
+            "text": "Mass assignment: ProfileForm extra=\"allow\" cho phép tự nâng quyền (role, department_id, password_hash): ProfileForm cấu hình extra=\"allow\" nên mọi field thừa trong form POST đều được giữ lại. update_profile lặp model_dump(exclude={\"csrf_token\"}) rồi setattr(user, field, value) cho mọi key, nên người dùng đăng nhập có thể ghi đè bất kỳ cột nào của User (role, department_id, password_hash, username, is_active...). Chỉ cần thêm role=admin vào POST."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/auth/schemas.py"
+                },
+                "region": {
+                  "startLine": 8
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "9.5",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        }
+      ]
+    }
+  ]
+}

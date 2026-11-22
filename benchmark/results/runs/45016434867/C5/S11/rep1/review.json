@@ -1,0 +1,13 @@
+{
+  "commit_id": "bfd2192a3106f064f6fa88709fb0d92d6e2e8509",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/pyproject.toml",
+      "line": 43,
+      "side": "RIGHT",
+      "body": "**secagent · TP · LOW** — package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown (semgrep)\nCWE-829\n\nKhối [tool.uv] mới thêm không đặt exclude-newer (cooldown) nên có thể kéo gói mới phát hành chưa kiểm chứng. Rủi ro thấp vì có uv.lock.\n\n**Đề xuất sửa:** Trong [tool.uv] của app/pyproject.toml thêm exclude-newer = \"7 days\" (cooldown phụ thuộc)."
+    }
+  ],
+  "body": "<!-- secagent-review:bfd2192a3106f064f6fa88709fb0d92d6e2e8509 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}
