@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,8 @@ from medicare.record.models import MedicalRecord
 
 ENTITY = "prescription"
 MAX_ITEMS = 20
+IMPORT_MAX_BYTES = 256 * 1024
+IMPORT_MAX_ROWS = 2000
 
 
 class PrescriptionError(ValueError):
@@ -111,3 +115,63 @@ def add_medicine(db: Session, code: str, name: str, unit: str, unit_price: str) 
     db.add(medicine)
     db.flush()
     return medicine
+
+
+class MedicineRow(BaseModel):
+    """One entry of a catalogue file; strict, so YAML booleans or dates are not coerced."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", str_strip_whitespace=True)
+
+    code: str = Field(min_length=1, max_length=20)
+    name: str = Field(min_length=1, max_length=100)
+    unit: str = Field(min_length=1, max_length=20)
+    unit_price: int = Field(ge=0, le=999_999_999_999)
+
+
+def import_medicines(db: Session, content: bytes) -> tuple[int, int]:
+    """Add or update catalogue entries from a YAML file; all rows or none.
+
+    Expected layout:
+        medicines:
+          - {code: PARA500, name: Paracetamol 500mg, unit: viên, unit_price: 1500}
+    Returns (added, updated).
+    """
+    if len(content) > IMPORT_MAX_BYTES:
+        raise PrescriptionError(f"Tệp quá lớn (tối đa {IMPORT_MAX_BYTES // 1024} KB)")
+    try:
+        data = yaml.safe_load(content.decode("utf-8"))
+    except (UnicodeDecodeError, yaml.YAMLError):
+        raise PrescriptionError("Tệp không phải YAML hợp lệ (mã hóa UTF-8)") from None
+    rows = data.get("medicines") if isinstance(data, dict) else None
+    if not isinstance(rows, list) or not rows:
+        raise PrescriptionError("Tệp phải có danh sách thuốc dưới khóa medicines")
+    if len(rows) > IMPORT_MAX_ROWS:
+        raise PrescriptionError(f"Tối đa {IMPORT_MAX_ROWS} thuốc mỗi lần nhập")
+    parsed: dict[str, MedicineRow] = {}
+    for number, row in enumerate(rows, start=1):
+        try:
+            item = MedicineRow.model_validate(row)
+        except ValidationError:
+            raise PrescriptionError(
+                f"Thuốc thứ {number}: cần đủ code, name, unit, unit_price (số nguyên, đồng)"
+            ) from None
+        code = item.code.upper()
+        if code in parsed:
+            raise PrescriptionError(f"Thuốc thứ {number}: mã {code} bị lặp trong tệp")
+        parsed[code] = item
+    existing = {
+        m.code: m for m in db.scalars(select(Medicine).where(Medicine.code.in_(parsed)))
+    }
+    added = updated = 0
+    for code, item in parsed.items():
+        medicine = existing.get(code)
+        if medicine is None:
+            db.add(Medicine(code=code, name=item.name, unit=item.unit,
+                            unit_price=Decimal(item.unit_price)))
+            added += 1
+        else:
+            medicine.name, medicine.unit = item.name, item.unit
+            medicine.unit_price = Decimal(item.unit_price)
+            updated += 1
+    db.flush()
+    return added, updated
