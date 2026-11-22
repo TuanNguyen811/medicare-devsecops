@@ -194,3 +194,16 @@ def test_truths_are_written_as_json():
                     violated_rules=frozenset({"R-17", "R-04"}))
     (data,) = json.loads(json.dumps(ev._truth_dicts({"S07": [rate]})))["S07"]
     assert data["violated_rules"] == ["R-04", "R-17"]
+
+
+def test_a_bug_pinned_at_any_listed_location_matches_once():
+    xss = ev.Truth("S06-1", "S06", "XSS", "pattern", frozenset({"CWE-79"}),
+                   "app/templates/detail.html", 29, 29,
+                   also=(("app/medicare/record/service.py", 108, 121),))
+    sink = P("app/templates/detail.html", 30, cwes=["CWE-79"])
+    source = P("app/medicare/record/service.py", 115, cwes=["CWE-80"])
+    elsewhere = P("app/medicare/record/router.py", 115, cwes=["CWE-79"])
+    assert ev.matches(sink, xss) and ev.matches(source, xss)
+    assert not ev.matches(elsewhere, xss)
+    s = ev.score([sink, source], [xss], strict=True)
+    assert (s.tp, s.fp) == ({"S06-1"}, 0)  # two reports of the same bug: one TP, no FP

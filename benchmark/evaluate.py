@@ -10,7 +10,8 @@ Units and matching (addendum 8.4):
   TP. NEEDS_REVIEW is never a detection: the strict view counts it as an FP, the lenient view
   ignores it (spec 5.3).
 - A prediction matches a ground-truth vulnerability when one of its locations is in the same
-  file with lines within +-3 of the vulnerable range and in the same CWE family (or names one
+  file with lines within +-3 of the vulnerable range (or of one of the truth's `also` ranges:
+  other places where the same bug can be pinned, e.g. source and sink; still one bug) and in the same CWE family (or names one
   of its scanner `rules`, or, for an agent finding, one of the business rules R-xx the bug
   violates: the CWE of a logic bug is a matter of judgement, the broken rules are listed in
   the ground truth); a DAST prediction matches on route (`METHOD /template`) and family.
@@ -63,6 +64,11 @@ class Truth:
     routes: frozenset[str] = frozenset()
     rules: frozenset[str] = frozenset()
     violated_rules: frozenset[str] = frozenset()
+    also: tuple[Span, ...] = ()  # other places where the same bug can be pinned
+
+    @property
+    def locations(self) -> tuple[Span, ...]:
+        return ((self.file, self.start, self.end), *self.also)
 
 
 @dataclass
@@ -96,7 +102,9 @@ def load_truth(scenario: sc.Scenario) -> list[Truth]:
             start=int(lines[0]), end=int(lines[-1]),
             routes=frozenset(item.get("routes") or []),
             rules=frozenset(item.get("rules") or []),
-            violated_rules=_rule_set(item.get("violated_rule"))))
+            violated_rules=_rule_set(item.get("violated_rule")),
+            also=tuple((a["file"], int(a["lines"][0]), int(a["lines"][-1]))
+                       for a in item.get("also") or [])))
     return out
 
 
@@ -111,8 +119,9 @@ def matches(p: Prediction, t: Truth) -> bool:
         if file.startswith("dast:"):
             if file.removeprefix("dast:") in t.routes and same_family:
                 return True
-        elif (file == t.file and start - LINE_SLACK <= t.end and end + LINE_SLACK >= t.start
-              and (same_family or same_rule or bool(p.rules & t.rules))):
+        elif (same_family or same_rule or bool(p.rules & t.rules)) and any(
+                file == f and start - LINE_SLACK <= last and end + LINE_SLACK >= first
+                for f, first, last in t.locations):
             return True
     return False
 
@@ -219,7 +228,8 @@ class EvaluateError(Exception):
 def _truth_dicts(truths: dict[str, list[Truth]]) -> dict[str, list[dict]]:
     return {k: [t.__dict__ | {"cwes": sorted(t.cwes), "routes": sorted(t.routes),
                               "rules": sorted(t.rules),
-                              "violated_rules": sorted(t.violated_rules)} for t in v]
+                              "violated_rules": sorted(t.violated_rules),
+                              "also": [list(a) for a in t.also]} for t in v]
             for k, v in truths.items()}
 
 
