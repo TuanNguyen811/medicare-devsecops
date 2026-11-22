@@ -44,6 +44,68 @@ def test_markdown_report():
     assert text.index("<details>") > text.index("SQL ghép chuỗi")
 
 
+def dast(route: str, rule: str = "10020", verdict: str = "TP", sev: str = "MEDIUM") -> ReportEntry:
+    alert = entry(verdict, source="zap", finding_id=f"zap:{rule}:{route}",
+                  finding_ids=[f"zap:{rule}:{route}"], title=f"{rule} (zap)", severity=sev,
+                  cwe="CWE-1021", reasoning="Ứng dụng không đặt X-Frame-Options.",
+                  file=f"dast:{route}", fix=Fix(description="Thêm middleware đặt X-Frame-Options: DENY."))
+    return alert.model_copy(update={"line": 0, "evidence": []})  # as DAST entries come
+
+
+def test_clean_pr_with_app_wide_dast_alerts_reads_as_clean():
+    """Header warnings of the running app are not reported as the PR's vulnerabilities."""
+    fp = entry("FP", line=3, reasoning="Hằng số, không phải dữ liệu người dùng", fix=None)
+    alerts = [dast("GET /"), dast("GET /login"), dast("GET /health", rule="10021", sev="LOW")]
+    text = render_markdown(Report(meta=meta(), findings=[fp, *alerts]), head_sha="abc123")
+    summary = text[:text.index("<details>")]
+    assert "Không tìm thấy lỗ hổng nào trong code của PR" in summary
+    assert "🔴" not in text and "lỗi thật" not in summary
+    assert "Cảnh báo khi quét ứng dụng đang chạy (ZAP): 3" in text
+    assert "có thể đã có từ trước PR" in text
+    # the same rule on several routes is one row, with its fix once
+    assert text.count("Thêm middleware đặt X-Frame-Options") == 2  # 10020 and 10021 rows
+    assert "`GET /`, `GET /login`" in text
+    assert "Báo nhầm của công cụ quét đã gỡ: 1" in text
+
+
+def test_vulnerabilities_of_the_pr_come_first_and_severe_dast_stays_visible():
+    tp = entry()
+    agent = entry(source="agent", finding_id="agent:1", finding_ids=[], title="IDOR khi xuất")
+    sqli = dast("GET /search", rule="40018", sev="HIGH")
+    text = render_markdown(Report(meta=meta(), findings=[dast("GET /"), tp, agent, sqli]))
+    summary = text[:text.index("### ")]
+    assert "🔴 3 lỗi cần sửa" in summary and "1 do Agent tự tìm" in summary
+    assert "Cảnh báo khi quét ứng dụng đang chạy (ZAP): 1" in text  # only the MEDIUM one
+    main = text[:text.index("<details>")]
+    assert "40018 (zap)" in main and "IDOR khi xuất" in main and "SQL ghép chuỗi" in main
+
+
+def test_dast_alert_the_gate_blocks_or_nobody_judged_stays_visible():
+    """The gate blocks on the scanner's severity: an alert ZAP rated HIGH stays in view even if
+    the agent rated it MEDIUM; so does an alert left as NEEDS_REVIEW."""
+    lowered = dast("GET /a", rule="40012").model_copy(update={"tool_severity": "HIGH"})
+    unjudged = dast("GET /b", rule="10021", verdict="NEEDS_REVIEW", sev="LOW")
+    text = render_markdown(Report(meta=meta(), findings=[lowered, unjudged, dast("GET /")]))
+    main = text[:text.index("<details>")]
+    assert "40012 (zap)" in main and "`dast:GET /b:0`" in main
+    assert "Cảnh báo khi quét ứng dụng đang chạy (ZAP): 1" in text
+
+
+def test_only_needs_review_gets_a_neutral_heading_and_a_cut_short_run_is_not_clean():
+    review = entry("NEEDS_REVIEW")
+    text = render_markdown(Report(meta=meta(), findings=[review]))
+    assert "### 🟡 Cần người xem" in text and "🔴" not in text
+    cut = render_markdown(Report(meta=meta(limit_hit=True), findings=[dast("GET /")]))
+    assert "Agent chưa thẩm định xong" in cut and "Không tìm thấy lỗ hổng" not in cut
+
+
+def test_table_cells_keep_carriage_returns_out():
+    alert = dast("GET /").model_copy(update={"reasoning": "dòng 1\r\ndòng 2\rdòng 3"})
+    text = render_markdown(Report(meta=meta(), findings=[alert]))
+    row = next(line for line in text.split("\n") if "dòng 1" in line)
+    assert "\r" not in row and "dòng 1 dòng 2 dòng 3" in row
+
+
 def test_markdown_report_does_not_name_how_the_llm_was_reached():
     """The PR comment shows the model, not whether it ran with an API key or claude-mcp."""
     for provider in ("claude-mcp", "anthropic", "gemini"):

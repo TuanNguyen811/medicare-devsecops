@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from secagent.context.redact import redact
@@ -11,10 +12,14 @@ MARKER = "<!-- secagent-report -->"
 MAX_CHARS = 60_000  # GitHub comments are limited to 65 536 characters
 MAX_ROWS = 200
 ICON = {"TP": "🔴", "NEEDS_REVIEW": "🟡", "FP": "🟢"}
+APP_VERDICT = {"TP": "xác nhận", "NEEDS_REVIEW": "cần xem", "FP": "báo nhầm"}
+DAST_PREFIX = "dast:"
+SEVERE = {"HIGH", "CRITICAL"}
+SEVERITY_ORDER = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
 
 
 def _cell(text: str) -> str:
-    return text.replace("|", "\\|").replace("\n", " ")
+    return re.sub(r"\s*[\r\n]+\s*", " ", text).replace("|", "\\|")
 
 
 def _where(e: ReportEntry) -> str:
@@ -36,27 +41,73 @@ def _details(e: ReportEntry) -> str:
     return "\n".join(lines)
 
 
+def _is_app_alert(e: ReportEntry) -> bool:
+    """A judged, non-blocking finding of the scan of the running app (ZAP): usually app-wide
+    settings such as security headers, often there before this PR. It must be low for the
+    scanners (the gate blocks on their severity) and for the agent; NEEDS_REVIEW stays visible."""
+    return (e.file.startswith(DAST_PREFIX) and e.verdict != "NEEDS_REVIEW"
+            and e.severity not in SEVERE and (e.tool_severity or "LOW") not in SEVERE)
+
+
+def _app_alerts(alerts: list[ReportEntry]) -> list[str]:
+    """One row per alert kind and verdict, with the routes it was seen on."""
+    groups: dict[tuple[str, str, str], list[ReportEntry]] = {}
+    for e in alerts:
+        groups.setdefault((e.title, e.verdict, e.severity), []).append(e)
+    rows = ["| Kết luận | Mức | Cảnh báo | Route | Phân tích | Đề xuất sửa |",
+            "|---|---|---|---|---|---|"]
+    for (title, verdict, _), items in groups.items():
+        first = items[0]
+        routes = ", ".join(f"`{_cell(e.file.removeprefix(DAST_PREFIX))}`" for e in items)
+        fix = first.fix.description if first.fix else ""
+        rows.append(f"| {APP_VERDICT[verdict]} | {first.severity} | {_cell(title)} | {routes} | "
+                    f"{_cell(first.reasoning)} | {_cell(fix)} |")
+    return rows
+
+
 def render_markdown(report: Report, head_sha: str | None = None) -> str:
     findings = report.findings
-    counts = Counter(e.verdict for e in findings)
-    new = sum(1 for e in findings if e.source == "agent")
-    summary = (f"**Kết quả:** {counts['TP']} lỗi thật (TP) · {counts['NEEDS_REVIEW']} cần người "
-               f"xem (NEEDS_REVIEW) · {counts['FP']} báo nhầm (FP) · trong đó {new} phát hiện "
-               "mới do Agent tự tìm")
-    if head_sha:
-        summary += f" · commit `{head_sha[:7]}`"
-    parts = [MARKER, "## 🛡️ AI Security Agent", "", summary, ""]
-    if findings:
-        parts += ["| | Mức | Nguồn | Phát hiện | Vị trí | Độ tin cậy |",
-                  "|---|---|---|---|---|---|"]
-        parts += [f"| {ICON[e.verdict]} {e.verdict} | {e.severity} | {e.source} | "
-                  f"{_cell(e.title)} | `{_cell(_where(e))}` | {e.confidence:.2f} |"
-                  for e in findings[:MAX_ROWS]]
-        if len(findings) > MAX_ROWS:
-            parts.append(f"\n… và {len(findings) - MAX_ROWS} phát hiện khác (xem report.json).")
-    else:
-        parts.append("Không có phát hiện nào cần thẩm định.")
+    alerts = [e for e in findings if _is_app_alert(e)]
+    own = [e for e in findings if not _is_app_alert(e)]
+    issues = sorted((e for e in own if e.verdict != "FP"),
+                    key=lambda e: (e.verdict != "TP", -SEVERITY_ORDER.get(e.severity, 0)))
+    fps = [e for e in own if e.verdict == "FP"]
+    counts = Counter(e.verdict for e in issues)
+    new = sum(1 for e in issues if e.source == "agent")
     m = report.meta
+    if issues:
+        found = []
+        if counts["TP"]:
+            found.append(f"🔴 {counts['TP']} lỗi cần sửa"
+                         + (f" ({new} do Agent tự tìm, công cụ quét không báo)" if new else ""))
+        if counts["NEEDS_REVIEW"]:
+            found.append(f"🟡 {counts['NEEDS_REVIEW']} cần người xem")
+        summary = "**Code của PR này:** " + " · ".join(found)
+    elif m.limit_hit or m.error:
+        summary = ("⚠️ **Agent chưa thẩm định xong**"
+                   + (f" ({m.error})" if m.error else " (hết thời gian hoặc số bước)")
+                   + ": chưa thể kết luận code của PR này không có lỗ hổng.")
+    else:
+        summary = "✅ **Không tìm thấy lỗ hổng nào trong code của PR này.**"
+    extra = []
+    if fps:
+        extra.append(f"🟢 {len(fps)} báo nhầm của công cụ quét đã được gỡ")
+    if alerts:
+        extra.append(f"ℹ️ {len(alerts)} cảnh báo khi quét ứng dụng đang chạy, xem cuối báo cáo")
+    if head_sha:
+        extra.append(f"commit `{head_sha[:7]}`")
+    parts = [MARKER, "## 🛡️ AI Security Agent", "", summary]
+    if extra:
+        parts += ["", " · ".join(extra)]
+    parts.append("")
+    if issues:
+        parts += ["### 🔴 Lỗi cần sửa" if counts["TP"] else "### 🟡 Cần người xem", "",
+                  "| | Mức | Lỗ hổng | Vị trí | Nguồn | Độ tin cậy |", "|---|---|---|---|---|---|"]
+        parts += [f"| {ICON[e.verdict]} {e.verdict} | {e.severity} | {_cell(e.title)} | "
+                  f"`{_cell(_where(e))}` | {e.source} | {e.confidence:.2f} |"
+                  for e in issues[:MAX_ROWS]]
+        if len(issues) > MAX_ROWS:
+            parts.append(f"\n… và {len(issues) - MAX_ROWS} mục khác (xem report.json).")
     # How the LLM was reached (API key or claude-mcp) stays in report.json, not on the PR.
     head = f"model `{m.model}` · chiến lược `{m.strategy}`"
     footer = ["", "---", (
@@ -66,9 +117,9 @@ def render_markdown(report: Report, head_sha: str | None = None) -> str:
         f"{'có' if m.limit_hit else 'không'}" + (f" · lỗi: {m.error}" if m.error else "")
         + "</sub>")]
 
-    fps = [e for e in findings if e.verdict == "FP"]
     fp_lines = [f"- **{_cell(e.title)}** — `{_where(e)}`: {e.reasoning}" for e in fps]
-    details = [_details(e) for e in findings if e.verdict != "FP"]
+    details = [_details(e) for e in issues]
+    alert_rows = _app_alerts(alerts) if alerts else []
     budget = MAX_CHARS - len("\n".join(parts + footer)) - 600
     body, dropped = [], 0
     if details:
@@ -87,8 +138,21 @@ def render_markdown(report: Report, head_sha: str | None = None) -> str:
                 continue
             shown.append(line)
             budget -= len(line) + 1
-        body += ["", f"<details><summary>{ICON['FP']} Báo nhầm (FP): {len(fps)}</summary>", "",
-                 *shown, "", "</details>"]
+        body += ["", f"<details><summary>{ICON['FP']} Báo nhầm của công cụ quét đã gỡ: "
+                     f"{len(fps)}</summary>", "", *shown, "", "</details>"]
+    if alert_rows:
+        shown = []
+        for row in alert_rows:
+            if len(row) + 1 > budget:
+                dropped += 1
+                continue
+            shown.append(row)
+            budget -= len(row) + 1
+        body += ["", "<details><summary>ℹ️ Cảnh báo khi quét ứng dụng đang chạy (ZAP): "
+                     f"{len(alerts)}</summary>", "",
+                 "Các cảnh báo này đến từ việc quét ứng dụng đang chạy. Chúng thường là cấu hình "
+                 "chung của ứng dụng (ví dụ header bảo mật), có thể đã có từ trước PR này, và "
+                 "không làm PR bị chặn ở mức MEDIUM/LOW.", "", *shown, "", "</details>"]
     if dropped:
         body += ["", f"_… cắt bớt {dropped} mục do giới hạn độ dài comment; xem đầy đủ trong "
                      "report.json (artifact `agent-report`)._"]

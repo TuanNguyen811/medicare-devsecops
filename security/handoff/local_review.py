@@ -28,7 +28,7 @@ import time
 from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from handoff import pack  # noqa: E402
+from handoff import HandoffError, pack  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 AGENT_JOB = "ai-security-agent"
@@ -149,6 +149,47 @@ def hide(tree: Path, base: str, head: str, hidden: list[str]) -> None:
     print(f"local-review: hidden from the agent: {', '.join(paths)}", flush=True)
 
 
+def benchmark_view(tree: Path, base: str, head: str) -> None:
+    """What the benchmark's agent saw (benchmark/scenario.py materialize): the files of the
+    benchmark base commit, neutralized the same way, plus the PR's changes. Hides everything
+    main gained since (results, answer key, tooling) and SANITIZED; applies the same rewrites."""
+    sys.path.insert(0, str(ROOT / "benchmark"))
+    import scenario as sc  # needs PyYAML
+
+    origin = sc.base_commit()
+    # The commit the PR branched from (the PR's base sha moves when main does).
+    fork = sh("git", "-C", str(tree), "merge-base", base, head).strip()
+
+    def since(kind: str) -> list[str]:
+        out = sh("git", "-C", str(tree), "-c", "core.quotePath=false", "diff", "--name-only",
+                 "--no-renames", f"--diff-filter={kind}", "-z", origin, fork)
+        return [f for f in out.split("\0") if f]
+
+    pr_files = set(sh("git", "-C", str(tree), "-c", "core.quotePath=false", "diff",
+                      "--name-only", "--no-renames", "-z", f"{base}...{head}").split("\0"))
+    # Files main changed or removed since the benchmark base go back to that version, unless
+    # the PR itself changes them (the PR's version is what is under review).
+    restore = [f for f in since("MDT") if f not in pr_files]
+    for start in range(0, len(restore), 100):
+        sh("git", "-C", str(tree), "checkout", origin, "--",
+           *(f":(literal){f}" for f in restore[start:start + 100]))
+    # Files main added since go away, with the benchmark's sanitized paths.
+    hidden = sorted({*sc.SANITIZED, *since("A")})
+    hide(tree, base, head, [p for p in hidden
+                            if not any(p.startswith(q + "/") for q in hidden if q != p)])
+    for rel, edits in sc.REWRITES.items():
+        path = tree / rel
+        text = path.read_bytes().decode("utf-8")
+        for old, new in edits:
+            if old not in text:
+                sys.exit(f"local-review: {rel}: text to neutralize not found: {old[:60]!r}")
+            text = text.replace(old, new)
+        path.write_bytes(text.encode("utf-8"))
+    (tree / "README.md").write_bytes(sc.NEUTRAL_README.encode("utf-8"))
+    print("local-review: benchmark view (base files neutralized, later additions hidden)",
+          flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--pr", type=int, required=True)
@@ -158,6 +199,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="leave DIR (or a file) out of the checkout the agent reads. For a "
                          "benchmark scenario opened as a PR, hide the answer key: benchmark, "
                          "docs/benchmark-results.md and docs/superpowers")
+    ap.add_argument("--benchmark-view", action="store_true",
+                    help="for a benchmark scenario opened as a PR: show the agent exactly what "
+                         "the benchmark showed it (see benchmark_view); needs PyYAML")
     ap.add_argument("--save", metavar="DIR", help="copy the agent's output (trace too) to DIR")
     args = ap.parse_args(argv)
 
@@ -184,6 +228,8 @@ def main(argv: list[str] | None = None) -> int:
         sh("git", "worktree", "add", "--quiet", "--detach", str(tree), head)
         if args.hide:
             hide(tree, base, head, args.hide)
+        if args.benchmark_view:
+            benchmark_view(tree, base, head)
         out = work / "out"
         env = {**os.environ, "LLM_PROVIDER": "claude-mcp", "PYTHONIOENCODING": "utf-8"}
         env.pop("VIRTUAL_ENV", None)
@@ -198,8 +244,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"local-review: secagent exited {done.returncode}; nothing posted "
                   "(the job will time out and the gate falls back to traditional mode)")
             return done.returncode
+        report = json.loads((out / "report.json").read_text(encoding="utf-8"))
+        if (report.get("meta") or {}).get("error"):
+            print(f"local-review: secagent stopped midway ({report['meta']['error']}); "
+                  "nothing posted")
+            return 3
         body = work / "comment.md"
-        body.write_text(pack(out, head), encoding="utf-8", newline="")
+        try:
+            body.write_text(pack(out, head), encoding="utf-8", newline="")
+        except HandoffError as exc:
+            print(f"local-review: {exc}; nothing posted")
+            return 4
         sh("gh", "api", f"repos/{repo}/issues/{args.pr}/comments", "-F", f"body=@{body}")
         if in_time:
             print(f"local-review: report posted to {repo}#{args.pr}; {AGENT_JOB} picks it up",

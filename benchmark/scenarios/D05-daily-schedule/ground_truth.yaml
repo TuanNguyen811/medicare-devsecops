@@ -1,0 +1,7 @@
+# PR tính năng thông thường, không có mồi nhử. Trang chỉ đọc (GET), chỉ ADMIN/lễ tân/bác sĩ/y tá
+# (require_roles); truy vấn dựng trên service._scoped nên bác sĩ chỉ thấy lịch mình khám, y tá chỉ
+# thấy bệnh nhân cùng khoa (R-01, R-13), tham số doctor_id bị bỏ qua với bác sĩ. Ngày, trạng thái,
+# bác sĩ, trang đều được kiểm tra (allowlist trạng thái, parse_id, date.fromisoformat), lọc bằng
+# biểu thức SQLAlchemy có tham số; template autoescape, không hiện CCCD/BHYT hay nội dung bệnh án.
+# Không có lỗ hổng.
+findings: []

@@ -1,0 +1,355 @@
+diff --git a/app/medicare/appointment/router.py b/app/medicare/appointment/router.py
+index a5f086f..4853154 100644
+--- a/app/medicare/appointment/router.py
++++ b/app/medicare/appointment/router.py
+@@ -1,4 +1,5 @@
+-from datetime import UTC, datetime
++from datetime import UTC, date, datetime, timedelta
++from urllib.parse import urlencode
+ 
+ from fastapi import APIRouter, Depends, Form, HTTPException, Request
+ from fastapi.responses import RedirectResponse, Response
+@@ -8,13 +9,14 @@ from sqlalchemy.orm import Session
+ 
+ from medicare import policy
+ from medicare.appointment import service
++from medicare.appointment.models import AppointmentStatus
+ from medicare.appointment.schemas import FIELD_LABELS, AppointmentForm
+ from medicare.auth.models import Role, User
+ from medicare.common.auth import get_current_user, require_roles
+ from medicare.common.csrf import verify_csrf
+ from medicare.common.errors import Conflict
+-from medicare.common.ids import ObjectId
+-from medicare.common.templating import flash, render
++from medicare.common.ids import ObjectId, parse_id
++from medicare.common.templating import VN_TZ, flash, render
+ from medicare.db import get_db
+ from medicare.patient.models import Patient
+ 
+@@ -22,6 +24,7 @@ router = APIRouter()
+ 
+ booker_user = require_roles(Role.PATIENT, Role.RECEPTIONIST)
+ receptionist_user = require_roles(Role.RECEPTIONIST)
++staff_user = require_roles(Role.ADMIN, Role.RECEPTIONIST, Role.DOCTOR, Role.NURSE)
+ 
+ STATUS_LABELS = {
+     "REQUESTED": ("Chờ duyệt", "warning"),
+@@ -68,6 +71,64 @@ def list_appointments(
+     )
+ 
+ 
++def _parse_day(value: str, default: date) -> date:
++    try:
++        day = date.fromisoformat(value.strip())
++    except ValueError:
++        return default
++    return day if date.min < day < date.max else default
++
++
++def _schedule_url(filters: dict, **changes) -> str:
++    params = {k: v for k, v in (filters | changes).items() if v not in ("", None)}
++    return "/appointments/schedule?" + urlencode(params)
++
++
++@router.get("/appointments/schedule")
++def appointment_schedule(
++    request: Request,
++    day: str = "",
++    status: str = "",
++    doctor_id: str = "",
++    page: str = "1",
++    user: User = Depends(staff_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    today = datetime.now(VN_TZ).date()
++    selected_day = _parse_day(day, today)
++    selected_status = status if status in STATUS_LABELS else ""
++    # A doctor's schedule is always their own; the doctor filter is for the other roles.
++    doctor_filter = parse_id(doctor_id) if user.role != Role.DOCTOR else None
++    result = service.schedule_for(
++        db,
++        user,
++        selected_day,
++        status=AppointmentStatus(selected_status) if selected_status else None,
++        doctor_id=doctor_filter,
++        page=parse_id(page) or 1,
++    )
++    filters = {"day": selected_day.isoformat(), "status": selected_status,
++               "doctor_id": doctor_filter}
++    one_day = timedelta(days=1)
++    return render(
++        request,
++        "appointment/schedule.html",
++        {
++            "result": result,
++            "filters": filters,
++            "day": selected_day,
++            "is_today": selected_day == today,
++            "doctors": service.bookable_doctors(db) if user.role != Role.DOCTOR else [],
++            "status_labels": STATUS_LABELS,
++            "prev_day_url": _schedule_url(filters, day=(selected_day - one_day).isoformat()),
++            "next_day_url": _schedule_url(filters, day=(selected_day + one_day).isoformat()),
++            "prev_page_url": _schedule_url(filters, page=result.page - 1),
++            "next_page_url": _schedule_url(filters, page=result.page + 1),
++            "breadcrumbs": [*_CRUMBS, ("Lịch khám theo ngày", None)],
++        },
++    )
++
++
+ @router.get("/appointments/new")
+ def new_appointment_form(
+     request: Request,
+diff --git a/app/medicare/appointment/service.py b/app/medicare/appointment/service.py
+index f73e013..3ac6145 100644
+--- a/app/medicare/appointment/service.py
++++ b/app/medicare/appointment/service.py
+@@ -1,6 +1,7 @@
+-from datetime import datetime, timedelta
++from dataclasses import dataclass
++from datetime import date, datetime, time, timedelta
+ 
+-from sqlalchemy import Select, false, select
++from sqlalchemy import Select, false, func, select
+ from sqlalchemy.exc import IntegrityError
+ from sqlalchemy.orm import Session
+ 
+@@ -9,12 +10,14 @@ from medicare.appointment.models import Appointment, AppointmentStatus
+ from medicare.auth.models import Role, User
+ from medicare.common import metrics
+ from medicare.common.errors import Conflict, NotFound
++from medicare.common.templating import VN_TZ
+ from medicare.patient.models import Patient
+ from medicare.patient.service import get_patient_for
+ 
+ SLOT_MINUTES = (0, 30)
+ BOOKING_HORIZON = timedelta(days=365)
+ DOUBLE_BOOKED = "Bác sĩ đã có lịch hẹn vào thời gian này"
++SCHEDULE_PAGE_SIZE = 20
+ 
+ 
+ class AppointmentError(ValueError):
+@@ -42,6 +45,44 @@ def list_for(db: Session, user: User) -> list[Appointment]:
+     return list(db.scalars(stmt))
+ 
+ 
++@dataclass
++class SchedulePage:
++    items: list[Appointment]
++    total: int
++    page: int
++    pages: int
++
++
++def schedule_for(
++    db: Session,
++    user: User,
++    day: date,
++    *,
++    status: AppointmentStatus | None = None,
++    doctor_id: int | None = None,
++    page: int = 1,
++) -> SchedulePage:
++    """Appointments of one calendar day (Vietnam time) in the user's scope, one page at a time."""
++    start = datetime.combine(day, time.min, tzinfo=VN_TZ)
++    stmt = _scoped(user).where(
++        Appointment.scheduled_at >= start,
++        Appointment.scheduled_at < start + timedelta(days=1),
++    )
++    if status is not None:
++        stmt = stmt.where(Appointment.status == status)
++    if doctor_id is not None:
++        stmt = stmt.where(Appointment.doctor_id == doctor_id)
++    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
++    pages = max(1, -(-total // SCHEDULE_PAGE_SIZE))
++    page = min(max(page, 1), pages)
++    stmt = (
++        stmt.order_by(Appointment.scheduled_at, Appointment.id)
++        .limit(SCHEDULE_PAGE_SIZE)
++        .offset((page - 1) * SCHEDULE_PAGE_SIZE)
++    )
++    return SchedulePage(items=list(db.scalars(stmt)), total=total, page=page, pages=pages)
++
++
+ def get_appointment_for(db: Session, user: User, appointment_id: int) -> Appointment:
+     """Missing and not-visible both raise NotFound (R-15)."""
+     appt = db.get(Appointment, appointment_id)
+diff --git a/app/medicare/templates/appointment/schedule.html b/app/medicare/templates/appointment/schedule.html
+new file mode 100644
+index 0000000..e5b584a
+--- /dev/null
++++ b/app/medicare/templates/appointment/schedule.html
+@@ -0,0 +1,73 @@
++{% extends "base.html" %}
++{% block title %}Lịch khám theo ngày{% endblock %}
++{% block content %}
++<div class="d-flex justify-content-between align-items-center mb-3">
++  <h1 class="h5 mb-0">Lịch khám ngày {{ day | date_vn }}{% if is_today %} <span class="badge text-bg-info">Hôm nay</span>{% endif %}</h1>
++  <div class="btn-group btn-group-sm" role="group" aria-label="Chuyển ngày">
++    <a class="btn btn-outline-secondary" href="{{ prev_day_url }}"><i class="bi bi-chevron-left"></i> Ngày trước</a>
++    <a class="btn btn-outline-secondary" href="/appointments/schedule">Hôm nay</a>
++    <a class="btn btn-outline-secondary" href="{{ next_day_url }}">Ngày sau <i class="bi bi-chevron-right"></i></a>
++  </div>
++</div>
++<div class="card mc-card">
++  <div class="card-body pb-0">
++    <form class="row g-2 mb-3" method="get" action="/appointments/schedule">
++      <div class="col-auto">
++        <input class="form-control form-control-sm" type="date" name="day" value="{{ filters.day }}" aria-label="Ngày khám">
++      </div>
++      <div class="col-auto">
++        <select class="form-select form-select-sm" name="status" aria-label="Trạng thái">
++          <option value="">Tất cả trạng thái</option>
++          {% for value, (label, _) in status_labels.items() %}
++          <option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>
++          {% endfor %}
++        </select>
++      </div>
++      {% if doctors %}
++      <div class="col-auto">
++        <select class="form-select form-select-sm" name="doctor_id" aria-label="Bác sĩ">
++          <option value="">Tất cả bác sĩ</option>
++          {% for d in doctors %}
++          <option value="{{ d.id }}"{% if filters.doctor_id == d.id %} selected{% endif %}>{{ d.full_name }}</option>
++          {% endfor %}
++        </select>
++      </div>
++      {% endif %}
++      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-funnel"></i> Lọc</button></div>
++    </form>
++  </div>
++  <div class="table-responsive">
++    <table class="table table-sm table-hover align-middle mb-0">
++      <thead>
++        <tr><th>Giờ khám</th><th>Bệnh nhân</th><th>Bác sĩ</th><th>Lý do khám</th><th>Trạng thái</th></tr>
++      </thead>
++      <tbody>
++        {% for a in result.items %}
++        {% set label, color = status_labels[a.status.value] %}
++        <tr>
++          <td class="text-nowrap">{{ a.scheduled_at | datetime_vn }}</td>
++          <td>{{ a.patient.code }} - {{ a.patient.full_name }}</td>
++          <td>{{ a.doctor.full_name }}</td>
++          <td>{{ a.reason }}</td>
++          <td><span class="badge text-bg-{{ color }}">{{ label }}</span></td>
++        </tr>
++        {% else %}
++        <tr><td colspan="5" class="text-center text-secondary py-3">Không có lịch hẹn trong ngày</td></tr>
++        {% endfor %}
++      </tbody>
++    </table>
++  </div>
++  <div class="card-footer d-flex justify-content-between align-items-center small">
++    <span class="text-secondary">{{ result.total }} lịch hẹn</span>
++    {% if result.pages > 1 %}
++    <nav aria-label="Phân trang">
++      <ul class="pagination pagination-sm mb-0">
++        <li class="page-item{% if result.page == 1 %} disabled{% endif %}"><a class="page-link" href="{{ prev_page_url }}">Trang trước</a></li>
++        <li class="page-item disabled"><span class="page-link">Trang {{ result.page }}/{{ result.pages }}</span></li>
++        <li class="page-item{% if result.page == result.pages %} disabled{% endif %}"><a class="page-link" href="{{ next_page_url }}">Trang sau</a></li>
++      </ul>
++    </nav>
++    {% endif %}
++  </div>
++</div>
++{% endblock %}
+diff --git a/app/medicare/templates/base.html b/app/medicare/templates/base.html
+index a678d05..d3c80f3 100644
+--- a/app/medicare/templates/base.html
++++ b/app/medicare/templates/base.html
+@@ -46,6 +46,9 @@
+         {% if role in ("ADMIN", "RECEPTIONIST", "DOCTOR", "NURSE", "PATIENT") %}
+         <li class="nav-item"><a class="nav-link" href="/appointments"><i class="bi bi-calendar-check"></i> Lịch hẹn</a></li>
+         {% endif %}
++        {% if role in ("ADMIN", "RECEPTIONIST", "DOCTOR", "NURSE") %}
++        <li class="nav-item"><a class="nav-link" href="/appointments/schedule"><i class="bi bi-calendar-day"></i> Lịch khám theo ngày</a></li>
++        {% endif %}
+         {% if role in ("ADMIN", "RECEPTIONIST", "PATIENT") %}
+         <li class="nav-item"><a class="nav-link" href="/invoices"><i class="bi bi-receipt"></i> Hóa đơn</a></li>
+         {% endif %}
+diff --git a/app/tests/test_appointment.py b/app/tests/test_appointment.py
+index 6cf3fed..f16160a 100644
+--- a/app/tests/test_appointment.py
++++ b/app/tests/test_appointment.py
+@@ -177,3 +177,82 @@ def test_nurse_list_scoped_to_department(client, db):
+     login(client, make_user(db, Role.NURSE, department=noi))
+     html = client.get("/appointments").text
+     assert p_noi.code in html and p_ngoai.code not in html
++
++
++def schedule(client, days=1, **params):
++    params.setdefault("day", (date.today() + timedelta(days=days)).isoformat())
++    return client.get("/appointments/schedule", params=params)
++
++
++def test_schedule_shows_selected_day_only(client, db):
++    doc = setup_doctor(db)
++    p_tomorrow, p_later = make_patient(db), make_patient(db)
++    make_appt(db, p_tomorrow, doc, days=1)
++    make_appt(db, p_later, doc, days=2)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    r = schedule(client)
++    assert r.status_code == 200
++    assert p_tomorrow.code in r.text and p_later.code not in r.text
++
++
++def test_schedule_filters_by_status_and_doctor(client, db):
++    doc, other_doc = setup_doctor(db), make_user(db, Role.DOCTOR)
++    requested, confirmed, elsewhere = make_patient(db), make_patient(db), make_patient(db)
++    make_appt(db, requested, doc, hour=9)
++    make_appt(db, confirmed, doc, status=AppointmentStatus.CONFIRMED, hour=10)
++    make_appt(db, elsewhere, other_doc, hour=9)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    html = schedule(client, status="CONFIRMED").text
++    assert confirmed.code in html and requested.code not in html
++    html = schedule(client, doctor_id=str(doc.id)).text
++    assert requested.code in html and confirmed.code in html and elsewhere.code not in html
++
++
++def test_schedule_paginates(client, db):
++    doc = setup_doctor(db)
++    start = slot_dt(hour=7)
++    for i in range(25):
++        db.add(Appointment(patient_id=make_patient(db).id, doctor_id=doc.id,
++                           scheduled_at=start + timedelta(minutes=30 * i), reason="Tái khám",
++                           status=AppointmentStatus.REQUESTED, created_by_id=doc.id))
++    db.flush()
++    login(client, make_user(db, Role.RECEPTIONIST))
++    first, second = schedule(client).text, schedule(client, page="2").text
++    assert first.count("Tái khám") == 20 and "Trang 1/2" in first
++    assert second.count("Tái khám") == 5 and "Trang 2/2" in second
++    assert "25 lịch hẹn" in second
++
++
++def test_schedule_doctor_sees_only_own(client, db):
++    dept = make_department(db)
++    doc, colleague = (make_user(db, Role.DOCTOR, department=dept) for _ in range(2))
++    p_mine, p_theirs = make_patient(db), make_patient(db)
++    make_appt(db, p_mine, doc)
++    make_appt(db, p_theirs, colleague)
++    login(client, doc)
++    html = schedule(client, doctor_id=str(colleague.id)).text
++    assert p_mine.code in html and p_theirs.code not in html
++
++
++def test_schedule_nurse_scoped_to_department(client, db):
++    noi, ngoai = make_department(db, "NOI"), make_department(db, "NGOAI")
++    doc = make_user(db, Role.DOCTOR, department=noi)
++    p_noi, p_ngoai = make_patient(db, department=noi), make_patient(db, department=ngoai)
++    make_appt(db, p_noi, doc, hour=9)
++    make_appt(db, p_ngoai, doc, hour=10)
++    login(client, make_user(db, Role.NURSE, department=noi))
++    html = schedule(client).text
++    assert p_noi.code in html and p_ngoai.code not in html
++    assert 'href="/appointments/schedule"' in client.get("/").text
++
++
++def test_schedule_not_for_patients(client, db):
++    login(client, make_user(db, Role.PATIENT, patient=make_patient(db)))
++    assert schedule(client).status_code == 403
++
++
++def test_schedule_invalid_day_defaults_to_today(client, db):
++    login(client, make_user(db, Role.RECEPTIONIST))
++    r = client.get("/appointments/schedule", params={"day": "31/12", "page": "x"})
++    today = datetime.now(VN_TZ).date().strftime("%d/%m/%Y")
++    assert r.status_code == 200 and f"Lịch khám ngày {today}" in r.text

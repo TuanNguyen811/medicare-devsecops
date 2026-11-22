@@ -1,0 +1,5 @@
+id: D05
+title: Lịch khám theo ngày
+split: test
+kind: decoy
+commit_message: Thêm trang lịch khám theo ngày có lọc theo trạng thái, bác sĩ và phân trang
