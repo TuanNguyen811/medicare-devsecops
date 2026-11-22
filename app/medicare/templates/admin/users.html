@@ -14,6 +14,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="col-md-2"><label class="form-label" for="username">Tên đăng nhập</label><input class="form-control form-control-sm" id="username" name="username" value="{{ values.username or '' }}" maxlength="50" required></div>
       <div class="col-md-3"><label class="form-label" for="full_name">Họ tên</label><input class="form-control form-control-sm" id="full_name" name="full_name" value="{{ values.full_name or '' }}" maxlength="100" required></div>
+      <div class="col-md-3"><label class="form-label" for="email">Email</label><input class="form-control form-control-sm" id="email" name="email" type="email" value="{{ values.email or '' }}" maxlength="254" autocomplete="off"></div>
       <div class="col-md-2">
         <label class="form-label" for="role">Vai trò</label>
         <select class="form-select form-select-sm" id="role" name="role" required>
@@ -36,12 +37,13 @@
 <div class="card mc-card">
   <div class="table-responsive">
     <table class="table table-sm table-hover align-middle mb-0">
-      <thead><tr><th>Tên đăng nhập</th><th>Họ tên</th><th>Vai trò</th><th>Khoa</th><th>Hồ sơ BN</th><th>Trạng thái</th><th class="text-end"></th></tr></thead>
+      <thead><tr><th>Tên đăng nhập</th><th>Họ tên</th><th>Email</th><th>Vai trò</th><th>Khoa</th><th>Hồ sơ BN</th><th>Trạng thái</th><th class="text-end"></th></tr></thead>
       <tbody>
         {% for u in users %}
         <tr>
           <td class="font-monospace">{{ u.username }}</td>
           <td>{{ u.full_name }}</td>
+          <td>{{ u.email or "" }}</td>
           <td>{{ role_labels[u.role] }}</td>
           <td>{{ u.department.name if u.department else "" }}</td>
           <td>{{ patient_codes.get(u.patient_id, "") }}</td>

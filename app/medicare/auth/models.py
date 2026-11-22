@@ -23,6 +23,8 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(100))
+    # Used to deliver password reset links; stored lower-case.
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
     role: Mapped[Role] = mapped_column(str_enum(Role, "role"))
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"))
     # use_alter: users and patients reference each other (patients.attending_doctor_id).
@@ -35,6 +37,19 @@ class User(Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Bumped on logout and password change; sessions carrying an older value are rejected.
     session_version: Mapped[int] = mapped_column(default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class PasswordResetToken(Base):
+    """A password reset link sent by mail. Only the SHA-256 of the token is stored (R-18)."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

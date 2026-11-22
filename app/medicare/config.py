@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     database_url: str
     secret_key: SecretStr = Field(min_length=32)
     session_max_age: int = Field(default=28800, ge=300, le=86400)
+    # Absolute address used in links sent by mail; never taken from the request's Host header.
+    public_base_url: str = "http://localhost:8000"
     # Prometheus metrics on their own port; off unless set. Deployments that scrape the
     # app from another pod set METRICS_HOST to the pod address range they listen on.
     metrics_port: int | None = Field(default=None, ge=1, le=65535)
