@@ -93,7 +93,7 @@ def render_markdown(report: Report, head_sha: str | None = None) -> str:
     if fps:
         extra.append(f"🟢 {len(fps)} báo nhầm của công cụ quét đã được gỡ")
     if alerts:
-        extra.append(f"ℹ️ {len(alerts)} cảnh báo khi quét ứng dụng đang chạy, xem cuối báo cáo")
+        extra.append(f"📋 {len(alerts)} cảnh báo khi quét ứng dụng đang chạy, xem cuối báo cáo")
     if head_sha:
         extra.append(f"commit `{head_sha[:7]}`")
     parts = [MARKER, "## 🛡️ AI Security Agent", "", summary]
@@ -148,7 +148,7 @@ def render_markdown(report: Report, head_sha: str | None = None) -> str:
                 continue
             shown.append(row)
             budget -= len(row) + 1
-        body += ["", "<details><summary>ℹ️ Cảnh báo khi quét ứng dụng đang chạy (ZAP): "
+        body += ["", "<details><summary>📋 Cảnh báo khi quét ứng dụng đang chạy (ZAP): "
                      f"{len(alerts)}</summary>", "",
                  "Các cảnh báo này đến từ việc quét ứng dụng đang chạy. Chúng thường là cấu hình "
                  "chung của ứng dụng (ví dụ header bảo mật), có thể đã có từ trước PR này, và "

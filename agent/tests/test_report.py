@@ -48,7 +48,8 @@ def dast(route: str, rule: str = "10020", verdict: str = "TP", sev: str = "MEDIU
     alert = entry(verdict, source="zap", finding_id=f"zap:{rule}:{route}",
                   finding_ids=[f"zap:{rule}:{route}"], title=f"{rule} (zap)", severity=sev,
                   cwe="CWE-1021", reasoning="Ứng dụng không đặt X-Frame-Options.",
-                  file=f"dast:{route}", fix=Fix(description="Thêm middleware đặt X-Frame-Options: DENY."))
+                  file=f"dast:{route}",
+                  fix=Fix(description="Thêm middleware đặt X-Frame-Options: DENY."))
     return alert.model_copy(update={"line": 0, "evidence": []})  # as DAST entries come
 
 
