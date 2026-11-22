@@ -111,6 +111,8 @@ def record_detail(
         "record": record, "patient": patient,
         "can_write": policy.can_write_record(user, patient),
         "can_prescribe": policy.can_prescribe(user, patient),
+        "can_quick_prescribe": user.role in (Role.DOCTOR, Role.NURSE),
+        "quick_templates": prescription_service.QUICK_TEMPLATES,
         "prescriptions": prescription_service.list_for_record(db, record.id),
         "breadcrumbs": _crumbs(patient, (f"Phiếu khám #{record.id}", None)),
     })

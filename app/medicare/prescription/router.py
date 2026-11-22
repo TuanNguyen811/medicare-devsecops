@@ -16,6 +16,7 @@ from medicare.prescription import service
 router = APIRouter()
 
 doctor_user = require_roles(Role.DOCTOR)
+ward_staff = require_roles(Role.DOCTOR, Role.NURSE)
 admin_user = require_roles(Role.ADMIN)
 FORM_ROWS = 5
 _MED_ID = re.compile(r"[0-9]{1,9}")  # always < INT4_MAX
@@ -90,6 +91,24 @@ def create_prescription(
                           status_code=400)
     db.commit()
     flash(request, "Đã kê đơn thuốc")
+    return RedirectResponse(f"/prescriptions/{prescription.id}", status_code=303)
+
+
+@router.post("/records/{record_id}/prescriptions/quick", dependencies=[Depends(verify_csrf)])
+def quick_prescription(
+    request: Request,
+    record_id: ObjectId,
+    template: str = Form(""),
+    user: User = Depends(ward_staff),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        prescription = service.quick_prescribe(db, user, record_id, template, _ip(request))
+    except service.PrescriptionError as exc:
+        flash(request, str(exc), "danger")
+        return RedirectResponse(f"/records/{record_id}", status_code=303)
+    db.commit()
+    flash(request, "Đã kê đơn theo đơn mẫu")
     return RedirectResponse(f"/prescriptions/{prescription.id}", status_code=303)
 
 

@@ -162,3 +162,46 @@ def test_record_page_offers_prescribing_to_attending_only(client, db):
     client.cookies.clear()
     login(client, make_user(db, Role.NURSE, department=dept))
     assert f"/records/{record.id}/prescriptions/new" not in client.get(f"/records/{record.id}").text
+
+
+def quick(client, record, template="ha-sot"):
+    data = {"template": template, "csrf_token": csrf_token(client, f"/records/{record.id}")}
+    return client.post(f"/records/{record.id}/prescriptions/quick", data=data,
+                       follow_redirects=False)
+
+
+def test_quick_prescription_from_template(client, db):
+    _, doc, _, record = ward(db)
+    db.add(Medicine(code="PARA500", name="Paracetamol 500mg", unit="viên",
+                    unit_price=Decimal(1500)))
+    db.flush()
+    login(client, doc)
+    r = quick(client, record)
+    assert r.status_code == 303 and r.headers["location"].startswith("/prescriptions/")
+    p = db.scalar(select(Prescription).where(Prescription.record_id == record.id))
+    assert p.note == "Đơn mẫu: Hạ sốt" and [i.quantity for i in p.items] == [10]
+    assert prescription_total(p) == Decimal(15000)
+
+
+def test_quick_prescription_unknown_template(client, db):
+    _, doc, _, record = ward(db)
+    login(client, doc)
+    r = quick(client, record, template="khong-co")
+    assert r.status_code == 303 and r.headers["location"] == f"/records/{record.id}"
+    assert db.scalar(select(Prescription).where(Prescription.record_id == record.id)) is None
+
+
+def test_quick_prescription_hidden_from_other_department(client, db):
+    _, _, _, record = ward(db)
+    other = make_user(db, Role.DOCTOR, department=make_department(db, "NGOAI"))
+    login(client, other)
+    assert quick(client, record).status_code == 404
+
+
+def test_receptionist_cannot_quick_prescribe(client, db):
+    _, _, _, record = ward(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    r = client.post(f"/records/{record.id}/prescriptions/quick",
+                    data={"template": "ha-sot", "csrf_token": csrf_token(client)},
+                    follow_redirects=False)
+    assert r.status_code == 403
