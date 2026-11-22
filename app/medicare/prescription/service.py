@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from medicare import policy
 from medicare.audit import service as audit
 from medicare.auth.models import User
+from medicare.common import metrics
 from medicare.common.errors import NotFound
 from medicare.patient.models import Patient
 from medicare.prescription.models import Medicine, Prescription, PrescriptionItem
@@ -22,7 +23,10 @@ class PrescriptionError(ValueError):
 def get_record_for_prescribing(db: Session, user: User, record_id: int) -> MedicalRecord:
     """Only the attending doctor may prescribe on a record (R-03); others get NotFound."""
     record = db.get(MedicalRecord, record_id)
-    if record is None or not policy.can_prescribe(user, db.get(Patient, record.patient_id)):
+    if record is None:
+        raise NotFound
+    if not policy.can_prescribe(user, db.get(Patient, record.patient_id)):
+        metrics.authz_denied("prescription")
         raise NotFound
     return record
 
@@ -69,9 +73,10 @@ def get_prescription_for(
 ) -> Prescription:
     """Readable by whoever may read the underlying record (R-03, R-12); audited (R-05)."""
     prescription = db.get(Prescription, prescription_id)
-    if prescription is None or not policy.can_view_record(
-        user, db.get(Patient, prescription.patient_id)
-    ):
+    if prescription is None:
+        raise NotFound
+    if not policy.can_view_record(user, db.get(Patient, prescription.patient_id)):
+        metrics.authz_denied("prescription")
         raise NotFound
     audit.log_access(db, user, audit.VIEW_PRESCRIPTION, ENTITY, prescription.id, ip)
     return prescription

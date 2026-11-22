@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -10,6 +12,7 @@ from medicare.auth.admin_router import router as admin_router
 from medicare.auth.router import router as auth_router
 from medicare.billing.router import router as billing_router
 from medicare.common.errors import CatchAllErrorsMiddleware, register_error_handlers
+from medicare.common.metrics import MetricsMiddleware, start_metrics_server
 from medicare.config import Settings
 from medicare.db import create_db
 from medicare.patient.router import router as patient_router
@@ -19,11 +22,27 @@ from medicare.record.router import router as record_router
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings: Settings = app.state.settings
+    server = None
+    if settings.metrics_port is not None:
+        server, _thread = start_metrics_server(settings.metrics_host, settings.metrics_port)
+    app.state.metrics_server = server
+    try:
+        yield
+    finally:
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is None:
         settings = Settings()
     app = FastAPI(
-        title="MediCare HMS", docs_url=None, redoc_url=None, openapi_url=None
+        title="MediCare HMS", docs_url=None, redoc_url=None, openapi_url=None,
+        lifespan=_lifespan,
     )
     app.state.settings = settings
     app.state.engine, app.state.session_factory = create_db(settings.database_url)
@@ -37,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         same_site="lax",
         https_only=settings.env == "production",
     )
+    app.add_middleware(MetricsMiddleware)  # outermost: sees the final status of every response
     register_error_handlers(app)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(auth_router)

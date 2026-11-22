@@ -11,6 +11,7 @@ resources:
   - ../../infra/k8s/networkpolicy.yaml
   - postgres.yaml
   - networkpolicy.yaml
+  - metrics.yaml
 patches:
   - target:
       kind: Deployment
@@ -19,3 +20,17 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 1
+      # Metrics for Prometheus (spec addendum 7.1): own port, reachable only from the
+      # monitoring namespace (metrics.yaml), never through the app Service or port-forward.
+      - op: add
+        path: /spec/template/spec/containers/0/env
+        value:
+          - name: METRICS_PORT
+            value: "9000"
+          - name: METRICS_HOST
+            value: "0.0.0.0"
+      - op: add
+        path: /spec/template/spec/containers/0/ports/-
+        value:
+          containerPort: 9000
+          name: metrics

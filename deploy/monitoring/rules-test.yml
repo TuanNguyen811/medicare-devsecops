@@ -1,0 +1,86 @@
+# Unit tests for config/rules.yml (not deployed). Run with promtool, see deploy/README.md.
+rule_files:
+  - config/rules.yml
+evaluation_interval: 15s
+tests:
+  # A per-user series that first appears already holding a burst of 40 accesses.
+  - interval: 15s
+    input_series:
+      - series: 'medicare_record_access_total{action="VIEW_RECORD",role="DOCTOR",user_id="3"}'
+        values: '_ _ _ _ 40x20'
+      - series: 'medicare_record_access_total{action="VIEW_RECORD",role="NURSE",user_id="7"}'
+        values: '0+1x20'
+      - series: 'up{job="medicare"}'
+        values: '1x24'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: RecordAccessSpike
+        exp_alerts:
+          - exp_labels: {severity: warning, user_id: "3", role: DOCTOR}
+            exp_annotations:
+              summary: Truy cập bệnh án bất thường
+              description: >-
+                Người dùng id 3 (DOCTOR) truy cập dữ liệu lâm sàng 40 lần trong 5 phút (ngưỡng 30).
+  # 30 wrong passwords on pre-created series: counted in full.
+  - interval: 15s
+    input_series:
+      - series: 'medicare_login_total{result="failure"}'
+        values: '0 0 10 20 30 30 30'
+      - series: 'medicare_account_lockouts_total'
+        values: '0 0 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 90s
+        alertname: BruteForceSuspected
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: Nghi dò mật khẩu
+              description: 30 lần đăng nhập thất bại trong 5 phút (ngưỡng 20).
+      - eval_time: 90s
+        alertname: AccountLockout
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: Có tài khoản bị khóa
+              description: 1 tài khoản bị khóa trong 5 phút do nhập sai mật khẩu nhiều lần.
+  # Health probes do not dilute the error rate; probes alone raise nothing.
+  - interval: 15s
+    input_series:
+      - series: 'medicare_http_requests_total{method="GET",route="/health",status="200"}'
+        values: '0+10x40'
+      - series: 'medicare_http_requests_total{method="GET",route="/patients",status="200"}'
+        values: '0+1x40'
+      - series: 'medicare_http_requests_total{method="GET",route="/patients",status="500"}'
+        values: '0+1x40'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: Tỷ lệ lỗi 5xx cao
+              description: 50% request trả về 5xx trong 5 phút (ngưỡng 5%).
+  - interval: 15s
+    input_series:
+      - series: 'medicare_http_requests_total{method="GET",route="/health",status="200"}'
+        values: '0+10x40'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HighErrorRate
+        exp_alerts: []
+  # No scrape target at all for more than a minute.
+  - interval: 15s
+    input_series:
+      - series: 'up{job="medicare"}'
+        values: '1 1 1 _ _ _ _ _ _ _ _'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: AppDown
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: AppDown
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: MediCare không phản hồi
+              description: Prometheus không lấy được metrics của MediCare trong hơn 1 phút.

@@ -96,4 +96,7 @@
 
 ### Task 6: Review toàn nhánh (Opus), PR, sau merge chạy `pull-deploy.sh` thật
 - [ ] Review, sửa, push, mở PR, theo dõi CI, xin label.
-- [ ] Sau khi merge và `main-ci` ký bản `main`: chạy `deploy/pull-deploy.sh` từ đầu đến cuối, rồi `demo-unsigned.sh`. Sửa tiếp trong PR sau nếu cần.
+- [x] Sau khi merge và `main-ci` ký bản `main`: chạy `deploy/pull-deploy.sh` từ đầu đến cuối, rồi `demo-unsigned.sh`. Sửa tiếp trong PR sau nếu cần.
+  - *Kết quả 2026-11-22:* deploy `sha256:b0ebf038…` của `main` đạt sau khoảng 2 phút, không cần sửa gì.
+  - `demo-unsigned.sh` từ chối image chưa ký ("no signatures found").
+  - Image do nhánh `feat/sign-deploy` ký bị từ chối, vì SAN là `@refs/heads/feat/sign-deploy` chứ không phải `@refs/heads/main`.

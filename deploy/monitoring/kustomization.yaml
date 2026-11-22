@@ -1,0 +1,28 @@
+# Monitoring for the local deployment (spec addendum 7.2): Prometheus, Alertmanager, Grafana in
+# namespace monitoring. Applied by deploy/pull-deploy.sh with: kubectl apply -k deploy/monitoring
+# Everything is reached through kubectl port-forward on 127.0.0.1 (deploy/README.md).
+# Config maps get a content hash suffix, so a config change rolls the pods.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+resources:
+  - namespace.yaml
+  - prometheus.yaml
+  - alertmanager.yaml
+  - grafana.yaml
+  - networkpolicy.yaml
+configMapGenerator:
+  - name: prometheus-config
+    files:
+      - config/prometheus.yml
+      - config/rules.yml
+  - name: alertmanager-config
+    files:
+      - config/alertmanager.yml
+  - name: grafana-provisioning
+    files:
+      - config/datasources.yaml
+      - config/dashboards.yaml
+  - name: grafana-dashboards
+    files:
+      - config/medicare-security.json

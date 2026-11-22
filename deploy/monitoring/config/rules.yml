@@ -1,0 +1,65 @@
+# Alert rules (spec addendum 7.2). Thresholds over 5-minute windows; simulate-traffic.py
+# triggers each security alert on demand.
+groups:
+  - name: medicare-security
+    rules:
+      - alert: BruteForceSuspected
+        expr: sum(increase(medicare_login_total{result=~"failure|locked"}[5m])) > 20
+        labels:
+          severity: warning
+        annotations:
+          summary: Nghi dò mật khẩu
+          description: >-
+            {{ $value | printf "%.0f" }} lần đăng nhập thất bại trong 5 phút (ngưỡng 20).
+      - alert: AccountLockout
+        expr: sum(increase(medicare_account_lockouts_total[5m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Có tài khoản bị khóa
+          description: >-
+            {{ $value | printf "%.0f" }} tài khoản bị khóa trong 5 phút do nhập sai mật khẩu nhiều lần.
+      - alert: RecordAccessSpike
+        # Per-user series cannot be pre-created: one that appears mid-window already holds
+        # its burst, which increase() does not see, so its raw value is checked too.
+        expr: >-
+          sum by (user_id, role) (increase(medicare_record_access_total[5m])) > 30
+          or
+          sum by (user_id, role) (
+            medicare_record_access_total unless medicare_record_access_total offset 5m
+          ) > 30
+        labels:
+          severity: warning
+        annotations:
+          summary: Truy cập bệnh án bất thường
+          description: >-
+            Người dùng id {{ $labels.user_id }} ({{ $labels.role }}) truy cập dữ liệu lâm sàng
+            {{ $value | printf "%.0f" }} lần trong 5 phút (ngưỡng 30).
+      - alert: AuthzDeniedSpike
+        expr: sum(increase(medicare_authz_denied_total[5m])) > 20
+        labels:
+          severity: warning
+        annotations:
+          summary: Nghi dò IDOR
+          description: >-
+            {{ $value | printf "%.0f" }} lần bị từ chối quyền trên đối tượng có thật trong 5 phút
+            (ngưỡng 20).
+      - alert: HighErrorRate
+        # Kubelet probes on /health would dilute the ratio; no traffic means no ratio.
+        expr: >-
+          sum(rate(medicare_http_requests_total{status=~"5..", route!="/health"}[5m]))
+          / (sum(rate(medicare_http_requests_total{route!="/health"}[5m])) > 0) > 0.05
+        labels:
+          severity: critical
+        annotations:
+          summary: Tỷ lệ lỗi 5xx cao
+          description: >-
+            {{ $value | humanizePercentage }} request trả về 5xx trong 5 phút (ngưỡng 5%).
+      - alert: AppDown
+        expr: absent(up{job="medicare"} == 1)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: MediCare không phản hồi
+          description: Prometheus không lấy được metrics của MediCare trong hơn 1 phút.
