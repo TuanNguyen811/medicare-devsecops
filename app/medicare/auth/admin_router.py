@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from medicare.auth import remember
 from medicare.auth.models import Role, User
 from medicare.common.auth import require_roles, revoke_sessions
 from medicare.common.csrf import verify_csrf
@@ -127,6 +128,7 @@ def deactivate_user(
                            status_code=400)
     target.is_active = False
     revoke_sessions(target)
+    remember.revoke_all(db, target)
     db.commit()
     flash(request, f"Đã vô hiệu hóa tài khoản {target.username}")
     return RedirectResponse("/admin/users", status_code=303)
