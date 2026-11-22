@@ -1,0 +1,207 @@
+diff --git a/app/medicare/patient/router.py b/app/medicare/patient/router.py
+index 00439e7..1713133 100644
+--- a/app/medicare/patient/router.py
++++ b/app/medicare/patient/router.py
+@@ -85,6 +85,45 @@ def list_patients(
+     )
+ 
+ 
++def _opt_int(value: str) -> int | None:
++    value = value.strip()
++    return int(value) if value.isascii() and value.isdigit() and len(value) <= 9 else None
++
++
++@router.get("/patients/search")
++def advanced_search_page(
++    request: Request,
++    phone: str = "",
++    area: str = "",
++    birth_year: str = "",
++    department_id: str = "",
++    user: User = Depends(staff_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    form = {"phone": phone, "area": area, "birth_year": birth_year,
++            "department_id": department_id}
++    searched = any(v.strip() for v in form.values())
++    rows = []
++    if searched:
++        patients = service.advanced_search(
++            db, user, phone=phone, area=area, birth_year=_opt_int(birth_year),
++            department_id=_opt_int(department_id),
++        )
++        rows = [(p, _identifiers(user, p)) for p in patients]
++    return render(
++        request,
++        "patient/search.html",
++        {
++            "rows": rows,
++            "form": form,
++            "searched": searched,
++            "departments": service.form_choices(db)["departments"],
++            "breadcrumbs": [("Trang chủ", "/"), ("Bệnh nhân", "/patients"),
++                            ("Tìm kiếm nâng cao", None)],
++        },
++    )
++
++
+ @router.get("/patients/new")
+ def new_patient_form(
+     request: Request,
+diff --git a/app/medicare/patient/service.py b/app/medicare/patient/service.py
+index 226150e..7303249 100644
+--- a/app/medicare/patient/service.py
++++ b/app/medicare/patient/service.py
+@@ -1,6 +1,6 @@
+ import secrets
+ 
+-from sqlalchemy import false, or_, select
++from sqlalchemy import extract, false, or_, select, text
+ from sqlalchemy.exc import IntegrityError
+ from sqlalchemy.orm import Session
+ 
+@@ -60,6 +60,31 @@ def search_patients(db: Session, user: User, q: str | None) -> list[Patient]:
+     return list(db.scalars(stmt).unique())
+ 
+ 
++def advanced_search(
++    db: Session,
++    user: User,
++    *,
++    phone: str | None = None,
++    area: str | None = None,
++    birth_year: int | None = None,
++    department_id: int | None = None,
++) -> list[Patient]:
++    """Search by contact details and demographics, within the user's scope (R-01, R-12)."""
++    stmt = select(Patient).order_by(Patient.code).limit(SEARCH_LIMIT)
++    scope = _scope_filter(user)
++    if scope is not None:
++        stmt = stmt.where(scope)
++    if phone and phone.strip():
++        stmt = stmt.where(Patient.phone.startswith(phone.strip(), autoescape=True))
++    if area and area.strip():
++        stmt = stmt.where(text(f"patients.address ILIKE '%{area.strip()}%'"))
++    if birth_year is not None:
++        stmt = stmt.where(extract("year", Patient.date_of_birth) == birth_year)
++    if department_id is not None:
++        stmt = stmt.where(Patient.department_id == department_id)
++    return list(db.scalars(stmt).unique())
++
++
+ def form_choices(db: Session) -> dict:
+     departments = db.scalars(select(Department).order_by(Department.name)).all()
+     doctors = db.scalars(
+diff --git a/app/medicare/templates/patient/list.html b/app/medicare/templates/patient/list.html
+index eea04ab..a292a41 100644
+--- a/app/medicare/templates/patient/list.html
++++ b/app/medicare/templates/patient/list.html
+@@ -12,6 +12,7 @@
+         <input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" maxlength="100" placeholder="Tìm theo mã hoặc họ tên">
+       </div>
+       <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-search"></i> Tìm</button></div>
++      <div class="col-auto"><a class="btn btn-link btn-sm" href="/patients/search">Tìm kiếm nâng cao</a></div>
+     </form>
+   </div>
+   <div class="table-responsive">
+diff --git a/app/medicare/templates/patient/search.html b/app/medicare/templates/patient/search.html
+new file mode 100644
+index 0000000..608e1ae
+--- /dev/null
++++ b/app/medicare/templates/patient/search.html
+@@ -0,0 +1,51 @@
++{% extends "base.html" %}
++{% block title %}Tìm kiếm nâng cao{% endblock %}
++{% block content %}
++<h1 class="h5 mb-3">Tìm kiếm bệnh nhân nâng cao</h1>
++<div class="card mc-card">
++  <div class="card-body pb-0">
++    <form class="row g-2 mb-3" method="get" action="/patients/search" role="search">
++      <div class="col-sm-6 col-lg-3">
++        <input class="form-control form-control-sm" type="search" name="phone" value="{{ form.phone }}" maxlength="15" placeholder="Số điện thoại (đầu số)">
++      </div>
++      <div class="col-sm-6 col-lg-3">
++        <input class="form-control form-control-sm" type="search" name="area" value="{{ form.area }}" maxlength="100" placeholder="Địa chỉ (phường, quận, tỉnh)">
++      </div>
++      <div class="col-sm-4 col-lg-2">
++        <input class="form-control form-control-sm" type="number" name="birth_year" value="{{ form.birth_year }}" min="1900" max="2100" placeholder="Năm sinh">
++      </div>
++      <div class="col-sm-5 col-lg-2">
++        <select class="form-select form-select-sm" name="department_id">
++          <option value="">Mọi khoa</option>
++          {% for d in departments %}
++          <option value="{{ d.id }}"{% if form.department_id == d.id | string %} selected{% endif %}>{{ d.name }}</option>
++          {% endfor %}
++        </select>
++      </div>
++      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-search"></i> Tìm</button></div>
++    </form>
++  </div>
++  <div class="table-responsive">
++    <table class="table table-sm table-hover align-middle mb-0">
++      <thead>
++        <tr><th>Mã BN</th><th>Họ tên</th><th>Ngày sinh</th><th>Số điện thoại</th><th>Địa chỉ</th><th>CCCD</th><th>Khoa</th></tr>
++      </thead>
++      <tbody>
++        {% for p, ids in rows %}
++        <tr>
++          <td><a href="/patients/{{ p.id }}">{{ p.code }}</a></td>
++          <td>{{ p.full_name }}</td>
++          <td>{{ p.date_of_birth | date_vn }}</td>
++          <td>{{ p.phone }}</td>
++          <td>{{ p.address }}</td>
++          <td class="font-monospace">{{ ids.national_id }}</td>
++          <td>{{ p.department.name if p.department else "" }}</td>
++        </tr>
++        {% else %}
++        <tr><td colspan="7" class="text-center text-secondary py-3">{% if searched %}Không có bệnh nhân phù hợp{% else %}Nhập ít nhất một tiêu chí để tìm{% endif %}</td></tr>
++        {% endfor %}
++      </tbody>
++    </table>
++  </div>
++</div>
++{% endblock %}
+diff --git a/app/tests/test_patient.py b/app/tests/test_patient.py
+index 2180878..cbf51d3 100644
+--- a/app/tests/test_patient.py
++++ b/app/tests/test_patient.py
+@@ -195,3 +195,39 @@ def test_me_shows_own_profile(client, db):
+     login(client, make_user(db, Role.PATIENT, patient=me))
+     r = client.get("/me")
+     assert r.status_code == 200 and me.code in r.text and me.national_id in r.text
++
++
++def test_advanced_search_by_area_and_birth_year(client, db):
++    hn = make_patient(db)
++    hcm = make_patient(db)
++    hcm.address = "Quận 1, TP Hồ Chí Minh"
++    db.flush()
++    login(client, make_user(db, Role.RECEPTIONIST))
++    html = client.get("/patients/search", params={"area": "hồ chí", "birth_year": "1990"}).text
++    assert hcm.code in html and hn.code not in html
++    html = client.get("/patients/search", params={"birth_year": "1991"}).text
++    assert hcm.code not in html and hn.code not in html
++
++
++def test_advanced_search_by_phone_prefix(client, db):
++    p = make_patient(db)
++    other = make_patient(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    html = client.get("/patients/search", params={"phone": p.phone}).text
++    assert p.code in html and other.code not in html
++
++
++def test_advanced_search_is_scoped_for_nurse(client, db):
++    noi, ngoai = make_department(db, "NOI"), make_department(db, "NGOAI")
++    mine = make_patient(db, department=noi)
++    theirs = make_patient(db, department=ngoai)
++    login(client, make_user(db, Role.NURSE, department=noi))
++    html = client.get("/patients/search", params={"area": "Hà Nội"}).text
++    assert mine.code in html and theirs.code not in html
++
++
++def test_advanced_search_without_criteria_lists_nothing(client, db):
++    make_patient(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    r = client.get("/patients/search")
++    assert r.status_code == 200 and "Nhập ít nhất một tiêu chí" in r.text

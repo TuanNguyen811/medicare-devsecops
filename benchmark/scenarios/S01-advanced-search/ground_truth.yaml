@@ -1,0 +1,11 @@
+findings:
+  - id: S01-1
+    title: SQL injection qua tham số địa chỉ (area) ghép vào text()
+    category: pattern
+    severity: high
+    cwe: [CWE-89]
+    file: app/medicare/patient/service.py
+    lines: [79, 80]
+    routes: ["GET /patients/search"]
+    rules: []
+    violated_rule: null

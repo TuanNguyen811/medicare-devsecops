@@ -1,8 +1,10 @@
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import scenario as sc
@@ -151,6 +153,35 @@ def test_materialize_golden_shas_and_cleanup_on_failure(tmp_path):
 
 def test_real_scenarios_load():
     scenarios = sc.all_scenarios()
-    assert scenarios and scenarios[0].id == sc.BASELINE
+    assert sc.BASELINE in [s.id for s in scenarios]
     for s in scenarios:
         assert (s.dir / "ground_truth.yaml").is_file(), s.id
+
+
+PATCHED = [s for s in sc.all_scenarios() if s.patch.is_file()]
+
+
+@pytest.mark.parametrize("scenario", PATCHED, ids=lambda s: s.id)
+def test_real_patch_and_commit_message_do_not_leak(scenario):
+    assert not re.search(LEAK, scenario.patch_text() + scenario.commit_message, re.IGNORECASE)
+
+
+@pytest.mark.skipif(not _has_base(), reason="BASE_COMMIT not in this clone (shallow checkout)")
+@pytest.mark.parametrize("scenario", PATCHED, ids=lambda s: s.id)
+def test_real_patch_applies_and_ground_truth_points_into_it(scenario, tmp_path):
+    repo = sc.HERE.parent
+    dest = tmp_path / "w"
+    try:
+        sc.materialize(scenario, dest, repo)
+        truth = yaml.safe_load((scenario.dir / "ground_truth.yaml").read_text(encoding="utf-8"))
+        for item in truth.get("findings") or []:
+            assert item["file"] in scenario.touched(), item["id"]
+            n_lines = len((dest / item["file"]).read_bytes().splitlines())
+            start, end = item["lines"]
+            assert 1 <= start <= end <= n_lines, item["id"]
+            # the vulnerable range is code this PR added, not pre-existing lines
+            added = sc.added_lines(scenario.patch_text())[item["file"]]
+            assert added & set(range(start, end + 1)), item["id"]
+    finally:
+        subprocess.run(["git", "worktree", "remove", "--force", str(dest)],
+                       check=False, cwd=repo, capture_output=True)

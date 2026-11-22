@@ -27,9 +27,7 @@ pull_request → main
  │                    ▼  mỗi job: artifact sarif-<tool> + upload lên tab Security
  ├─ ai-security-agent ─ đọc diff + SARIF + mã nguồn + quy tắc R-xx → out/report.json; job duy nhất có
  │                      LLM_API_KEY, không chạy ứng dụng hay test của PR; upload agent-report ngay sau đó
- ├─ validate-patches ── áp bản vá vào worktree tạm, chạy test + Semgrep; không secret, không lưu cache;
- │                      artifact agent-validation chỉ để hiển thị (gate không đọc)
- ├─ agent-comment ──── comment báo cáo + review suggestion (luôn COMMENT); không checkout code
+ ├─ agent-comment ──── comment báo cáo + comment tại dòng lỗi kèm cách sửa (luôn COMMENT); không checkout code
  └─ quality-gate ───── chặn hoặc cho qua (bắt buộc đạt, theo branch protection)
 ```
 

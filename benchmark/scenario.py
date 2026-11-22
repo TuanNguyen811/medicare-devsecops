@@ -126,6 +126,31 @@ class Scenario:
         return any(p.startswith(DAST_TRIGGERS) for p in self.touched())
 
 
+Added = dict[str, set[int]]  # file -> lines a patch adds (new-side numbers)
+
+
+def added_lines(patch: str) -> Added:
+    """Lines each file gains in a unified diff (the scenario's patch.diff)."""
+    out: Added = {}
+    path, line = None, 0
+    for raw in patch.splitlines():
+        if raw.startswith("+++ "):
+            target = raw[4:].strip()
+            path = None if target == "/dev/null" else target.removeprefix("b/")
+            if path is not None:
+                out.setdefault(path, set())
+        elif raw.startswith("--- ") or raw.startswith("diff --git"):
+            continue
+        elif raw.startswith("@@"):
+            line = int(raw.split("+", 1)[1].split(" ", 1)[0].split(",")[0])
+        elif path is not None and raw.startswith("+"):
+            out[path].add(line)
+            line += 1
+        elif path is not None and raw.startswith(" "):
+            line += 1
+    return out
+
+
 def _fake(kind: str, seed: bytes) -> str:
     digest = hashlib.sha256(seed).digest() * 4
 

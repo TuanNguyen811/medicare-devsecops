@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 
 from secagent.context.redact import redact
-from secagent.models import Fix, Report, ReportEntry
+from secagent.models import Report, ReportEntry
 
 MARKER = "<!-- secagent-report -->"
 MAX_CHARS = 60_000  # GitHub comments are limited to 65 536 characters
@@ -22,20 +21,6 @@ def _where(e: ReportEntry) -> str:
     return f"{e.file}:{e.line}" if e.file else "(không có vị trí)"
 
 
-def fence(text: str, lang: str = "") -> str:
-    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
-    marks = "`" * max(3, longest + 1)
-    return f"{marks}{lang}\n{text.rstrip(chr(10))}\n{marks}"
-
-
-def _validation(fix: Fix) -> str:
-    if fix.validated is True:
-        return "✅ đã kiểm chứng: áp được, test đạt, Semgrep sạch"
-    if fix.validated is False:
-        return f"❌ không qua kiểm chứng: {fix.validation_note or 'không rõ'}"
-    return "chưa kiểm chứng" + (f" ({fix.validation_note})" if fix.validation_note else "")
-
-
 def _details(e: ReportEntry) -> str:
     facts = [x for x in (e.cwe, e.owasp and f"OWASP {e.owasp}",
                          e.violated_rule and f"vi phạm {e.violated_rule}",
@@ -48,8 +33,6 @@ def _details(e: ReportEntry) -> str:
         lines += ["", "Gộp các phát hiện: " + ", ".join(f"`{i}`" for i in e.finding_ids)]
     if e.fix is not None:
         lines += ["", f"**Đề xuất sửa:** {e.fix.description}"]
-        if e.fix.patch:
-            lines += [f"Bản vá ({_validation(e.fix)}):", "", fence(e.fix.patch, "diff")]
     return "\n".join(lines)
 
 

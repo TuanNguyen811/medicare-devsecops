@@ -1,0 +1,202 @@
+diff --git a/app/medicare/prescription/router.py b/app/medicare/prescription/router.py
+index 8090af7..7a6f4be 100644
+--- a/app/medicare/prescription/router.py
++++ b/app/medicare/prescription/router.py
+@@ -16,6 +16,7 @@ from medicare.prescription import service
+ router = APIRouter()
+ 
+ doctor_user = require_roles(Role.DOCTOR)
++ward_staff = require_roles(Role.DOCTOR, Role.NURSE)
+ admin_user = require_roles(Role.ADMIN)
+ FORM_ROWS = 5
+ _MED_ID = re.compile(r"[0-9]{1,9}")  # always < INT4_MAX
+@@ -93,6 +94,24 @@ def create_prescription(
+     return RedirectResponse(f"/prescriptions/{prescription.id}", status_code=303)
+ 
+ 
++@router.post("/records/{record_id}/prescriptions/quick", dependencies=[Depends(verify_csrf)])
++def quick_prescription(
++    request: Request,
++    record_id: ObjectId,
++    template: str = Form(""),
++    user: User = Depends(ward_staff),
++    db: Session = Depends(get_db),
++) -> Response:
++    try:
++        prescription = service.quick_prescribe(db, user, record_id, template, _ip(request))
++    except service.PrescriptionError as exc:
++        flash(request, str(exc), "danger")
++        return RedirectResponse(f"/records/{record_id}", status_code=303)
++    db.commit()
++    flash(request, "Đã kê đơn theo đơn mẫu")
++    return RedirectResponse(f"/prescriptions/{prescription.id}", status_code=303)
++
++
+ @router.get("/prescriptions/{prescription_id}")
+ def prescription_detail(
+     request: Request,
+diff --git a/app/medicare/prescription/service.py b/app/medicare/prescription/service.py
+index 9037824..59ef432 100644
+--- a/app/medicare/prescription/service.py
++++ b/app/medicare/prescription/service.py
+@@ -15,6 +15,24 @@ from medicare.record.models import MedicalRecord
+ ENTITY = "prescription"
+ MAX_ITEMS = 20
+ 
++# Ward templates for common orders on rounds: (label, [(medicine code, quantity, dosage)]).
++QUICK_TEMPLATES = {
++    "ha-sot": ("Hạ sốt", [
++        ("PARA500", 10, "Uống 1 viên khi sốt trên 38,5°C, cách nhau ít nhất 4 giờ"),
++    ]),
++    "tieu-chay": ("Tiêu chảy cấp", [
++        ("ORS", 6, "Pha 1 gói với 200 ml nước, uống sau mỗi lần đi ngoài"),
++        ("SMEC", 6, "Uống 1 gói x 3 lần/ngày"),
++    ]),
++    "di-ung": ("Dị ứng nhẹ", [
++        ("LORA10", 5, "Uống 1 viên buổi tối"),
++    ]),
++    "da-day": ("Đau dạ dày", [
++        ("OMEP20", 14, "Uống 1 viên trước ăn sáng 30 phút"),
++        ("DOMP10", 9, "Uống 1 viên x 3 lần/ngày trước ăn"),
++    ]),
++}
++
+ 
+ class PrescriptionError(ValueError):
+     """Invalid prescription or medicine data; the message is user-facing."""
+@@ -40,6 +58,42 @@ def create_prescription(
+     ip: str | None,
+ ) -> Prescription:
+     record = get_record_for_prescribing(db, user, record_id)
++    return _save_prescription(db, user, record, items, note, ip)
++
++
++def quick_prescribe(
++    db: Session, user: User, record_id: int, template_key: str, ip: str | None
++) -> Prescription:
++    """One-click prescription from a ward template, for orders given on rounds."""
++    record = db.get(MedicalRecord, record_id)
++    if record is None:
++        raise NotFound
++    if not policy.can_view_record(user, db.get(Patient, record.patient_id)):
++        metrics.authz_denied("prescription")
++        raise NotFound
++    template = QUICK_TEMPLATES.get(template_key)
++    if template is None:
++        raise PrescriptionError("Đơn mẫu không tồn tại")
++    label, lines = template
++    items = []
++    for code, quantity, dosage in lines:
++        medicine_id = db.scalar(
++            select(Medicine.id).where(Medicine.code == code, Medicine.is_active.is_(True))
++        )
++        if medicine_id is None:
++            raise PrescriptionError(f"Đơn mẫu {label}: thuốc {code} không còn trong danh mục")
++        items.append((medicine_id, quantity, dosage))
++    return _save_prescription(db, user, record, items, f"Đơn mẫu: {label}", ip)
++
++
++def _save_prescription(
++    db: Session,
++    user: User,
++    record: MedicalRecord,
++    items: list[tuple[int, int, str]],
++    note: str,
++    ip: str | None,
++) -> Prescription:
+     if not items:
+         raise PrescriptionError("Đơn thuốc phải có ít nhất một thuốc")
+     if len(items) > MAX_ITEMS:
+diff --git a/app/medicare/record/router.py b/app/medicare/record/router.py
+index e2a709e..6edd777 100644
+--- a/app/medicare/record/router.py
++++ b/app/medicare/record/router.py
+@@ -111,6 +111,8 @@ def record_detail(
+         "record": record, "patient": patient,
+         "can_write": policy.can_write_record(user, patient),
+         "can_prescribe": policy.can_prescribe(user, patient),
++        "can_quick_prescribe": user.role in (Role.DOCTOR, Role.NURSE),
++        "quick_templates": prescription_service.QUICK_TEMPLATES,
+         "prescriptions": prescription_service.list_for_record(db, record.id),
+         "breadcrumbs": _crumbs(patient, (f"Phiếu khám #{record.id}", None)),
+     })
+diff --git a/app/medicare/templates/record/detail.html b/app/medicare/templates/record/detail.html
+index 2fd21d9..6d4198a 100644
+--- a/app/medicare/templates/record/detail.html
++++ b/app/medicare/templates/record/detail.html
+@@ -20,6 +20,24 @@
+     </dl>
+   </div>
+ </div>
++{% if can_quick_prescribe %}
++<div class="card mc-card mt-3">
++  <div class="card-header">Kê đơn nhanh theo đơn mẫu</div>
++  <div class="card-body">
++    <form class="row g-2 align-items-center" method="post" action="/records/{{ record.id }}/prescriptions/quick">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <div class="col-sm-6">
++        <select class="form-select form-select-sm" name="template">
++          {% for key, (label, lines) in quick_templates.items() %}
++          <option value="{{ key }}">{{ label }}</option>
++          {% endfor %}
++        </select>
++      </div>
++      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-lightning"></i> Kê đơn</button></div>
++    </form>
++  </div>
++</div>
++{% endif %}
+ <div class="card mc-card mt-3">
+   <div class="card-header">Đơn thuốc</div>
+   <ul class="list-group list-group-flush">
+diff --git a/app/tests/test_prescription.py b/app/tests/test_prescription.py
+index 6d6c421..85537fb 100644
+--- a/app/tests/test_prescription.py
++++ b/app/tests/test_prescription.py
+@@ -162,3 +162,46 @@ def test_record_page_offers_prescribing_to_attending_only(client, db):
+     client.cookies.clear()
+     login(client, make_user(db, Role.NURSE, department=dept))
+     assert f"/records/{record.id}/prescriptions/new" not in client.get(f"/records/{record.id}").text
++
++
++def quick(client, record, template="ha-sot"):
++    data = {"template": template, "csrf_token": csrf_token(client, f"/records/{record.id}")}
++    return client.post(f"/records/{record.id}/prescriptions/quick", data=data,
++                       follow_redirects=False)
++
++
++def test_quick_prescription_from_template(client, db):
++    _, doc, _, record = ward(db)
++    db.add(Medicine(code="PARA500", name="Paracetamol 500mg", unit="viên",
++                    unit_price=Decimal(1500)))
++    db.flush()
++    login(client, doc)
++    r = quick(client, record)
++    assert r.status_code == 303 and r.headers["location"].startswith("/prescriptions/")
++    p = db.scalar(select(Prescription).where(Prescription.record_id == record.id))
++    assert p.note == "Đơn mẫu: Hạ sốt" and [i.quantity for i in p.items] == [10]
++    assert prescription_total(p) == Decimal(15000)
++
++
++def test_quick_prescription_unknown_template(client, db):
++    _, doc, _, record = ward(db)
++    login(client, doc)
++    r = quick(client, record, template="khong-co")
++    assert r.status_code == 303 and r.headers["location"] == f"/records/{record.id}"
++    assert db.scalar(select(Prescription).where(Prescription.record_id == record.id)) is None
++
++
++def test_quick_prescription_hidden_from_other_department(client, db):
++    _, _, _, record = ward(db)
++    other = make_user(db, Role.DOCTOR, department=make_department(db, "NGOAI"))
++    login(client, other)
++    assert quick(client, record).status_code == 404
++
++
++def test_receptionist_cannot_quick_prescribe(client, db):
++    _, _, _, record = ward(db)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    r = client.post(f"/records/{record.id}/prescriptions/quick",
++                    data={"template": "ha-sot", "csrf_token": csrf_token(client)},
++                    follow_redirects=False)
++    assert r.status_code == 403

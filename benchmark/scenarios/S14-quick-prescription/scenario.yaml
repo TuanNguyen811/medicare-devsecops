@@ -1,0 +1,5 @@
+id: S14
+title: Kê đơn nhanh theo đơn mẫu
+split: dev
+kind: vuln
+commit_message: Kê đơn nhanh theo đơn mẫu khi đi buồng

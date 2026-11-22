@@ -4,7 +4,7 @@ Agent tự xây dựng bằng Function Calling, dùng để review bảo mật P
 
 1. **Thẩm định** từng phát hiện của công cụ quét: `TP`, `FP` hoặc `NEEDS_REVIEW`, kèm lý do và bằng chứng trích từ mã nguồn.
 2. **Săn thêm** lỗ hổng mà công cụ quét bỏ sót trong phần code PR thay đổi: phân quyền, IDOR, fail-open, vi phạm quy tắc R-01..R-19.
-3. **Đề xuất bản vá** (unified diff) và kiểm chứng bản vá: áp vào bản sao tạm, chạy test và Semgrep.
+3. **Đề xuất cách sửa** bằng lời cho mỗi lỗi thật. Agent chỉ đọc, không sinh code: lập trình viên đọc báo cáo và tự sửa, quality gate chặn merge tới khi lỗi được xử lý.
 
 Thiết kế nằm ở spec mục 4 (`docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md`) và spec bổ sung mục 4 (`docs/superpowers/specs/2026-11-21-ops-dast-benchmark-design.md`). Giao diện với pipeline là Hợp đồng 2 (`docs/superpowers/plans/2026-11-07-00-roadmap.md`).
 
@@ -17,7 +17,6 @@ cd agent && uv sync --locked          # Python 3.12, uv
 export LLM_PROVIDER=claude-mcp        # hoặc anthropic / openai / gemini kèm LLM_API_KEY
 uv run --project agent secagent --mode cli --repo . \
   --base origin/main --head HEAD --sarif-dir sarif --out out
-uv run --project agent secagent-validate --out out --repo .   # kiểm chứng bản vá (không cần LLM)
 ```
 
 `--mode cli` in ra từng bước và từng lần gọi công cụ, dùng khi demo. `--mode ci` và `--mode benchmark` chỉ in một dòng tóm tắt.
@@ -44,7 +43,7 @@ Các biến khác:
 | `LLM_MODEL` | Ghi đè model. Tên mặc định trong bảng trên có thể cũ dần theo thời gian |
 | `LLM_BASE_URL` | Ghi đè endpoint (proxy, gateway) cho `openai` và `gemini` |
 | `LLM_TEMPERATURE` | Số thực, hoặc `none` để không gửi. Mặc định 0 nếu nhà cung cấp hỗ trợ. Claude không nhận tham số này |
-| `LLM_PRICE_IN_PER_M` / `LLM_PRICE_OUT_PER_M` | Đơn giá USD cho 1 triệu token, dùng để tính `cost_usd` (RQ4) |
+| `LLM_PRICE_IN_PER_M` / `LLM_PRICE_OUT_PER_M` | Đơn giá USD cho 1 triệu token, dùng để tính `cost_usd` (RQ3) |
 | `CLAUDE_BIN` | Đường dẫn CLI `claude` cho `claude-mcp`, ví dụ bản `claude.exe` đi kèm extension VS Code |
 
 ### `claude-mcp`
@@ -83,7 +82,7 @@ secagent/mcp_bridge.py (MCP stdio) ── socket 127.0.0.1, token riêng của p
 | `report.json` | Kết luận cho từng cụm phát hiện, theo đúng schema spec 4.3 cộng `finding_ids`. Quality gate đọc file này |
 | `report.md` | Comment báo cáo trên PR (tiếng Việt) |
 | `agent.sarif` | Lỗ hổng do Agent tự tìm, upload lên tab Security (category `ai-agent`) |
-| `review.json` | Review với các comment `suggestion` để sửa bằng một cú bấm |
+| `review.json` | Review với comment tại dòng lỗi (dòng PR thêm vào): vấn đề và cách sửa |
 | `trace.jsonl` | Nhật ký từng lần gọi LLM và công cụ, đã che secret |
 | `claude-mcp/` | Chỉ có với `claude-mcp`: hội thoại của từng phiên |
 
@@ -102,7 +101,7 @@ Mã thoát: `0` là chạy xong; `2` là Agent thất bại, khi đó gate quay 
 3. **Kiểm tra**:
    - cụm chưa có kết luận được hỏi lại một lần;
    - bằng chứng phải khớp với code thật, kết luận `FP` phải có bằng chứng; không đạt thì thành `NEEDS_REVIEW`.
-4. **Báo cáo** và **kiểm chứng bản vá**: tối đa 2 bản vá, mức nghiêm trọng cao nhất trước.
+4. **Báo cáo**: `report.json`, comment trên PR, comment tại dòng lỗi, SARIF.
 
 Với `claude-mcp`, mỗi lượt bổ sung (chạm giới hạn, hỏi lại cụm còn thiếu) là một tiến trình `claude -p` mới: tin nhắn đầu của phiên cộng chỉ dẫn bổ sung. Các kết luận đã nộp vẫn được giữ.
 
@@ -114,11 +113,9 @@ Với `claude-mcp`, mỗi lượt bổ sung (chạm giới hạn, hỏi lại c�
 - **Prompt injection không gỡ được việc chặn.** Kết luận `FP` phải có bằng chứng khớp code thật. Gate chỉ miễn chặn Critical khi có label `security-reviewed`. Sửa `agent/**` cũng cần label đó.
 - **Trên CI:**
   - Bước gọi LLM là bước duy nhất có `LLM_API_KEY`. Bước này chạy code Agent lấy từ PR (vì vậy sửa `agent/**` cần label `security-reviewed`), nhưng không chạy ứng dụng hay test của PR. `report.json` được upload (artifact `agent-report`) ngay sau bước này, và quality gate chỉ đọc artifact đó.
-  - Kiểm chứng bản vá chạy ở job riêng `validate-patches`. Job này chạy test của PR nên không tham chiếu secret nào và không lưu uv cache; kết quả của nó (artifact `agent-validation`) chỉ để hiển thị, gate không dùng.
   - Job `agent-comment` không checkout code. Job này chỉ cập nhật comment và review của chính bot, và luôn gửi review dạng `COMMENT` (Agent không bao giờ approve PR).
   - `claude-mcp` không bao giờ chạy trên CI. GitHub không giữ thông tin đăng nhập Claude nào.
 - **Bằng chứng cho FP.** Kết luận `FP` phải trích ít nhất một đoạn mã thật (≥ 10 ký tự) tại vị trí phát hiện (±20 dòng) hoặc trong file liên quan theo luồng dữ liệu; với phát hiện SCA thì chỉ cần trích được mã thật, ví dụ nơi import. Không đạt thì kết luận thành `NEEDS_REVIEW`.
-- **Bản vá không được tin số dòng.** Dòng bị xóa và dòng ngữ cảnh của bản vá phải khớp nội dung thật; nếu không, bản vá không được tính là đã kiểm chứng và không thành gợi ý sửa.
 - **Chỉ thẩm định phát hiện trong phần PR thay đổi**, đúng tập mà quality gate xét, và xét phát hiện nghiêm trọng nhất trước.
 - **Dữ liệu gửi đi.** Code của PR được gửi cho nhà cung cấp LLM của chế độ đã chọn; cần cân nhắc điều này trong môi trường bệnh viện thật (spec mục 5.7).
 

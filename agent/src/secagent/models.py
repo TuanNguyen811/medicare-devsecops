@@ -29,10 +29,9 @@ class Evidence(BaseModel):
 
 
 class Fix(BaseModel):
-    description: str
-    patch: str = Field(default="", description="Unified diff from the repo root (a/ b/ prefixes)")
-    validated: bool | None = None
-    validation_note: str = ""
+    """How to fix a TP, in words: the developer writes the code (the agent only reads)."""
+
+    description: str = Field(min_length=1)
 
 
 class VerdictArgs(BaseModel):

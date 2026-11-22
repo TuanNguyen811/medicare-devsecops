@@ -2,7 +2,9 @@
 
 - Coverage: clusters without a verdict get one follow-up request; still missing → NEEDS_REVIEW.
 - Anti-hallucination: cited evidence must exist in the repository; otherwise → NEEDS_REVIEW.
-  An FP verdict must cite evidence. Nothing here can ever turn a finding into FP.
+  A snippet quoted verbatim but a few lines off (models miscount lines) is moved to where it
+  really is; an invented one is not. An FP verdict must cite evidence. Nothing here can ever
+  turn a finding into FP.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from secagent.trace import Trace
 TOOL_ORDER = ("semgrep", "codeql", "bandit", "trivy", "gitleaks", "checkov", "zizmor")
 MIN_SNIPPET_CHARS = 10  # an FP must quote real code, not ")" or an empty snippet
 NEAR_LINES = 20
+MAX_SHIFT = 10  # how far a quoted snippet may sit from the cited lines
 VERDICT_ORDER = {"TP": 0, "NEEDS_REVIEW": 1, "FP": 2}
 _LINE_PREFIX = re.compile(r"^\s*\d+\|\s?")  # a "   12| " prefix copied from read_file output
 
@@ -46,27 +49,66 @@ def _normalize(text: str) -> str:
     return " ".join(_LINE_PREFIX.sub("", text).split())
 
 
-def evidence_problems(evidence: list[Evidence], fs: RepoFS) -> list[str]:
-    problems = []
+def _missing_line(item: Evidence, lines: list[str]) -> str | None:
+    """The first snippet line not found around the cited lines (±3), or None."""
+    window = [_normalize(line) for line in lines[max(0, item.start_line - 4):
+                                                 item.end_line + 3]]
+    for snippet_line in item.snippet.splitlines():
+        wanted = _normalize(snippet_line)
+        if wanted and not any(wanted in line for line in window):
+            return wanted
+    return None
+
+
+def _relocate(item: Evidence, lines: list[str]) -> Evidence | None:
+    """The snippet as a contiguous block within MAX_SHIFT lines of the cited start, nearest
+    first; None if it is not there."""
+    wanted = [_normalize(s) for s in item.snippet.splitlines()]
+    while wanted and not wanted[-1]:
+        wanted.pop()
+    if not any(wanted):
+        return None
+    normalized = [_normalize(line) for line in lines]
+    starts = sorted(range(max(0, item.start_line - 1 - MAX_SHIFT),
+                          min(len(lines), item.start_line + MAX_SHIFT)),
+                    key=lambda i: abs(i - (item.start_line - 1)))
+    for i in starts:
+        block = normalized[i:i + len(wanted)]
+        if len(block) == len(wanted) and all(w in b for w, b in zip(wanted, block, strict=True)):
+            return item.model_copy(update={"start_line": i + 1, "end_line": i + len(wanted)})
+    return None
+
+
+def locate_evidence(evidence: list[Evidence], fs: RepoFS) -> tuple[list[Evidence], list[str]]:
+    """(evidence with line numbers checked or corrected, problems)."""
+    located, problems = [], []
     for item in evidence:
         try:
             lines = fs.lines(item.file)
         except ToolError as exc:
             problems.append(f"{item.file}: {exc}")
+            located.append(item)
             continue
-        if item.end_line > len(lines):
+        fits = item.end_line <= len(lines)
+        missing = _missing_line(item, lines) if fits else None
+        if fits and missing is None:
+            located.append(item)
+            continue
+        moved = _relocate(item, lines) if item.snippet.strip() else None
+        if moved is not None:
+            located.append(moved)
+        elif not fits:
             problems.append(f"{item.file}:{item.start_line}-{item.end_line} vượt quá "
                             f"{len(lines)} dòng")
-            continue
-        window = [_normalize(line) for line in lines[max(0, item.start_line - 4):
-                                                     item.end_line + 3]]
-        for snippet_line in item.snippet.splitlines():
-            wanted = _normalize(snippet_line)
-            if wanted and not any(wanted in line for line in window):
-                problems.append(f"{item.file}:{item.start_line} không có đoạn mã "
-                                f"“{wanted[:60]}”")
-                break
-    return problems
+            located.append(item)
+        else:
+            problems.append(f"{item.file}:{item.start_line} không có đoạn mã “{missing[:60]}”")
+            located.append(item)
+    return located, problems
+
+
+def evidence_problems(evidence: list[Evidence], fs: RepoFS) -> list[str]:
+    return locate_evidence(evidence, fs)[1]
 
 
 def fp_is_anchored(evidence: list[Evidence], cluster: Cluster) -> bool:
@@ -120,21 +162,21 @@ def _cluster_entry(cluster: Cluster, outcome: ReviewOutcome, fs: RepoFS) -> Repo
                            cwe=cluster.cwes[0] if cluster.cwes else None,
                            reasoning=_uncovered_reason(cluster, outcome))
     verdict, reasoning = v.verdict, v.reasoning
-    problems = evidence_problems(v.evidence, fs)
+    evidence, problems = locate_evidence(v.evidence, fs)
     if problems:
         verdict = "NEEDS_REVIEW"
         reasoning = f"[Bằng chứng không khớp mã nguồn: {'; '.join(problems)}] {reasoning}"
-    elif v.verdict == "FP" and not v.evidence:
+    elif v.verdict == "FP" and not evidence:
         verdict = "NEEDS_REVIEW"
         reasoning = f"[Kết luận FP không có bằng chứng] {reasoning}"
-    elif v.verdict == "FP" and not fp_is_anchored(v.evidence, cluster):
+    elif v.verdict == "FP" and not fp_is_anchored(evidence, cluster):
         verdict = "NEEDS_REVIEW"
         reasoning = ("[Bằng chứng cho FP phải trích đoạn mã (≥ 10 ký tự) tại vị trí phát hiện "
                      f"hoặc trong file liên quan] {reasoning}")
     return ReportEntry(**base, verdict=verdict, confidence=v.confidence, severity=v.severity,
                        cwe=v.cwe or (cluster.cwes[0] if cluster.cwes else None),
                        owasp=v.owasp, violated_rule=v.violated_rule, reasoning=reasoning,
-                       evidence=v.evidence, exploit_scenario=v.exploit_scenario, fix=v.fix)
+                       evidence=evidence, exploit_scenario=v.exploit_scenario, fix=v.fix)
 
 
 def _duplicate_of(file: str, line: int, cwe: str, clusters: list[Cluster]) -> Cluster | None:
@@ -153,14 +195,14 @@ def build_entries(clusters: list[Cluster], outcome: ReviewOutcome, fs: RepoFS,
     entries = [_cluster_entry(c, outcome, fs) for c in clusters]
     kept = 0
     for found in outcome.new_findings:
-        first = found.evidence[0]
+        evidence, problems = locate_evidence(found.evidence, fs)
+        first = evidence[0]
         duplicate = _duplicate_of(first.file, first.start_line, found.cwe, clusters)
         if duplicate is not None:
             if trace is not None:
                 trace.event("new_finding_dropped", title=found.title, duplicate_of=duplicate.id)
             continue
         kept += 1
-        problems = evidence_problems(found.evidence, fs)
         reasoning = found.reasoning
         if problems:
             reasoning = f"[Bằng chứng không khớp mã nguồn: {'; '.join(problems)}] {reasoning}"
@@ -168,7 +210,7 @@ def build_entries(clusters: list[Cluster], outcome: ReviewOutcome, fs: RepoFS,
             finding_id=f"agent:{kept}", finding_ids=[], source="agent", title=found.title,
             verdict="NEEDS_REVIEW" if problems else "TP", confidence=found.confidence,
             severity=found.severity, cwe=found.cwe, owasp=found.owasp,
-            violated_rule=found.violated_rule, reasoning=reasoning, evidence=found.evidence,
+            violated_rule=found.violated_rule, reasoning=reasoning, evidence=evidence,
             exploit_scenario=found.exploit_scenario, fix=found.fix, file=first.file,
             line=first.start_line))
     return sorted(entries, key=lambda e: (VERDICT_ORDER[e.verdict],

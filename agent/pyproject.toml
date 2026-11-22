@@ -1,7 +1,7 @@
 [project]
 name = "secagent"
 version = "0.1.0"
-description = "AI Security Agent: thẩm định phát hiện của công cụ quét, săn lỗi logic và đề xuất bản vá cho Pull Request"
+description = "AI Security Agent: thẩm định phát hiện của công cụ quét, săn lỗi logic và đề xuất cách sửa cho Pull Request"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,7 +12,6 @@ dependencies = [
 
 [project.scripts]
 secagent = "secagent.cli:run"
-secagent-validate = "secagent.cli:run_validate"
 
 [build-system]
 requires = ["uv_build>=0.13.7,<0.14.0"]
@@ -31,8 +30,7 @@ extend-exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "RUF"]
-# The agent runs git (and, when validating patches, the test command) with argv lists,
-# never a shell; S603/S607 would flag every such call.
+# The agent runs git with argv lists, never a shell; S603/S607 would flag every such call.
 ignore = ["S603", "S607"]
 
 [tool.ruff.lint.per-file-ignores]

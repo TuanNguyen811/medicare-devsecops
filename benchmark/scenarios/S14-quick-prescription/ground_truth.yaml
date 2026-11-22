@@ -1,0 +1,11 @@
+findings:
+  - id: S14-1
+    title: Kê đơn nhanh chỉ kiểm tra quyền xem bệnh án, y tá và bác sĩ không phụ trách kê được đơn
+    category: logic
+    severity: high
+    cwe: [CWE-285, CWE-863]
+    file: app/medicare/prescription/service.py
+    lines: [64, 73]
+    routes: ["POST /records/{record_id}/prescriptions/quick"]
+    rules: []
+    violated_rule: R-03

@@ -14,7 +14,7 @@
 
 **Thành công là khi:**
 
-- Một PR đi hết luồng: 6 nhóm công cụ quét + DAST → Agent (`secagent`, khi có API key; chưa có key thì gate chạy chế độ truyền thống) → kiểm chứng bản vá → comment → gate. Không cần thao tác tay.
+- Một PR đi hết luồng: 6 nhóm công cụ quét + DAST → Agent (`secagent`, khi có API key; chưa có key thì gate chạy chế độ truyền thống) → comment → gate. Không cần thao tác tay.
 - `main` được build, ký, gắn SBOM, rồi deploy về cụm Kubernetes trên máy bằng một lệnh. Image không có chữ ký hợp lệ bị cụm từ chối.
 - Dashboard Grafana có số liệu, và cảnh báo dò mật khẩu bật lên khi chạy script giả lập.
 - Benchmark chạy đủ C1, C1+DAST, C2–C5 trên khoảng 30 kịch bản. Kết quả thô và bảng tổng hợp được commit.
@@ -40,7 +40,7 @@
 2. PR (pr-security.yml) build-test | Semgrep, Bandit, CodeQL | Trivy | Gitleaks | Checkov, zizmor
                         | DAST: ZAP [MỚI]
                         → ai-security-agent (secagent, API key)
-                        → validate-patches → agent-comment → quality-gate → review, label → merge
+                        → agent-comment → quality-gate → review, label → merge
 3. MAIN (main-ci.yml)   build-test → full-scan → image → Trivy image → SBOM
                         → cosign ký + SBOM attestation [MỚI] → GHCR → staging tạm
 4. DEPLOY [MỚI]         deploy/pull-deploy.sh trên máy: cosign verify → apply overlay
@@ -82,7 +82,7 @@ Bốn chế độ dùng chung toàn bộ code của `secagent`. Chúng chỉ kh�
 
 ```
 secagent (y nguyên): pha 0 (SARIF, diff, che secret) → review theo lô cluster → kiểm độ phủ
-                     → chống bịa → validate_patch → report.json, report.md, agent.sarif
+                     → chống bịa → report.json, report.md, agent.sarif
    lớp LLM = claude-mcp:
      claude -p  --system-prompt <prompts/system.md>  --model <LLM_MODEL>
                 --tools ""  --strict-mcp-config --mcp-config <cầu MCP>
@@ -101,7 +101,7 @@ secagent (y nguyên): pha 0 (SARIF, diff, che secret) → review theo lô cluste
 
 - **Cùng prompt:** system prompt là `prompts/system.md`; tin nhắn đầu dựng bằng `review.md` như chế độ API.
 - **Cùng công cụ:** cầu MCP phục vụ đúng các công cụ mà chế độ API đưa cho model, với cùng giới hạn đường dẫn, cùng cách che secret và cùng vỏ bọc `<untrusted-code>`. Cờ `--no-ast-tools` và `--no-requirements` bỏ công cụ tương ứng khỏi danh sách.
-- **Cùng các pha:** mỗi lô cluster chạy một `claude -p`. Cluster còn thiếu kết luận được hỏi lại trong một phiên mới, chỉ gồm các cluster đó. Sau đó là chống bịa, `validate_patch` và báo cáo, bằng đúng code của secagent.
+- **Cùng các pha:** mỗi lô cluster chạy một `claude -p`. Cluster còn thiếu kết luận được hỏi lại trong một phiên mới, chỉ gồm các cluster đó. Sau đó là chống bịa và báo cáo, bằng đúng code của secagent.
 - **`--strategy single-shot`:** như chế độ API, cầu MCP chỉ có các công cụ nộp kết luận (không có công cụ đọc). Toàn bộ ngữ cảnh nằm trong prompt `single_shot.md`. Giới hạn 2 lượt, vì Claude Code tính câu trả lời kết thúc sau kết quả công cụ là một lượt riêng.
 - **`meta`:** lấy từ đầu ra stream-json: model thật, số lượt gọi, token vào và ra, thời gian, chi phí quy đổi theo bảng giá API. `report.md` ghi chế độ và model ở chân báo cáo (dạng "LLM claude-mcp · model …").
 
@@ -117,7 +117,7 @@ secagent (y nguyên): pha 0 (SARIF, diff, che secret) → review theo lô cluste
 ### 4.4 Trên CI
 
 - Job `ai-agent` của `pr-security.yml` chạy `secagent` bằng `LLM_API_KEY` với `anthropic`, `openai` hoặc `gemini`. Không có thông tin đăng nhập Claude trên GitHub.
-- Mọi job checkout code PR (`ai-agent`, `validate-patches`, `quality-gate`) đều xóa `out/` trước khi dùng, vì `out/` trong code PR do người mở PR kiểm soát (chặn trường hợp PR tự đặt sẵn `out/agent-exit=0`).
+- Mọi job checkout code PR (`ai-agent`, `quality-gate`) đều xóa `out/` trước khi dùng, vì `out/` trong code PR do người mở PR kiểm soát (chặn trường hợp PR tự đặt sẵn `out/agent-exit=0`).
 
 ### 4.5 Cấu hình
 
@@ -337,9 +337,8 @@ Mọi cấu hình có AI chạy `secagent` ở chế độ `claude-mcp` (mục 4
 **Câu hỏi nghiên cứu:**
 - RQ1 (giảm báo nhầm): C1+DAST so với C2, xét trên mồi nhử, bản sạch và các finding sai.
 - RQ2 (bắt thêm lỗi): C1+DAST so với C2.
-- RQ3 (bản vá): pha `validate_patch` của C2.
-- RQ4 (chi phí): thời gian và token đo thật. Tiền quy đổi theo bảng giá API của Claude, tức đúng số tiền nếu chạy chế độ `anthropic` bằng key. Với model khác, tiền chỉ là ước tính bằng số token nhân bảng giá, ghi rõ là ước tính.
-- RQ5 (đóng góp từng phần): C2 so với C3 (Function Calling), C4 (ngữ cảnh nghiệp vụ), C5 (công cụ AST).
+- RQ3 (chi phí): thời gian và token đo thật. Tiền quy đổi theo bảng giá API của Claude, tức đúng số tiền nếu chạy chế độ `anthropic` bằng key. Với model khác, tiền chỉ là ước tính bằng số token nhân bảng giá, ghi rõ là ước tính.
+- RQ4 (đóng góp từng phần): C2 so với C3 (Function Calling), C4 (ngữ cảnh nghiệp vụ), C5 (công cụ AST).
 - Phụ: độ ổn định qua 3 lần chạy C2; S15 (prompt injection).
 
 **Hạn chế ghi trong báo cáo:** số liệu là của "kiến trúc secagent + Claude Sonnet". Con số tuyệt đối phụ thuộc model; C2-api đo ảnh hưởng của model khi có key.
@@ -364,7 +363,7 @@ Chạy `--jobs 3`. `run.py` chạy tiếp được từ chỗ dừng và tự ch
 2. **Tải về:** `benchmark/run.py fetch --run <id>` tải artifact về `benchmark/results/<run-id>/scan/<kịch bản>/`.
 3. **Chạy agent (máy):** `benchmark/run.py agent --config C2|C3|C4|C5 --set dev|test --reps N --jobs 3`. Mỗi lượt:
    - tạo worktree tạm ở commit kịch bản (không có `benchmark/`);
-   - chạy `secagent --mode benchmark` (LLM `claude-mcp`), rồi `validate_patch`;
+   - chạy `secagent --mode benchmark` (LLM `claude-mcp`);
    - ghi `report.json`, `trace.jsonl`, `timing.json` và đầu ra stream-json của các lượt `claude -p` vào `benchmark/results/<run-id>/<config>/<kịch bản>/<rep>/`.
 4. **Chấm:** `benchmark/evaluate.py` sinh `summary.csv`, bảng Markdown và biểu đồ. Kết quả thô **được commit** để lưu vĩnh viễn, vì artifact của GitHub chỉ giữ tối đa 90 ngày.
 5. **PR trưng bày:** khoảng 5 PR, mỗi nhóm một kịch bản tiêu biểu, chạy toàn bộ luồng trên GitHub. Comment và check được lưu cả khi PR đã đóng. Nhánh có lỗi không bao giờ được deploy. Phần AI trên PR chỉ có khi secagent có API key; chưa có key thì gate chạy chế độ truyền thống, và kết quả AI nằm ở `benchmark/results/`.
@@ -378,6 +377,8 @@ Chạy `--jobs 3`. `run.py` chạy tiếp được từ chỗ dừng và tự ch
 - **Khớp đáp án:**
   - cùng file, dòng nằm trong vùng lỗi ±3, và cùng nhóm CWE (theo `CWE_GROUPS` của agent). Với phát hiện agent tự tìm, chỉ cần **một** đoạn bằng chứng của nó khớp;
   - với phát hiện không có CWE (Checkov), khớp khi tên rule nằm trong `rules` của đáp án.
+  - với phát hiện của agent, cũng khớp khi cùng vị trí và `violated_rule` của nó nằm trong danh sách quy tắc mà đáp án ghi là bị vi phạm (một lỗi có thể vi phạm nhiều quy tắc, ví dụ S07 vi phạm R-04 và R-17). CWE của một lỗi logic là lựa chọn mang tính diễn giải (tỷ lệ BHYT do client gửi có thể ghi CWE-602, CWE-472 hay CWE-639), còn quy tắc bị vi phạm thì đáp án liệt kê đủ. Quy ước này chốt trên tập dev, trước khi viết tập test.
+- **Phát hiện SAST/IaC có sẵn trong file PR sửa** (ví dụ các finding Checkov của `infra/terraform/main.tf` khi PR thêm tài nguyên vào file đó) được tính như mọi dự đoán: không khớp đáp án thì là FP. Khác với DAST, chúng chỉ xuất hiện khi PR sửa đúng file, và người review PR thật cũng phải xem chúng; bảng kết quả ghi rõ số FP thuộc loại này để không phóng đại mức giảm FP ở RQ1.
 - **Phát hiện DAST có sẵn trên bản gốc S00** (cùng rule ZAP, trên bất kỳ route nào, ví dụ thiếu header CSP) xuất hiện ở mọi kịch bản, vì ZAP quét cả app. Đây là vấn đề có thật nhưng không do PR gây ra. Chúng không tính TP hay FP, được đếm riêng. Benchmark đo những gì mỗi PR đưa vào. Khớp đáp án được xét trước, nên quy ước này không che được lỗi được cài.
 - **Cấp PR:** quyết định của quality gate:
   - chế độ `traditional` cho C1 và C1+DAST;

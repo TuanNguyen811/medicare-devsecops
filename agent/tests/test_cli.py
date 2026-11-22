@@ -11,7 +11,7 @@ from secagent.report.markdown import MARKER
 
 SERVICE = "app/medicare/demo/service.py"
 VULN = "    return db.execute(text(f\"SELECT * FROM items WHERE name = '{q}'\"))"
-FIXED = '    return db.execute(text("SELECT * FROM items WHERE name = :q"), {"q": q})'
+FIX_TEXT = "Dùng bind parameter: text(\"... WHERE name = :q\") với tham số q"
 GATE = REPO_ROOT / "security" / "gate" / "gate.py"
 
 
@@ -48,18 +48,13 @@ def argv(repo, base, head, sarif_dir, out, mode="ci"):
             "--out", str(out)]
 
 
-def fix_patch(line: int) -> str:
-    return (f"--- a/{SERVICE}\n+++ b/{SERVICE}\n@@ -{line},1 +{line},1 @@\n"
-            f"-{VULN}\n+{FIXED}\n")
-
-
 def verdict(line: int, v="TP", snippet="return db.execute(") -> dict:
     return {"cluster_id": "F1", "verdict": v, "confidence": 0.95, "severity": "HIGH",
             "cwe": "CWE-89", "owasp": "A05", "reasoning": "q ghép thẳng vào câu SQL",
             "evidence": [{"file": SERVICE, "start_line": line, "end_line": line,
                           "snippet": snippet}],
             "exploit_scenario": "q = ' OR 1=1 --",
-            "fix": {"description": "Dùng bind parameter", "patch": fix_patch(line)}}
+            "fix": {"description": FIX_TEXT}}
 
 
 def scripted(line: int, v="TP") -> ScriptedLLM:
@@ -92,11 +87,11 @@ def test_cli_end_to_end_writes_contract_outputs(tmp_path):
     assert entry.finding_ids == sorted([
         f"codeql:py/sql-injection:{SERVICE}:{line}",
         f"semgrep:medicare.sqlalchemy-text-fstring:{SERVICE}:{line}"])
-    assert entry.verdict == "TP" and entry.fix.patch == fix_patch(line)
+    assert entry.verdict == "TP" and entry.fix.description == FIX_TEXT
     assert (report.meta.llm_calls, report.meta.model, report.meta.tokens_in) == (
         2, "claude-opus-5-5", 200)
     review = json.loads((out / "review.json").read_text(encoding="utf-8"))
-    assert review["comments"][0]["line"] == line and FIXED in review["comments"][0]["body"]
+    assert review["comments"][0]["line"] == line and FIX_TEXT in review["comments"][0]["body"]
 
 
 def test_report_drives_the_gate(tmp_path):

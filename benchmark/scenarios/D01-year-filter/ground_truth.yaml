@@ -1,0 +1,3 @@
+# Mồi nhử: text() ghép tên cột lấy từ danh sách cho phép (YEAR_FIELDS), giá trị năm qua bind
+# parameter. Không có lỗ hổng.
+findings: []

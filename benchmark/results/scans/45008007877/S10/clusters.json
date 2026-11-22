@@ -1,0 +1,800 @@
+{
+  "C1": [
+    {
+      "id": "F1",
+      "file": "infra/k8s/backup-cronjob.yaml",
+      "line": 3,
+      "end_line": 60,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_K8S_23:infra/k8s/backup-cronjob.yaml:3"
+      ],
+      "rules": [
+        "CKV_K8S_23"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F2",
+      "file": "infra/k8s/backup-cronjob.yaml",
+      "line": 3,
+      "end_line": 60,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_K8S_40:infra/k8s/backup-cronjob.yaml:3"
+      ],
+      "rules": [
+        "CKV_K8S_40"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F3",
+      "file": "infra/terraform/main.tf",
+      "line": 5,
+      "end_line": 7,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_394:infra/terraform/main.tf:5"
+      ],
+      "rules": [
+        "CKV_AWS_394"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F4",
+      "file": "infra/terraform/main.tf",
+      "line": 15,
+      "end_line": 25,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_109:infra/terraform/main.tf:15"
+      ],
+      "rules": [
+        "CKV_AWS_109"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F5",
+      "file": "infra/terraform/main.tf",
+      "line": 15,
+      "end_line": 25,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_111:infra/terraform/main.tf:15"
+      ],
+      "rules": [
+        "CKV_AWS_111"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F6",
+      "file": "infra/terraform/main.tf",
+      "line": 15,
+      "end_line": 25,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_356:infra/terraform/main.tf:15"
+      ],
+      "rules": [
+        "CKV_AWS_356"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F7",
+      "file": "infra/terraform/main.tf",
+      "line": 64,
+      "end_line": 68,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV2_AWS_5:infra/terraform/main.tf:64"
+      ],
+      "rules": [
+        "CKV2_AWS_5"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F8",
+      "file": "infra/terraform/main.tf",
+      "line": 175,
+      "end_line": 177,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV2_AWS_62:infra/terraform/main.tf:175"
+      ],
+      "rules": [
+        "CKV2_AWS_62"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F9",
+      "file": "infra/terraform/main.tf",
+      "line": 175,
+      "end_line": 177,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_144:infra/terraform/main.tf:175"
+      ],
+      "rules": [
+        "CKV_AWS_144"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F10",
+      "file": "infra/terraform/main.tf",
+      "line": 179,
+      "end_line": 181,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV2_AWS_62:infra/terraform/main.tf:179"
+      ],
+      "rules": [
+        "CKV2_AWS_62"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F11",
+      "file": "infra/terraform/main.tf",
+      "line": 179,
+      "end_line": 181,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_144:infra/terraform/main.tf:179"
+      ],
+      "rules": [
+        "CKV_AWS_144"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F12",
+      "file": "infra/terraform/main.tf",
+      "line": 320,
+      "end_line": 322,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV2_AWS_6:infra/terraform/main.tf:320"
+      ],
+      "rules": [
+        "CKV2_AWS_6"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F13",
+      "file": "infra/terraform/main.tf",
+      "line": 320,
+      "end_line": 322,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV2_AWS_62:infra/terraform/main.tf:320"
+      ],
+      "rules": [
+        "CKV2_AWS_62"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F14",
+      "file": "infra/terraform/main.tf",
+      "line": 320,
+      "end_line": 322,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_144:infra/terraform/main.tf:320"
+      ],
+      "rules": [
+        "CKV_AWS_144"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F15",
+      "file": "infra/terraform/main.tf",
+      "line": 320,
+      "end_line": 322,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_145:infra/terraform/main.tf:320"
+      ],
+      "rules": [
+        "CKV_AWS_145"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F16",
+      "file": "infra/terraform/main.tf",
+      "line": 324,
+      "end_line": 330,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_54:infra/terraform/main.tf:324"
+      ],
+      "rules": [
+        "CKV_AWS_54"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F17",
+      "file": "infra/terraform/main.tf",
+      "line": 324,
+      "end_line": 330,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_56:infra/terraform/main.tf:324"
+      ],
+      "rules": [
+        "CKV_AWS_56"
+      ],
+      "in_diff": true
+    }
+  ],
+  "C1+DAST": [
+    {
+      "id": "F1",
+      "file": "dast:GET /",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-1021"
+      ],
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "rules": [
+        "10020"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F2",
+      "file": "dast:GET /",
+      "line": 0,
+      "end_line": 0,
+      "severity": "LOW",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "rules": [
+        "10021"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F3",
+      "file": "dast:GET /health",
+      "line": 0,
+      "end_line": 0,
+      "severity": "LOW",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "rules": [
+        "10021"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F4",
+      "file": "dast:GET /login",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-1021"
+      ],
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "rules": [
+        "10020"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F5",
+      "file": "dast:GET /login",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "rules": [
+        "10021",
+        "10038"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F6",
+      "file": "dast:POST /appointments",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "rules": [
+        "10038"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F7",
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "rules": [
+        "10038"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F8",
+      "file": "dast:POST /patients",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "rules": [
+        "10038"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F9",
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "rules": [
+        "10038"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F10",
+      "file": "infra/k8s/backup-cronjob.yaml",
+      "line": 3,
+      "end_line": 60,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_K8S_23:infra/k8s/backup-cronjob.yaml:3"
+      ],
+      "rules": [
+        "CKV_K8S_23"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F11",
+      "file": "infra/k8s/backup-cronjob.yaml",
+      "line": 3,
+      "end_line": 60,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_K8S_40:infra/k8s/backup-cronjob.yaml:3"
+      ],
+      "rules": [
+        "CKV_K8S_40"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F12",
+      "file": "infra/terraform/main.tf",
+      "line": 5,
+      "end_line": 7,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_394:infra/terraform/main.tf:5"
+      ],
+      "rules": [
+        "CKV_AWS_394"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F13",
+      "file": "infra/terraform/main.tf",
+      "line": 15,
+      "end_line": 25,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_109:infra/terraform/main.tf:15"
+      ],
+      "rules": [
+        "CKV_AWS_109"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F14",
+      "file": "infra/terraform/main.tf",
+      "line": 15,
+      "end_line": 25,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_111:infra/terraform/main.tf:15"
+      ],
+      "rules": [
+        "CKV_AWS_111"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F15",
+      "file": "infra/terraform/main.tf",
+      "line": 15,
+      "end_line": 25,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_356:infra/terraform/main.tf:15"
+      ],
+      "rules": [
+        "CKV_AWS_356"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F16",
+      "file": "infra/terraform/main.tf",
+      "line": 64,
+      "end_line": 68,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV2_AWS_5:infra/terraform/main.tf:64"
+      ],
+      "rules": [
+        "CKV2_AWS_5"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F17",
+      "file": "infra/terraform/main.tf",
+      "line": 175,
+      "end_line": 177,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV2_AWS_62:infra/terraform/main.tf:175"
+      ],
+      "rules": [
+        "CKV2_AWS_62"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F18",
+      "file": "infra/terraform/main.tf",
+      "line": 175,
+      "end_line": 177,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_144:infra/terraform/main.tf:175"
+      ],
+      "rules": [
+        "CKV_AWS_144"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F19",
+      "file": "infra/terraform/main.tf",
+      "line": 179,
+      "end_line": 181,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV2_AWS_62:infra/terraform/main.tf:179"
+      ],
+      "rules": [
+        "CKV2_AWS_62"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F20",
+      "file": "infra/terraform/main.tf",
+      "line": 179,
+      "end_line": 181,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_144:infra/terraform/main.tf:179"
+      ],
+      "rules": [
+        "CKV_AWS_144"
+      ],
+      "in_diff": false
+    },
+    {
+      "id": "F21",
+      "file": "infra/terraform/main.tf",
+      "line": 320,
+      "end_line": 322,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV2_AWS_6:infra/terraform/main.tf:320"
+      ],
+      "rules": [
+        "CKV2_AWS_6"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F22",
+      "file": "infra/terraform/main.tf",
+      "line": 320,
+      "end_line": 322,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV2_AWS_62:infra/terraform/main.tf:320"
+      ],
+      "rules": [
+        "CKV2_AWS_62"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F23",
+      "file": "infra/terraform/main.tf",
+      "line": 320,
+      "end_line": 322,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_144:infra/terraform/main.tf:320"
+      ],
+      "rules": [
+        "CKV_AWS_144"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F24",
+      "file": "infra/terraform/main.tf",
+      "line": 320,
+      "end_line": 322,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_145:infra/terraform/main.tf:320"
+      ],
+      "rules": [
+        "CKV_AWS_145"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F25",
+      "file": "infra/terraform/main.tf",
+      "line": 324,
+      "end_line": 330,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_54:infra/terraform/main.tf:324"
+      ],
+      "rules": [
+        "CKV_AWS_54"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F26",
+      "file": "infra/terraform/main.tf",
+      "line": 324,
+      "end_line": 330,
+      "severity": "HIGH",
+      "tools": [
+        "checkov"
+      ],
+      "cwes": [],
+      "finding_ids": [
+        "checkov:CKV_AWS_56:infra/terraform/main.tf:324"
+      ],
+      "rules": [
+        "CKV_AWS_56"
+      ],
+      "in_diff": true
+    }
+  ]
+}

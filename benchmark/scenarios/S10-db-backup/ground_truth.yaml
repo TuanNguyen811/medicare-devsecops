@@ -1,0 +1,22 @@
+findings:
+  - id: S10-1
+    title: CronJob sao lưu chạy container bằng root (runAsUser 0)
+    category: pattern
+    severity: medium
+    cwe: [CWE-250, CWE-269]
+    file: infra/k8s/backup-cronjob.yaml
+    lines: [3, 30]
+    routes: []
+    rules: [CKV_K8S_23, CKV_K8S_40]
+    violated_rule: null
+  - id: S10-2
+    title: Bucket chứa bản sao lưu CSDL cho phép đọc công khai (Principal *)
+    category: pattern
+    severity: high
+    cwe: [CWE-284, CWE-732, CWE-200, CWE-668]
+    file: infra/terraform/main.tf
+    lines: [320, 401]
+    routes: []
+    # SSE-S3 (CKV_AWS_145) là một phần của lỗi: với KMS, người ngoài không giải mã được bản dump.
+    rules: [CKV_AWS_54, CKV_AWS_56, CKV2_AWS_6, CKV_AWS_145]
+    violated_rule: null

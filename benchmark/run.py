@@ -2,7 +2,7 @@
 
     uv run --project agent --with pyyaml==6.0.2 python benchmark/run.py fetch --run <id>
     uv run --project agent --with pyyaml==6.0.2 python benchmark/run.py agent \\
-        --config C2 --scan <id> --select dev --reps 1 --jobs 3 [--validate]
+        --config C2 --scan <id> --select dev --reps 1 --jobs 3
 
 fetch    downloads the artifacts of a `Benchmark scan` workflow run into
          results/scans/<run>/<ID>/: the scanners' SARIF, zap.sarif (the five roles merged; a
@@ -255,8 +255,8 @@ def _scrub(text: str) -> str:
     return text.replace(str(Path.home()), "~").replace(Path.home().as_posix(), "~")
 
 
-def run_one(config: str, scan: Path, scenario: sc.Scenario, rep: int, validate: bool,
-            version: dict, stop: threading.Event) -> str:
+def run_one(config: str, scan: Path, scenario: sc.Scenario, rep: int, version: dict,
+            stop: threading.Event) -> str:
     from secagent.llm.claude_mcp import spawn  # kills the whole process tree on timeout
 
     rundir = RESULTS / "runs" / scan.name / config / scenario.id / f"rep{rep}"
@@ -289,17 +289,10 @@ def run_one(config: str, scan: Path, scenario: sc.Scenario, rep: int, validate: 
             kind = classify(rundir)
             if exit_code == 0 and kind:  # stopped midway by the plan's limit: not a result
                 exit_code = 3
-            validated = None
-            if exit_code == 0 and validate:
-                with _git_lock:  # validation adds and prunes worktrees of the same repository
-                    v = spawn([*agent, "secagent-validate", "--out", str(rundir), "--repo",
-                               str(repo), "--head", meta["head"]], "", ROOT, _child_env(),
-                              RUN_TIMEOUT_S)
-                validated = -1 if v.timed_out else v.returncode
             (rundir / "timing.json").write_text(json.dumps({
                 "config": config, "scenario": scenario.id, "rep": rep, "scan": scan.name,
                 "base": meta["base"], "head": meta["head"], **version,
-                "exit": exit_code, "wall_s": wall, "validate_exit": validated,
+                "exit": exit_code, "wall_s": wall,
                 "attempt": attempt, "finished_at": datetime.now(UTC).isoformat(timespec="seconds"),
             }, indent=2), encoding="utf-8")
             (rundir / "stderr.txt").write_text(_scrub(done.stderr[-4000:]), encoding="utf-8")
@@ -321,8 +314,7 @@ def run_one(config: str, scan: Path, scenario: sc.Scenario, rep: int, validate: 
     return "failed (usage limit)"
 
 
-def agent(config: str, scan_run: str, selection: str, reps: int, jobs: int,
-          validate: bool) -> int:
+def agent(config: str, scan_run: str, selection: str, reps: int, jobs: int) -> int:
     if not os.environ.get("CLAUDE_BIN") and not shutil.which("claude"):
         raise sc.ScenarioError("set CLAUDE_BIN to the Claude Code CLI")
     scan = RESULTS / "scans" / scan_run
@@ -339,7 +331,7 @@ def agent(config: str, scan_run: str, selection: str, reps: int, jobs: int,
     def work(task):
         scenario, rep = task
         try:
-            status = run_one(config, scan, scenario, rep, validate and rep == 1, version, stop)
+            status = run_one(config, scan, scenario, rep, version, stop)
         except Abort as exc:
             status = f"aborted: {exc}"
         except Exception as exc:  # one broken run must not take the batch down
@@ -369,13 +361,12 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--select", default="dev")
     a.add_argument("--reps", type=int, default=1)
     a.add_argument("--jobs", type=int, default=3)
-    a.add_argument("--validate", action="store_true", help="validate patches (first rep)")
     args = ap.parse_args(argv)
     try:
         if args.cmd == "fetch":
             _say(f"fetched into {fetch(args.run, args.baseline_run)}")
             return 0
-        return agent(args.config, args.scan, args.select, args.reps, args.jobs, args.validate)
+        return agent(args.config, args.scan, args.select, args.reps, args.jobs)
     except (sc.ScenarioError, subprocess.CalledProcessError) as exc:
         _say(f"run.py: {exc}")
         return 2
