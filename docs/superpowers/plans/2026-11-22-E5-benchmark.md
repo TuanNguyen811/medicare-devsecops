@@ -77,9 +77,9 @@
 - [x] PR #14, PR #15.
 
 ## Bước 3: Tập dev và chốt prompt
-- [ ] S01, S07, S10, S14, D1: patch và đáp án; áp sạch lên `v0.3-baseline`; test của app vẫn đạt (trừ khi lỗi cài vào cố ý làm hỏng test).
-- [ ] Chạy `benchmark-scan` cho tập dev, rồi C2 ×1. Chỉnh prompt nếu thấy lỗi hệ thống (không chỉnh theo đáp án cụ thể).
-- [ ] **Commit "chốt prompt"**, ghi hash commit này vào `benchmark/PROMPT_FREEZE`.
+- [x] S01, S07, S10, S14, D01: patch và đáp án; áp sạch lên `v0.3-baseline`; test của app vẫn đạt (trừ khi lỗi cài vào cố ý làm hỏng test).
+- [x] Chạy `benchmark-scan` cho tập dev (run `45008007877`), rồi C2 ×1. Chỉnh prompt nếu thấy lỗi hệ thống (không chỉnh theo đáp án cụ thể).
+- [x] **Commit "chốt prompt"**: `benchmark/PROMPT_FREEZE` ghi hash cây `agent/` và commit chốt; kết quả dev ở `benchmark/results/summary/dev/`.
 
 ## Bước 4: Tập test
 - [ ] S02–S06, S08, S09, S11–S13, S15–S24, D2–D4, bản sạch: patch và đáp án. Commit đáp án trước khi chạy.

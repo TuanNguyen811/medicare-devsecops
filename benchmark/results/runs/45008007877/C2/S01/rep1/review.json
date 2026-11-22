@@ -1,0 +1,13 @@
+{
+  "commit_id": "25e84cde60f26c85e969701d4bf3db9b500be442",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/patient/service.py",
+      "line": 80,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text (semgrep)\nCWE-89\n\nTham số `area` từ query string của GET /patients/search được nối trực tiếp vào `text(f\"... ILIKE '%{area.strip()}%'\")`, không dùng bind parameter. Server không kiểm tra, chỉ có maxlength ở HTML. User staff có thể chèn `' OR 1=1 --` hoặc UNION để vượt `_scope_filter` (R-01) và đọc dữ liệu ngoài phạm vi, kể cả bảng khác (bệnh án, R-12).\n\n**Đề xuất sửa:** Trong service.advanced_search, bỏ text() + f-string; dùng toán tử SQLAlchemy: Patient.address.icontains(area.strip(), autoescape=True) (giống cách Patient.phone.startswith(..., autoescape=True) ở trên). Thêm test với payload chứa dấu nháy đơn."
+    }
+  ],
+  "body": "<!-- secagent-review:25e84cde60f26c85e969701d4bf3db9b500be442 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

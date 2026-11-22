@@ -1,0 +1,16 @@
+{
+  "C1": {
+    "block": true,
+    "blocking": [
+      "semgrep:python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text:app/medicare/patient/service.py:72",
+      "semgrep:security.semgrep.medicare.sqlalchemy-text-fstring:app/medicare/patient/service.py:72"
+    ]
+  },
+  "C1+DAST": {
+    "block": true,
+    "blocking": [
+      "semgrep:python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text:app/medicare/patient/service.py:72",
+      "semgrep:security.semgrep.medicare.sqlalchemy-text-fstring:app/medicare/patient/service.py:72"
+    ]
+  }
+}

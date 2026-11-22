@@ -1,0 +1,269 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T09:50:56+00:00",
+    "duration_s": 50.95,
+    "llm_calls": 26,
+    "tool_calls": 15,
+    "tokens_in": 94266,
+    "tokens_out": 8036,
+    "cost_usd": 0.173665,
+    "step_limit": 43,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không tìm thấy chỗ nào trong repo đặt X-Frame-Options hoặc CSP frame-ancestors, nên ZAP báo đúng. Lỗi có sẵn từ trước, không do PR này gây ra.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware dùng chung trong app FastAPI để đặt X-Frame-Options: DENY, hoặc CSP có frame-ancestors 'none', cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có header chống clickjacking nào trong repo, trang /login có thể bị nhúng iframe.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng middleware security headers chung: X-Frame-Options DENY và CSP frame-ancestors 'none'."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP nào trong repo (đã search toàn bộ).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy vào middleware security headers dùng chung."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/cancel:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP nào trong repo (đã search toàn bộ).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy vào middleware security headers dùng chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/cancel",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments/{appointment_id}/confirm:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP nào trong repo (đã search toàn bộ).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy vào middleware security headers dùng chung."
+      },
+      "file": "dast:POST /appointments/{appointment_id}/confirm",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP nào trong repo (đã search toàn bộ).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy vào middleware security headers dùng chung."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.65,
+      "severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Không có CSP nào trong repo (đã search toàn bộ).",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy vào middleware security headers dùng chung."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options; không có header nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers dùng chung."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Endpoint /health thiếu X-Content-Type-Options; không có header nào được đặt trong repo.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff trong middleware security headers dùng chung."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "violated_rule": null,
+      "reasoning": "Repo không đặt X-Content-Type-Options hay CSP ở bất kỳ đâu. Đây là cấu hình thiếu từ trước, không do PR này gây ra.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware security headers đặt X-Content-Type-Options: nosniff và một CSP phù hợp."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "semgrep:python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text:app/medicare/patient/service.py:72",
+      "finding_ids": [
+        "semgrep:python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text:app/medicare/patient/service.py:72",
+        "semgrep:security.semgrep.medicare.sqlalchemy-text-fstring:app/medicare/patient/service.py:72"
+      ],
+      "source": "semgrep",
+      "title": "python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text (semgrep)",
+      "verdict": "FP",
+      "confidence": 0.95,
+      "severity": "LOW",
+      "cwe": "CWE-89",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Phần được nội suy vào f-string là `column`, lấy từ allowlist `YEAR_FIELDS.get(year_field, YEAR_FIELDS[\"dob\"])`. Giá trị chỉ có thể là `date_of_birth` hoặc `created_at`; input lạ sẽ rơi về mặc định. Giá trị `year` đi qua bind parameter `:year` và đã được ép sang int ở router (4 chữ số ASCII). Người dùng không điều khiển được chuỗi SQL.",
+      "evidence": [
+        {
+          "file": "app/medicare/patient/service.py",
+          "start_line": 70,
+          "end_line": 72,
+          "snippet": "column = YEAR_FIELDS.get(year_field, YEAR_FIELDS[\"dob\"])\n        stmt = stmt.where(\n            text(f\"EXTRACT(YEAR FROM patients.{column}) = :year\").bindparams(year=year)"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/medicare/patient/service.py",
+      "line": 72
+    }
+  ]
+}
