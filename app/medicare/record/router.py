@@ -112,8 +112,28 @@ def record_detail(
         "can_write": policy.can_write_record(user, patient),
         "can_prescribe": policy.can_prescribe(user, patient),
         "prescriptions": prescription_service.list_for_record(db, record.id),
+        "notes": service.list_notes(db, record.id),
         "breadcrumbs": _crumbs(patient, (f"Phiếu khám #{record.id}", None)),
     })
+
+
+@router.post("/records/{record_id}/notes", dependencies=[Depends(verify_csrf)])
+def add_note(
+    request: Request,
+    record_id: ObjectId,
+    body: str = Form(""),
+    user: User = Depends(doctor_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    record = service.get_writable_record(db, user, record_id)
+    try:
+        service.add_note(db, user, record, body, _ip(request))
+    except service.NoteError as exc:
+        flash(request, str(exc), "danger")
+        return RedirectResponse(f"/records/{record.id}#notes", status_code=303)
+    db.commit()
+    flash(request, "Đã thêm ghi chú")
+    return RedirectResponse(f"/records/{record.id}#notes", status_code=303)
 
 
 @router.get("/records/{record_id}/edit")
