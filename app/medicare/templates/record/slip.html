@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Phiếu khám #{{ record.id }}</title>
+  <style>
+    body { font-family: "Times New Roman", serif; font-size: 13pt; max-width: 760px; margin: 24px auto; color: #000; }
+    .toolbar { font-family: sans-serif; font-size: 11pt; margin-bottom: 16px; }
+    @media print { .toolbar { display: none; } body { margin: 0; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <a href="/records/{{ record.id }}">Quay lại phiếu khám</a>
+    · Dùng lệnh In của trình duyệt (Ctrl+P) để in phiếu.
+  </div>
+  {{ slip | safe }}
+</body>
+</html>
