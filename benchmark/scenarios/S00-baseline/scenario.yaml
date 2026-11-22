@@ -1,0 +1,5 @@
+id: S00
+title: Bản gốc, không thay đổi mã nguồn
+split: test
+kind: baseline
+commit_message: Kiểm tra định kỳ trước khi phát hành

@@ -1,0 +1,208 @@
+# Benchmark scans (spec addendum 8.4): each selected scenario goes through the same scanners and
+# the same ZAP scan as pr-security.yml, on the deterministic scenario commits built by
+# benchmark/scenario.py (same SHAs as on the machine that runs the agent).
+# Manual only, no secret, read-only token. Results are artifacts that benchmark/run.py fetches.
+# Scenario code is deliberately vulnerable: it only ever runs on these throwaway runners.
+name: Benchmark scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "all, dev, test, or a comma-separated list such as S00,S01"
+        required: true
+        default: all
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-scan
+  cancel-in-progress: false
+
+env:
+  SCENARIO: uv run --no-project --python 3.12 --with pyyaml==6.0.2 python benchmark/scenario.py
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      scan: ${{ steps.matrix.outputs.scan }}
+      dast: ${{ steps.matrix.outputs.dast }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+      - name: Scenario matrices
+        id: matrix
+        env:
+          SELECT: ${{ inputs.scenarios }}
+        run: $SCENARIO matrix --select "$SELECT" >> "$GITHUB_OUTPUT"
+
+  scan:
+    name: scan ${{ matrix.id }}
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read # checkout
+      actions: read # CodeQL reads the workflow run
+      security-events: write # CodeQL analysis; nothing is uploaded (upload: never)
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.plan.outputs.scan) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+      - name: Scenario commits
+        env:
+          ID: ${{ matrix.id }}
+        run: |
+          $SCENARIO materialize "$ID" scn > scn.json
+          cat scn.json
+      - name: Install pinned scanners
+        run: bash security/install-tools.sh "$RUNNER_TEMP/tools"
+      - name: Cache key (refreshed daily)
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ steps.day.outputs.day }}
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: python
+          build-mode: none
+          queries: security-extended
+          source-root: scn
+          config: |
+            paths:
+              - app/medicare
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: codeql # same as pr-security.yml
+          output: codeql-results
+          upload: never
+          checkout_path: ${{ github.workspace }}/scn
+      # Same commands as pr-security.yml, run inside the scenario tree (which has no agent/).
+      - name: Semgrep, Bandit, Trivy, Gitleaks, Checkov, zizmor
+        working-directory: scn
+        run: |
+          source security/tool-versions.env
+          tools="$RUNNER_TEMP/tools"
+          base="$(jq -r .base ../scn.json)"
+          head="$(jq -r .head ../scn.json)"
+          mkdir -p sarif checkov-out
+          cp ../codeql-results/python.sarif sarif/codeql.sarif
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "semgrep==${SEMGREP_VERSION}" semgrep scan \
+            --metrics off --disable-nosem \
+            --config p/python --config p/owasp-top-ten --config security/semgrep/medicare.yml \
+            --baseline-commit "$base" --sarif --output sarif/semgrep.sarif app
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "bandit[sarif]==${BANDIT_VERSION}" \
+            bandit -r app/medicare --ignore-nosec -f sarif -o sarif/bandit.sarif --exit-zero
+          "$tools/trivy" fs --scanners vuln --skip-dirs .git \
+            --format sarif --output sarif/trivy.sarif .
+          "$tools/gitleaks" git --log-opts="${base}..${head}" \
+            --config security/gitleaks.toml --ignore-gitleaks-allow --redact --exit-code 0 \
+            --report-format sarif --report-path sarif/gitleaks.sarif .
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" --from "checkov==${CHECKOV_VERSION}" \
+            checkov -d . --config-file security/checkov.yaml \
+            -o sarif --output-file-path checkov-out --soft-fail --quiet
+          mv checkov-out/results_sarif.sarif sarif/checkov.sarif
+          uvx --exclude-newer "$TOOLS_EXCLUDE_NEWER" "zizmor==${ZIZMOR_VERSION}" --offline --format sarif . \
+            > sarif/zizmor.sarif || test -s sarif/zizmor.sarif
+          cp ../scn.json sarif/scenario.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-${{ matrix.id }}
+          path: scn/sarif/
+          if-no-files-found: error
+
+  dast:
+    name: dast ${{ matrix.id }} ${{ matrix.role }}
+    needs: plan
+    # An empty matrix is an error on GitHub: skip when no selected scenario changes what runs.
+    if: needs.plan.outputs.dast != '[]'
+    runs-on: ubuntu-24.04
+    # Build ~3 min + one attempt ~12 min + one retry ~12 min (as in pr-security.yml).
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 15
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.dast) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+      - name: Scenario commits
+        env:
+          ID: ${{ matrix.id }}
+        run: $SCENARIO materialize "$ID" scn
+      - name: Ephemeral secrets (generated here, never printed)
+        working-directory: scn
+        run: |
+          umask 077
+          rand() { openssl rand -hex "$1"; }
+          pg="$(rand 24)"
+          {
+            echo "ENV=development"
+            echo "SECRET_KEY=$(rand 48)"
+            echo "POSTGRES_USER=medicare"
+            echo "POSTGRES_DB=medicare"
+            echo "POSTGRES_PASSWORD=${pg}"
+            echo "DATABASE_URL=postgresql+psycopg://medicare:${pg}@db:5432/medicare"
+            echo "DEMO_PASSWORD=Demo-$(rand 12)"
+          } > app/.env
+      - name: Start the scenario's app
+        working-directory: scn
+        run: docker compose -f infra/docker-compose.yml -p dast up -d --build --wait --wait-timeout 180
+      - name: Seed demo data and export the route map
+        working-directory: scn
+        run: |
+          compose="docker compose -f infra/docker-compose.yml -p dast"
+          $compose exec -T app python -m medicare.seed
+          mkdir -p dast-out
+          $compose exec -T app python - --stdout < security/dast/export_routes.py > dast-out/bundle.json
+          python3 security/dast/export_routes.py --split dast-out/bundle.json dast-out
+      - name: ZAP scan, authenticated as one role
+        working-directory: scn
+        env:
+          ROLE: ${{ matrix.role }}
+        run: |
+          DEMO_PASSWORD="$(sed -n 's/^DEMO_PASSWORD=//p' app/.env)"
+          echo "::add-mask::$DEMO_PASSWORD"
+          export DEMO_PASSWORD
+          bash security/dast/run-dast.sh --target http://app:8000 --network dast_default \
+            --work dast-out --roles "$ROLE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dast-${{ matrix.id }}-${{ matrix.role }}
+          path: |
+            scn/dast-out/out/zap-${{ matrix.role }}.json
+            scn/dast-out/routes.json
+          if-no-files-found: error
+      - name: Tear down
+        if: always()
+        working-directory: scn
+        run: |
+          docker compose -f infra/docker-compose.yml -p dast down -v
+          rm -f app/.env
