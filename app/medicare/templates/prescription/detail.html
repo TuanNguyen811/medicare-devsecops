@@ -14,7 +14,7 @@
         {% for item in prescription.items %}
         <tr>
           <td>{{ loop.index }}</td>
-          <td>{{ item.medicine.name }}</td>
+          <td>{{ item.medicine.name }}{% if not item.medicine.is_active %} <span class="badge text-bg-secondary">Ngừng sử dụng</span>{% endif %}</td>
           <td>{{ item.dosage }}</td>
           <td class="text-end">{{ item.quantity }} {{ item.medicine.unit }}</td>
           <td class="text-end">{{ item.medicine.unit_price | vnd }}</td>

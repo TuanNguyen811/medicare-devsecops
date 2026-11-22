@@ -150,3 +150,29 @@ def add_medicine(
     db.commit()
     flash(request, "Đã thêm thuốc vào danh mục")
     return RedirectResponse("/admin/medicines", status_code=303)
+
+
+@router.post("/admin/medicines/{medicine_id}/discontinue", dependencies=[Depends(verify_csrf)])
+def discontinue_medicine(
+    request: Request,
+    medicine_id: ObjectId,
+    user: User = Depends(admin_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    medicine = service.set_medicine_active(db, medicine_id, False)
+    db.commit()
+    flash(request, f"Đã ngừng sử dụng thuốc {medicine.code}")
+    return RedirectResponse("/admin/medicines", status_code=303)
+
+
+@router.post("/admin/medicines/{medicine_id}/reactivate", dependencies=[Depends(verify_csrf)])
+def reactivate_medicine(
+    request: Request,
+    medicine_id: ObjectId,
+    user: User = Depends(admin_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    medicine = service.set_medicine_active(db, medicine_id, True)
+    db.commit()
+    flash(request, f"Đã sử dụng lại thuốc {medicine.code}")
+    return RedirectResponse("/admin/medicines", status_code=303)
