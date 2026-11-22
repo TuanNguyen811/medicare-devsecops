@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
@@ -8,13 +9,14 @@ from sqlalchemy.orm import Session
 
 from medicare import policy
 from medicare.appointment import service
+from medicare.appointment.models import AppointmentStatus
 from medicare.appointment.schemas import FIELD_LABELS, AppointmentForm
 from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
 from medicare.common.errors import Conflict
-from medicare.common.ids import ObjectId
-from medicare.common.templating import flash, render
+from medicare.common.ids import ObjectId, parse_id
+from medicare.common.templating import VN_TZ, flash, render
 from medicare.db import get_db
 from medicare.patient.models import Patient
 
@@ -22,6 +24,7 @@ router = APIRouter()
 
 booker_user = require_roles(Role.PATIENT, Role.RECEPTIONIST)
 receptionist_user = require_roles(Role.RECEPTIONIST)
+staff_user = require_roles(Role.ADMIN, Role.RECEPTIONIST, Role.DOCTOR, Role.NURSE)
 
 STATUS_LABELS = {
     "REQUESTED": ("Chờ duyệt", "warning"),
@@ -64,6 +67,64 @@ def list_appointments(
             "can_book": user.role in (Role.PATIENT, Role.RECEPTIONIST),
             "can_confirm": user.role == Role.RECEPTIONIST,
             "breadcrumbs": [("Trang chủ", "/"), ("Lịch hẹn", None)],
+        },
+    )
+
+
+def _parse_day(value: str, default: date) -> date:
+    try:
+        day = date.fromisoformat(value.strip())
+    except ValueError:
+        return default
+    return day if date.min < day < date.max else default
+
+
+def _schedule_url(filters: dict, **changes) -> str:
+    params = {k: v for k, v in (filters | changes).items() if v not in ("", None)}
+    return "/appointments/schedule?" + urlencode(params)
+
+
+@router.get("/appointments/schedule")
+def appointment_schedule(
+    request: Request,
+    day: str = "",
+    status: str = "",
+    doctor_id: str = "",
+    page: str = "1",
+    user: User = Depends(staff_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    today = datetime.now(VN_TZ).date()
+    selected_day = _parse_day(day, today)
+    selected_status = status if status in STATUS_LABELS else ""
+    # A doctor's schedule is always their own; the doctor filter is for the other roles.
+    doctor_filter = parse_id(doctor_id) if user.role != Role.DOCTOR else None
+    result = service.schedule_for(
+        db,
+        user,
+        selected_day,
+        status=AppointmentStatus(selected_status) if selected_status else None,
+        doctor_id=doctor_filter,
+        page=parse_id(page) or 1,
+    )
+    filters = {"day": selected_day.isoformat(), "status": selected_status,
+               "doctor_id": doctor_filter}
+    one_day = timedelta(days=1)
+    return render(
+        request,
+        "appointment/schedule.html",
+        {
+            "result": result,
+            "filters": filters,
+            "day": selected_day,
+            "is_today": selected_day == today,
+            "doctors": service.bookable_doctors(db) if user.role != Role.DOCTOR else [],
+            "status_labels": STATUS_LABELS,
+            "prev_day_url": _schedule_url(filters, day=(selected_day - one_day).isoformat()),
+            "next_day_url": _schedule_url(filters, day=(selected_day + one_day).isoformat()),
+            "prev_page_url": _schedule_url(filters, page=result.page - 1),
+            "next_page_url": _schedule_url(filters, page=result.page + 1),
+            "breadcrumbs": [*_CRUMBS, ("Lịch khám theo ngày", None)],
         },
     )
 
