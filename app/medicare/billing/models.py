@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from medicare.db import Base, str_enum
@@ -34,3 +34,24 @@ class Invoice(Base):
     )
 
     patient: Mapped[Patient] = relationship(lazy="joined")
+    lines: Mapped[list["InvoiceLine"]] = relationship(
+        lazy="selectin", order_by="InvoiceLine.id"
+    )
+
+
+class InvoiceLine(Base):
+    """A billed service; the unit price is copied from the catalog at billing time."""
+
+    __tablename__ = "invoice_lines"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"), index=True)
+    service_code: Mapped[str] = mapped_column(String(20))
+    description: Mapped[str] = mapped_column(String(100))
+    quantity: Mapped[int]
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 0))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 0))
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

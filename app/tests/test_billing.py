@@ -39,6 +39,17 @@ def invoice_of(db, record) -> Invoice:
     return db.scalar(select(Invoice).where(Invoice.record_id == record.id))
 
 
+def pay(client, invoice, page="/invoices"):
+    data = {"status": "PAID", "csrf_token": csrf_token(client, page)}
+    return client.post(f"/invoices/{invoice.id}/status", data=data, follow_redirects=False)
+
+
+def add_lines(client, invoice, *lines):
+    data = {"service_code": [c for c, _ in lines], "quantity": [q for _, q in lines],
+            "csrf_token": csrf_token(client, f"/invoices/{invoice.id}")}
+    return client.post(f"/invoices/{invoice.id}/lines", data=data, follow_redirects=False)
+
+
 def test_invoice_with_80_percent_coverage(client, db):
     _, record = visit(db)
     login(client, make_user(db, Role.RECEPTIONIST))
@@ -150,12 +161,11 @@ def test_receptionist_marks_invoice_paid_once(client, db):
     login(client, make_user(db, Role.RECEPTIONIST))
     create_invoice(client, record)
     inv = invoice_of(db, record)
-    token = csrf_token(client, "/invoices")
-    r = client.post(f"/invoices/{inv.id}/pay", data={"csrf_token": token}, follow_redirects=False)
+    r = pay(client, inv)
     assert r.status_code == 303
     db.refresh(inv)
     assert inv.status == InvoiceStatus.PAID
-    assert client.post(f"/invoices/{inv.id}/pay", data={"csrf_token": token}).status_code == 409
+    assert pay(client, inv).status_code == 409
 
 
 def test_patient_cannot_mark_paid(client, db):
@@ -165,5 +175,89 @@ def test_patient_cannot_mark_paid(client, db):
     inv = invoice_of(db, record)
     client.cookies.clear()
     login(client, make_user(db, Role.PATIENT, patient=me))
-    r = client.post(f"/invoices/{inv.id}/pay", data={"csrf_token": csrf_token(client, "/")})
-    assert r.status_code == 403
+    assert pay(client, inv, "/").status_code == 403
+
+
+def test_receptionist_adds_service_lines(client, db):
+    _, record = visit(db)  # 230_000, 80% coverage
+    login(client, make_user(db, Role.RECEPTIONIST))
+    create_invoice(client, record)
+    inv = invoice_of(db, record)
+    r = add_lines(client, inv, ("XN-CTM", "1"), ("XQ-NGUC", "2"), ("", "1"))
+    assert r.status_code == 303 and r.headers["location"] == f"/invoices/{inv.id}"
+    db.refresh(inv)
+    assert [(line.service_code, line.quantity, line.amount) for line in inv.lines] == [
+        ("XN-CTM", 1, Decimal(90000)), ("XQ-NGUC", 2, Decimal(240000))]
+    assert (inv.total_amount, inv.insurance_amount, inv.patient_amount) == (
+        Decimal(560000), Decimal(448000), Decimal(112000))
+    page = client.get(f"/invoices/{inv.id}").text
+    assert "Chụp X-quang ngực thẳng" in page and "560.000 ₫" in page and "80.000 ₫" in page
+
+
+def test_line_prices_come_from_catalog(client, db):
+    _, record = visit(db, insurance_number=None, drug_cost=0)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    create_invoice(client, record)
+    inv = invoice_of(db, record)
+    data = {"service_code": "SA-BUNG", "quantity": "1", "unit_price": "1", "amount": "1",
+            "csrf_token": csrf_token(client, f"/invoices/{inv.id}")}
+    client.post(f"/invoices/{inv.id}/lines", data=data)
+    db.refresh(inv)
+    assert inv.lines[0].unit_price == Decimal(180000)
+    assert inv.total_amount == inv.patient_amount == Decimal(330000)
+
+
+def test_unknown_service_is_rejected(client, db):
+    _, record = visit(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    create_invoice(client, record)
+    inv = invoice_of(db, record)
+    add_lines(client, inv, ("KHONG-CO", "1"))
+    assert "Dịch vụ không có trong danh mục" in client.get(f"/invoices/{inv.id}").text
+    db.refresh(inv)
+    assert inv.lines == [] and inv.total_amount == Decimal(230000)
+
+
+def test_non_numeric_quantity_is_rejected(client, db):
+    _, record = visit(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    create_invoice(client, record)
+    inv = invoice_of(db, record)
+    add_lines(client, inv, ("XN-NT", "hai"))
+    db.refresh(inv)
+    assert inv.lines == []
+
+
+def test_paid_invoice_cannot_get_new_lines(client, db):
+    _, record = visit(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    create_invoice(client, record)
+    inv = invoice_of(db, record)
+    pay(client, inv)
+    assert add_lines(client, inv, ("XN-CTM", "1")).status_code == 409
+    assert "/lines" not in client.get(f"/invoices/{inv.id}").text
+
+
+def test_only_receptionist_adds_lines(client, db):
+    me, record = visit(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    create_invoice(client, record)
+    inv = invoice_of(db, record)
+    for user in (make_user(db, Role.ADMIN), make_user(db, Role.PATIENT, patient=me)):
+        client.cookies.clear()
+        login(client, user)
+        assert add_lines(client, inv, ("XN-CTM", "1")).status_code == 403
+    db.refresh(inv)
+    assert inv.lines == []
+
+
+def test_patient_sees_service_lines_on_own_invoice(client, db):
+    me, record = visit(db)
+    login(client, make_user(db, Role.RECEPTIONIST))
+    create_invoice(client, record)
+    inv = invoice_of(db, record)
+    add_lines(client, inv, ("DIEN-TIM", "1"))
+    client.cookies.clear()
+    login(client, make_user(db, Role.PATIENT, patient=me))
+    page = client.get(f"/invoices/{inv.id}").text
+    assert "Điện tim thường" in page and "/lines" not in page and "/status" not in page
