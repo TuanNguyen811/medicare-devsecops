@@ -66,3 +66,48 @@ Vì `main` là bản sạch đã qua review độc lập, **cả 15 phát hiện
 - **Gitleaks báo trên file test.** Bảng trên quét toàn bộ cây (`gitleaks dir`). Trên CI, Gitleaks chỉ quét **các commit của PR** (`gitleaks git --log-opts base..head`). Vì vậy hai FP này chỉ xuất hiện khi commit của PR thêm hoặc sửa đúng những dòng đó. Gate không lọc kết quả Gitleaks theo file thay đổi, vì secret đã commit rồi bị đổi tên hoặc xóa vẫn nằm trong lịch sử.
 - **Quét lại sau review cuối kế hoạch B** (cùng ngày) với cấu hình mới: zizmor quét từ gốc repo, Semgrep/Bandit/Gitleaks bỏ qua comment chặn cảnh báo, công cụ Python cài với `--exclude-newer`, bucket logs có thêm policy chỉ cho phép TLS. Kết quả **không đổi**: cùng 14 phát hiện ở cùng vị trí, cộng phát hiện CodeQL.
 - Không có comment chặn cảnh báo nào (`# nosec`, `checkov:skip`, …) trong `app/` và `infra/`. Mọi FP trên đều được giữ nguyên để đo.
+
+## DAST (ZAP) trên bản sạch
+
+Bổ sung 2026-11-22, giai đoạn 2 (spec bổ sung mục 5).
+
+**Cách chạy:**
+- App là bản `main` lúc đó (merge PR #8), dựng bằng `docker compose -p dast` với secret sinh tại chỗ và dữ liệu mẫu (`python -m medicare.seed`).
+- Lệnh quét: `security/dast/run-dast.sh --target http://app:8000 --network dast_default`.
+- ZAP 2.17.0, ghim theo digest trong `security/tool-versions.env`.
+- Kế hoạch quét `security/dast/zap-plan.yaml`: import OpenAPI, spider 2 phút, quét chủ động tối đa 5 phút cho mỗi vai trò.
+- Mỗi vai trò đăng nhập bằng một tài khoản demo:
+  - ADMIN: `admin`
+  - RECEPTIONIST: `letan1`
+  - DOCTOR: `bacsi1`
+  - NURSE: `yta1`
+  - PATIENT: `benhnhan1`
+- Sau khi quét, script kiểm tra phiên vẫn còn đăng nhập.
+- Chạy trên Docker Desktop (6 CPU, 8 GB RAM).
+
+**Thời gian và độ phủ:**
+
+| Vai trò | Thời gian | URL nạp từ OpenAPI | URL spider tìm thấy | Quét chủ động |
+|---|---|---|---|---|
+| RECEPTIONIST | 290 s | 55 | 46 | 4 phút 12 giây |
+| DOCTOR | 287 s | 55 | 46 | 4 phút 12 giây |
+| NURSE | 288 s | 55 | 46 | 4 phút 12 giây |
+| PATIENT | 342 s | 55 | 46 | 5 phút (chạm giới hạn) |
+| ADMIN | 342 s | 55 | 46 | 5 phút (chạm giới hạn) |
+
+Tổng cộng khoảng 26 phút khi chạy lần lượt. Trên CI, 5 vai trò chạy song song.
+
+**Kết quả** (sau `zap2sarif.py`, gộp theo plugin, method và route): **0 High**, 8 Medium, 3 Low. Không cảnh báo nào chặn PR, vì gate chỉ chặn High/Critical.
+
+| Mức | ZAP plugin | Cảnh báo | Route | CWE |
+|---|---|---|---|---|
+| MEDIUM | 10038 | Content Security Policy (CSP) Header Not Set | `GET /login`, `POST /appointments`, `POST /appointments/{appointment_id}/cancel`, `POST /appointments/{appointment_id}/confirm`, `POST /patients`, `POST /patients/{patient_id}/edit` | CWE-693 |
+| MEDIUM | 10020 | Missing Anti-clickjacking Header | `GET /`, `GET /login` | CWE-1021 |
+| LOW | 10021 | X-Content-Type-Options Header Missing | `GET /`, `GET /health`, `GET /login` | CWE-693 |
+
+**Nhận xét cho báo cáo:**
+- App chưa gửi các header bảo mật (CSP, `X-Frame-Options` hoặc `frame-ancestors`, `X-Content-Type-Options`). Đây là phát hiện đúng về mặt kỹ thuật nhưng mức thấp, và nằm ngoài các quy tắc R-xx. Chúng được giữ làm dữ liệu báo nhầm và nhiễu của DAST, không bị chặn bằng cấu hình (giống nguyên tắc của mục trên).
+- Mọi PR đều mang lại 11 kết quả này, vì DAST quét cả app chứ không chỉ phần thay đổi. AI Agent phải thẩm định chúng ở mỗi PR. Đây là chi phí cần đo trong benchmark.
+- Không có cảnh báo High nên bật DAST không làm PR sạch bị chặn.
+- Quét chủ động bị giới hạn thời gian, nên kết quả giữa các lần chạy có thể lệch nhẹ (hạn chế đã nêu trong spec bổ sung mục 11).
+- Báo cáo thô không chứa cookie phiên (đã kiểm tra: không có `medicare_session=`).
