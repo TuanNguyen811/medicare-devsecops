@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Khoa{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Danh mục khoa</h1>
+{% if errors %}
+<div class="alert alert-danger py-2" role="alert">
+  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="card mc-card mb-3">
+  <div class="card-header">Thêm khoa</div>
+  <div class="card-body">
+    <form class="row g-2 align-items-end" method="post" action="/admin/departments">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-md-2"><label class="form-label" for="code">Mã</label><input class="form-control form-control-sm" id="code" name="code" value="{{ values.code or '' }}" maxlength="20" required></div>
+      <div class="col-md-3"><label class="form-label" for="name">Tên khoa</label><input class="form-control form-control-sm" id="name" name="name" value="{{ values.name or '' }}" maxlength="100" required></div>
+      <div class="col-md-5"><label class="form-label" for="description">Mô tả</label><input class="form-control form-control-sm" id="description" name="description" value="{{ values.description or '' }}" maxlength="500"></div>
+      <div class="col-md-2"><button class="btn btn-primary btn-sm w-100" type="submit">Thêm</button></div>
+    </form>
+  </div>
+</div>
+<div class="card mc-card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead><tr><th>Mã</th><th>Tên khoa</th><th>Mô tả</th><th class="text-end"></th></tr></thead>
+      <tbody>
+        {% for d in departments %}
+        <tr>
+          <td class="font-monospace">{{ d.code }}</td>
+          <td>{{ d.name }}</td>
+          <td class="text-secondary">{{ d.description or "" }}</td>
+          <td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/admin/departments/{{ d.id }}/edit"><i class="bi bi-pencil"></i> Sửa</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center text-secondary py-3">Chưa có khoa</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

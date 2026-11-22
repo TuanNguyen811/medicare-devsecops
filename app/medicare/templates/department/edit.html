@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Sửa khoa{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Sửa thông tin khoa <span class="font-monospace text-secondary">{{ department.code }}</span></h1>
+{% if errors %}
+<div class="alert alert-danger py-2" role="alert">
+  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="card mc-card" style="max-width: 640px;">
+  <div class="card-body">
+    <form method="post" action="/admin/departments/{{ department.id }}/edit">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="mb-3">
+        <label class="form-label" for="name">Tên khoa</label>
+        <input class="form-control" id="name" name="name" value="{{ values.name }}" maxlength="100" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="description">Mô tả</label>
+        <textarea class="form-control" id="description" name="description" rows="4" maxlength="500">{{ values.description }}</textarea>
+      </div>
+      <button class="btn btn-primary" type="submit">Lưu</button>
+      <a class="btn btn-link" href="/admin/departments">Hủy</a>
+    </form>
+  </div>
+</div>
+{% endblock %}
