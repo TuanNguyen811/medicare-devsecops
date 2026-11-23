@@ -207,7 +207,7 @@ Chi tiết: [`docs/pipeline.md`](docs/pipeline.md) (pipeline), [`deploy/README.m
 ```text
 anthropic / openai / gemini → gọi API bằng key, chạy được ngay trên CI
 
-claude-mcp (đang dùng) → Claude Code đã đăng nhập trên máy, qua cầu MCP:
+claude-mcp (dùng cho benchmark và PR demo) → Claude Code đã đăng nhập trên máy, qua cầu MCP:
 
    Pipeline chờ ──► người review chạy local_review.py trên máy
                     → secagent review PR
