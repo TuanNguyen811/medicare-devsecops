@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Thống kê lịch hẹn{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Thống kê lịch hẹn theo khoa</h1>
+{% if error %}<div class="alert alert-danger py-2" role="alert">{{ error }}</div>{% endif %}
+<div class="card mc-card">
+  <div class="card-body pb-0">
+    <form class="row g-2 mb-3" method="get" action="/admin/reports/appointments">
+      <div class="col-sm-4 col-lg-3">
+        <label class="form-label small mb-0" for="start">Từ ngày</label>
+        <input class="form-control form-control-sm" id="start" type="date" name="start" value="{{ form.start }}">
+      </div>
+      <div class="col-sm-4 col-lg-3">
+        <label class="form-label small mb-0" for="end">Đến ngày</label>
+        <input class="form-control form-control-sm" id="end" type="date" name="end" value="{{ form.end }}">
+      </div>
+      <div class="col-sm-4 col-lg-2">
+        <label class="form-label small mb-0" for="period">Gộp</label>
+        <select class="form-select form-select-sm" id="period" name="period">
+          {% for key, label in periods.items() %}
+          <option value="{{ key }}"{% if form.period == key %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto align-self-end"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-bar-chart"></i> Xem</button></div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Kỳ</th><th>Khoa</th><th class="text-end">Tổng</th><th class="text-end">Chờ duyệt</th><th class="text-end">Đã xác nhận</th><th class="text-end">Hoàn thành</th><th class="text-end">Đã hủy</th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr data-stat-row>
+          <td class="text-nowrap">{{ r.bucket | date_vn }}</td>
+          <td>{{ r.department }}</td>
+          <td class="text-end">{{ r.total }}</td>
+          <td class="text-end">{{ r.requested }}</td>
+          <td class="text-end">{{ r.confirmed }}</td>
+          <td class="text-end">{{ r.completed }}</td>
+          <td class="text-end">{{ r.cancelled }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-secondary py-3">Không có lịch hẹn trong khoảng thời gian này</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if rows %}
+      <tfoot>
+        <tr class="fw-semibold">
+          <td colspan="2">Cộng</td>
+          <td class="text-end">{{ totals.total }}</td>
+          <td class="text-end">{{ totals.requested }}</td>
+          <td class="text-end">{{ totals.confirmed }}</td>
+          <td class="text-end">{{ totals.completed }}</td>
+          <td class="text-end">{{ totals.cancelled }}</td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}

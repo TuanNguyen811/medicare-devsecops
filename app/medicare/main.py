@@ -18,6 +18,7 @@ from medicare.db import create_db
 from medicare.patient.router import router as patient_router
 from medicare.prescription.router import router as prescription_router
 from medicare.record.router import router as record_router
+from medicare.report.router import router as report_router
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -67,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(billing_router)
     app.include_router(admin_router)
     app.include_router(audit_router)
+    app.include_router(report_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:
