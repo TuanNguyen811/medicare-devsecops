@@ -1,6 +1,6 @@
 # deploy/
 
-Deploy MediCare HMS về cụm Kubernetes của Docker Desktop trên máy, theo kiểu **kéo về** (spec bổ sung mục 6). CI không bao giờ chạm vào máy này: CI chỉ build, ký và đẩy image lên GHCR, còn máy tự kéo về sau khi kiểm tra chữ ký.
+Deploy MediCare HMS về cụm Kubernetes của Docker Desktop trên máy, theo kiểu **kéo về** (spec mục 6). CI không bao giờ chạm vào máy này: CI chỉ build, ký và đẩy image lên GHCR, còn máy tự kéo về sau khi kiểm tra chữ ký.
 
 ```
 main-ci (GitHub)                                  máy này
@@ -47,7 +47,7 @@ kubectl -n medicare port-forward --address 127.0.0.1 svc/medicare-app 18000:80
 # rồi mở http://127.0.0.1:18000
 ```
 
-## Giám sát (spec bổ sung mục 7)
+## Giám sát (spec mục 7)
 
 `pull-deploy.sh` apply `monitoring/` (namespace `monitoring`) ở mỗi lần chạy, rồi kiểm tra Prometheus lấy được metrics của pod mới.
 

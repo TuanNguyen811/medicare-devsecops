@@ -1,6 +1,6 @@
 # Kết quả benchmark: AI Security Agent trên 35 Pull Request thật
 
-Tài liệu này báo cáo kết quả đo AI Security Agent (`secagent`) trong pipeline DevSecOps của MediCare HMS. Mỗi kịch bản là một Pull Request thật trên GitHub, đi qua pipeline thật và quality gate thật. Thiết kế benchmark nằm ở spec bổ sung [§8](superpowers/specs/2026-11-21-ops-dast-benchmark-design.md). Bảng số liệu do `benchmark/evaluate.py` sinh ra nằm ở [`benchmark/results/summary/pr-r1-test/results.md`](../benchmark/results/summary/pr-r1-test/results.md) (tập test) và [`pr-r1-dev/results.md`](../benchmark/results/summary/pr-r1-dev/results.md) (tập dev).
+Tài liệu này báo cáo kết quả đo AI Security Agent (`secagent`) trong pipeline DevSecOps của MediCare HMS. Mỗi kịch bản là một Pull Request thật trên GitHub, đi qua pipeline thật và quality gate thật. Thiết kế benchmark nằm ở [spec mục 8](superpowers/specs/2026-11-07-devsecops-ai-agent-design.md). Bảng số liệu do `benchmark/evaluate.py` sinh ra nằm ở [`benchmark/results/summary/pr-r1-test/results.md`](../benchmark/results/summary/pr-r1-test/results.md) (tập test) và [`pr-r1-dev/results.md`](../benchmark/results/summary/pr-r1-dev/results.md) (tập dev).
 
 ## Tóm tắt
 
@@ -37,7 +37,7 @@ Trên 30 PR của tập test (20 PR có lỗ hổng chứa 28 lỗ hổng, 10 PR
 - **C1+DAST:** C1 cộng ZAP.
 - **C2:** C1+DAST cộng AI Agent; quality gate chế độ `ai-assisted` (quyết định thật của pipeline).
 
-**Cách chấm** (spec bổ sung §8.4):
+**Cách chấm** (spec mục 8.6):
 - Một dự đoán khớp một lỗ hổng trong đáp án khi cùng file, lệch không quá ±3 dòng so với một vị trí của lỗ hổng, và cùng họ CWE (hoặc cùng rule của công cụ, hoặc agent nêu đúng quy tắc nghiệp vụ R-xx bị vi phạm).
 - **Chặt:** kết luận NEEDS_REVIEW tính là báo nhầm. **Lỏng:** bỏ qua NEEDS_REVIEW. Số chính là chấm chặt.
 - Cảnh báo ZAP đã có trên S00 (cùng rule) là vấn đề sẵn có của ứng dụng, không tính đúng hay sai.
@@ -115,6 +115,8 @@ Cả hai đều là lỗ hổng thứ hai trong một PR có hai lỗ hổng.
 | Lượt gọi LLM / gọi công cụ | 21,7 / 15,5 |
 | Token vào / ra | 111 154 / 7 078 |
 | Chi phí quy đổi | 0,16 USD |
+
+Không lượt nào chạm giới hạn bước của phiên review (`limit_hit` = false ở cả 35 report), và không lượt nào bỏ sót kết luận cho cụm phát hiện trước khi kiểm tra độ phủ (`uncovered_before_check` = 0). Vì vậy không có kết luận nào bị hạ thành NEEDS_REVIEW vì hết lượt hay vì bị bỏ quên.
 
 Tổng chi phí quy đổi của 35 report được chấm là 5,90 USD; con số này chưa gồm lần review thất bại của D04 và lần review đầu của D05. Chi phí là con số Claude Code tự báo theo bảng giá API; benchmark chạy bằng gói thuê bao nên không trả tiền theo token.
 

@@ -51,7 +51,7 @@ def test_score_counts_each_bug_once_and_needs_review_is_never_a_detection():
              P("app/medicare/seed.py", 9, cwes=["CWE-330"])]  # no such bug: FP
     strict = ev.score(preds, [SQLI, IDOR], strict=True)
     lenient = ev.score(preds, [SQLI, IDOR], strict=False)
-    # spec 5.3: strict counts NEEDS_REVIEW as an FP, lenient ignores it; neither credits a TP
+    # spec 8.6: strict counts NEEDS_REVIEW as an FP, lenient ignores it; neither credits a TP
     assert (strict.tp, strict.fp, strict.fn, strict.needs_review) == (
         {"S01-1"}, 2, {"S01-2"}, 1)
     assert (lenient.tp, lenient.fp, lenient.fn) == ({"S01-1"}, 1, {"S01-2"})

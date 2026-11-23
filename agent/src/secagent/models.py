@@ -1,4 +1,4 @@
-"""Data shapes shared by the agent phases and report.json (spec 4.3, roadmap Contract 2)."""
+"""Data shapes shared by the agent phases and report.json (spec 5.3, roadmap Contract 2)."""
 
 from __future__ import annotations
 

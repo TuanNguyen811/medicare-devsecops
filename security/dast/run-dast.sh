@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DAST with OWASP ZAP, one authenticated scan per role (spec addendum 5.1).
+# DAST with OWASP ZAP, one authenticated scan per role (spec 4.1).
 #
 #   DEMO_PASSWORD=... bash security/dast/run-dast.sh --target http://app:8000 \
 #     --network dast_default --work dast-out [--roles "DOCTOR PATIENT"]

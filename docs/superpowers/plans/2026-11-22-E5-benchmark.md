@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Native (Claude tự làm, review toàn nhánh bằng Opus ở cuối mỗi PR). Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** đo bằng số liệu xem AI agent bổ sung được gì so với chỉ dùng công cụ quét, để trả lời RQ1–RQ3 của spec gốc (mục 5.1).
+**Goal:** đo bằng số liệu xem AI agent bổ sung được gì so với chỉ dùng công cụ quét, để trả lời RQ1–RQ3 của spec (mục 8.1).
 
 **Architecture:**
 - Mỗi kịch bản là một PR thật `[Bench] <ID> · <commit message>` vào `main`, đi qua đúng pipeline PR (`pr-security.yml`): công cụ quét, ZAP 5 vai trò, `ai-security-agent`, `agent-comment`, `quality-gate` ở chế độ `ai-assisted`.
@@ -11,7 +11,7 @@
 
 **Tech Stack:** GitHub Actions (CodeQL, Semgrep, Bandit, Trivy, Gitleaks, Checkov, zizmor, ZAP); Claude Code CLI 2.1.330 (`claude-sonnet-5-5`); `gh` CLI; Python 3.12 thư viện chuẩn, pydantic (đã có trong `agent/`) và PyYAML.
 
-**Spec:** `docs/superpowers/specs/2026-11-21-ops-dast-benchmark-design.md` mục 8, và spec gốc `2026-11-07-devsecops-ai-agent-design.md` mục 5 (RQ, luật chấm 5.3, hạn chế 5.7).
+**Spec:** `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md` mục 8 (RQ 8.1, chấm điểm 8.6, chống thiên vị 8.8) và mục 9 (hạn chế).
 
 ## Global Constraints
 
@@ -28,7 +28,7 @@
 
 ## Bước 1: Mốc gốc `v0.3-baseline`
 - [x] `docs/security-requirements.md`: R-16…R-19, cập nhật ma trận phân quyền.
-- [x] Spec mục 4 và 8: chế độ `claude-mcp`, cấu hình C1, C1+DAST, C2, cách trả lời RQ.
+- [x] Spec mục 5.5 và 8: chế độ `claude-mcp`, cấu hình C1, C1+DAST, C2, cách trả lời RQ.
 - [x] Kế hoạch E4: đánh dấu đã xong.
 - [x] PR #12 đã merge; tag `v0.3-baseline` gắn lên merge commit `8d668bd` và đã push.
 
@@ -57,10 +57,10 @@
   - Có test SHA vàng; CI trên Linux khớp SHA tính trên máy Windows.
   - Cây kịch bản trung tính: bỏ tài liệu thực nghiệm, có test bảo đảm không còn chữ nào lộ đáp án.
 - [x] `benchmark/common.py` `scan_views`: từ SARIF của một PR, dựng những gì gate và agent thấy (`clusters.json`, `gate.json`, `gate_findings.json`, `changed.json`).
-- [x] `benchmark/evaluate.py` chấm theo spec bổ sung §8.4 và sinh `results.md`, `summary.json`, `rows.json`. Có test cho phần khớp đáp án, cách chấm chặt và lỏng, loại phát hiện DAST có sẵn, và phần tổng hợp.
+- [x] `benchmark/evaluate.py` chấm theo spec mục 8.6 và sinh `results.md`, `summary.json`, `rows.json`. Có test cho phần khớp đáp án, cách chấm chặt và lỏng, loại phát hiện DAST có sẵn, và phần tổng hợp.
 - [x] Chạy thử C2 trên S00: agent kết luận 9 cụm ZAP có sẵn là TP. Kết luận này đúng: thiếu header bảo mật là vấn đề thật. Vì vậy có quy ước loại phát hiện DAST có sẵn khỏi TP/FP.
 - [x] Review toàn nhánh (Opus); đã sửa hết:
-  - **Cách chấm chặt đúng spec 5.3:** NEEDS_REVIEW tính là FP, không tính TP.
+  - **Cách chấm chặt đúng spec mục 8.6:** NEEDS_REVIEW tính là FP, không tính TP.
   - **Phát hiện DAST có sẵn** nhận theo rule ZAP, bắt buộc có S00.
   - **Lần chạy lỗi hoặc thiếu** tính là FN; ở cấp PR dùng quyết định truyền thống.
   - **Bằng chứng:** khớp đáp án với bất kỳ đoạn nào.

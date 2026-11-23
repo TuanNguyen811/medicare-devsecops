@@ -1,4 +1,4 @@
-# ZAP Automation Framework plan for MediCare HMS (spec addendum 5.1), one run per role.
+# ZAP Automation Framework plan for MediCare HMS (spec 4.1), one run per role.
 # Environment (set by run-dast.sh): TARGET, ZAP_COOKIE, ZAP_CSRF, ROLE.
 # The session cookie and CSRF header come from login.py and are forced onto every request.
 # Excluded: logout (would end the session), password change, login (an active scan there would

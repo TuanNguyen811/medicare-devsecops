@@ -10,11 +10,13 @@
 **Architecture:**
 - **Phiên bản công cụ:** khai báo ở đúng một file (`security/tool-versions.env`). Binary cài bằng script có kiểm tra sha256. Action của bên thứ ba được cố định bằng commit SHA.
 - **Quality gate:** script Python thuần stdlib (`security/gate/gate.py`) đọc các file SARIF và (tùy chọn) `report.json` của Agent theo Hợp đồng 2. Gate chỉ xét phát hiện nằm trong **file mà PR thay đổi**. Có 2 chế độ `traditional` và `ai-assisted`; Agent lỗi thì gate quay về `traditional`.
-- **Job Agent:** kế hoạch C mới cắm vào. Kế hoạch này để sẵn chỗ cho nó, và gate đã hiểu `report.json`.
+- **Job Agent:** thuộc kế hoạch C. Kế hoạch này để sẵn chỗ cho nó, và gate đã hiểu `report.json`.
 
 **Tech Stack:** GitHub Actions, Semgrep, CodeQL (`github/codeql-action`), Bandit, Trivy, Gitleaks, Checkov, zizmor, actionlint, pre-commit, Terraform (chỉ để quét), Kubernetes manifest (chỉ để quét), Docker/GHCR. Python 3.12 + pytest cho gate.
 
 **Spec:** `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md` (mục 1, 3). Hợp đồng giao tiếp: `docs/superpowers/plans/2026-11-07-00-roadmap.md` (Hợp đồng 2: SARIF, `report.json`, finding id, quy tắc gate).
+
+> **Trạng thái:** đã thực hiện xong (PR #3; tag `v0.2-baseline`). Các giai đoạn sau mở rộng pipeline này: C thêm job Agent và chế độ gate `ai-assisted`; E2 thêm DAST (job `dast-zap`, `dast`, gate bắt buộc `dast` thành công) và nới mục tiêu thời gian lên ≤ 15 phút; E3 thêm bước cosign ký image vào job `image` của `main-ci`. Pipeline hiện hành: `docs/pipeline.md`; thiết kế: `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md`.
 
 ## Global Constraints
 
@@ -35,8 +37,8 @@
 - **Không dùng** `pull_request_target`. Không dùng Action quét của bên thứ ba (trivy-action, gitleaks-action): tải binary chính thức và kiểm tra sha256 đã ghi trong `security/tool-versions.env`.
 - `permissions:` ở cấp workflow là `contents: read`. Job nào cần thêm quyền thì tự khai báo, ví dụ `security-events: write` để upload SARIF, `packages: write` để push GHCR.
 - Không thêm comment chặn cảnh báo (`# nosec`, `# nosemgrep`, `# noqa: S…`, `checkov:skip`, `gitleaks:allow`) vào `app/` và `infra/`. Phát hiện trên bản sạch là dữ liệu FP của thực nghiệm. Thay vào đó, ghi kết quả vào `docs/baseline-scan.md`.
-- Tên file SARIF đúng Hợp đồng 2: `sarif/{semgrep,codeql,bandit,trivy,gitleaks,checkov}.sarif`. zizmor ghi `sarif/zizmor.sarif` (gate đọc file này; Agent có thể bỏ qua).
-- Mục tiêu thời gian pipeline PR: tổng ≤ 5 phút. Các job quét chạy song song.
+- Tên file SARIF đúng Hợp đồng 2: `sarif/{semgrep,codeql,bandit,trivy,gitleaks,checkov}.sarif`. zizmor ghi `sarif/zizmor.sarif`. Gate và Agent đọc mọi `sarif/*.sarif`.
+- Mục tiêu thời gian của các job quét tĩnh: ≤ 5 phút, chạy song song. Từ giai đoạn E2 (có DAST), mục tiêu cả pipeline PR là ≤ 15 phút (spec mục 3.6).
 - Secret của CI chỉ lấy từ `secrets.*` hoặc được sinh ngẫu nhiên ngay trong job (staging). Không bao giờ in secret ra log.
 - Thư mục `security/gate/` chỉ dùng thư viện chuẩn. Test chạy bằng `uv run --with pytest pytest security/gate/tests -q` từ gốc repo.
 
@@ -90,20 +92,20 @@ docs/baseline-scan.md            # kết quả quét bản sạch v0.1-baseline 
     - `medicare.jinja-safe-filter`: `|safe` hoặc `Markup(` trong template hay code, CWE-79.
     - `medicare.route-int-path-param`: route FastAPI có tham số `*_id: int` thay vì `ObjectId`, ánh xạ R-15. Kiểu `int` thường cho phép ID vượt phạm vi INTEGER của PostgreSQL và gây lỗi 500, đúng loại lỗi đã tìm thấy và sửa ở mảng A.
 
-- [ ] **Step 1: Lấy sha256** của từng file release, ví dụ `gh release download v0.76.2 -R aquasecurity/trivy -p 'trivy_0.76.2_checksums.txt' -O -`, rồi lọc đúng dòng `Linux-64bit.tar.gz`. Làm tương tự với gitleaks và actionlint. Ghi vào `tool-versions.env`.
-- [ ] **Step 2: Viết file test cho rule trước** (`medicare.py`, `medicare.html`). Mỗi trường hợp có chú thích `# ruleid: <id>` hoặc `# ok: <id>`; trong HTML dùng `<!-- ruleid: ... -->`. Tối thiểu 2 trường hợp `ruleid` và 2 trường hợp `ok` cho mỗi rule. Ví dụ trường hợp `ok`: `text("... :q")` có bind parameter; `patient_id: ObjectId`.
-- [ ] **Step 3: Chạy** `docker run --rm -v "$PWD/security/semgrep:/src" semgrep/semgrep:1.184.0 semgrep --test /src`. Kỳ vọng: FAIL, vì chưa có rule.
-- [ ] **Step 4: Viết** `medicare.yml`, mỗi rule có `metadata: {cwe, owasp, confidence}`. Viết `gitleaks.toml` (`[extend] useDefault = true`, không có allowlist) và `checkov.yaml` (`framework: [terraform, kubernetes, dockerfile, secrets]`, `compact: true`).
-- [ ] **Step 5: Chạy lại** lệnh ở Step 3. Kỳ vọng: mọi test của rule PASS.
-- [ ] **Step 6: Chạy** `bash security/install-tools.sh /tmp/tools` (trong WSL hoặc trong một container `ubuntu`). Kỳ vọng: 3 binary chạy được `--version`. Sửa sai 1 ký tự trong sha256 thì script phải thoát với mã ≠ 0.
-- [ ] **Step 7: Commit** `ci(security): pin phiên bản công cụ quét, script cài đặt, rule Semgrep tùy chỉnh`
+- [x] **Step 1: Lấy sha256** của từng file release, ví dụ `gh release download v0.76.2 -R aquasecurity/trivy -p 'trivy_0.76.2_checksums.txt' -O -`, rồi lọc đúng dòng `Linux-64bit.tar.gz`. Làm tương tự với gitleaks và actionlint. Ghi vào `tool-versions.env`.
+- [x] **Step 2: Viết file test cho rule trước** (`medicare.py`, `medicare.html`). Mỗi trường hợp có chú thích `# ruleid: <id>` hoặc `# ok: <id>`; trong HTML dùng `<!-- ruleid: ... -->`. Tối thiểu 2 trường hợp `ruleid` và 2 trường hợp `ok` cho mỗi rule. Ví dụ trường hợp `ok`: `text("... :q")` có bind parameter; `patient_id: ObjectId`.
+- [x] **Step 3: Chạy** `docker run --rm -v "$PWD/security/semgrep:/src" semgrep/semgrep:1.184.0 semgrep --test /src`. Kỳ vọng: FAIL, vì chưa có rule.
+- [x] **Step 4: Viết** `medicare.yml`, mỗi rule có `metadata: {cwe, owasp, confidence}`. Viết `gitleaks.toml` (`[extend] useDefault = true`, không có allowlist) và `checkov.yaml` (`framework: [terraform, kubernetes, dockerfile, secrets]`, `compact: true`).
+- [x] **Step 5: Chạy lại** lệnh ở Step 3. Kỳ vọng: mọi test của rule PASS.
+- [x] **Step 6: Chạy** `bash security/install-tools.sh /tmp/tools` (trong WSL hoặc trong một container `ubuntu`). Kỳ vọng: 3 binary chạy được `--version`. Sửa sai 1 ký tự trong sha256 thì script phải thoát với mã ≠ 0.
+- [x] **Step 7: Commit** `ci(security): pin phiên bản công cụ quét, script cài đặt, rule Semgrep tùy chỉnh`
 
 ---
 
 ### Task 2: Quality gate (`security/gate/gate.py`)
 
 **Files:**
-- Create: `security/gate/gate.py`, `security/gate/tests/test_gate.py`, `security/gate/tests/fixtures/*.sarif`, `security/gate/tests/fixtures/report_*.json`
+- Create: `security/gate/gate.py`, `security/gate/tests/test_gate.py`, `security/gate/tests/fixtures/*.sarif` (report.json mẫu được dựng ngay trong test)
 
 **Interfaces:**
 - Produces:
@@ -128,15 +130,14 @@ docs/baseline-scan.md            # kết quả quét bản sạch v0.1-baseline 
   - `render_summary(decision, findings) -> str`: Markdown cho `$GITHUB_STEP_SUMMARY`. Gồm bảng số lượng theo tool × severity, danh sách phát hiện bị chặn (chỉ tool, rule, file:line; **không in `message`**, vì message của Gitleaks có thể chứa secret) và chế độ đã dùng.
   - CLI `python security/gate/gate.py --sarif-dir sarif --changed-files changed.txt --mode traditional|ai-assisted [--report out/report.json] [--agent-exit N] [--labels a,b] [--workspace $GITHUB_WORKSPACE] [--summary $GITHUB_STEP_SUMMARY]`: trả mã thoát 1 khi `block`, 0 khi không. Không truyền `--changed-files` thì không lọc theo file (dùng cho main-ci).
 
-- [ ] **Step 1: Tạo fixture SARIF nhỏ mô phỏng hình dạng của từng tool:**
+- [x] **Step 1: Tạo fixture SARIF nhỏ mô phỏng hình dạng của từng tool:**
   - `semgrep.sarif`: `level` ở result, `ruleId`.
   - `codeql.sarif`: `ruleIndex`, `security-severity` nằm ở rule.
   - `trivy.sarif`: `security-severity` ở rule, uri là `app/uv.lock`.
   - `gitleaks.sarif`: không có level.
   - `checkov.sarif`: uri tuyệt đối dạng `/github/workspace/infra/...`.
   - `corrupt.sarif`: JSON hỏng.
-  - `report_ok.json`, `report_fp_critical.json`.
-- [ ] **Step 2: Viết test thất bại:**
+- [x] **Step 2: Viết test thất bại:**
 
 ```python
 def test_finding_id_format(): ...  # Finding("semgrep","r1","HIGH","app/a.py",3).id == "semgrep:r1:app/a.py:3"
@@ -162,10 +163,10 @@ def test_summary_never_contains_messages(): ...       # gitleaks message "AKIA..
 def test_cli_exit_codes(tmp_path): ...                # subprocess: 1 when blocking, 0 when clean
 ```
 
-- [ ] **Step 3: Chạy** `uv run --with pytest pytest security/gate/tests -q`. Kỳ vọng: FAIL (`ModuleNotFoundError`). `conftest.py` thêm `security/gate` vào `sys.path`.
-- [ ] **Step 4: Cài đặt** `gate.py` (chỉ dùng stdlib: `argparse`, `json`, `dataclasses`, `pathlib`).
-- [ ] **Step 5: Chạy lại.** Kỳ vọng: toàn bộ PASS. Chạy thêm `uvx ruff check security/gate`, kỳ vọng sạch.
-- [ ] **Step 6: Commit** `feat(gate): quality gate đọc SARIF, 2 chế độ traditional/ai-assisted`
+- [x] **Step 3: Chạy** `uv run --with pytest pytest security/gate/tests -q`. Kỳ vọng: FAIL (`ModuleNotFoundError`). `conftest.py` thêm `security/gate` vào `sys.path`.
+- [x] **Step 4: Cài đặt** `gate.py` (chỉ dùng stdlib: `argparse`, `json`, `dataclasses`, `pathlib`).
+- [x] **Step 5: Chạy lại.** Kỳ vọng: toàn bộ PASS. Chạy thêm `uvx ruff check security/gate`, kỳ vọng sạch.
+- [x] **Step 6: Commit** `feat(gate): quality gate đọc SARIF, 2 chế độ traditional/ai-assisted`
 
 ---
 
@@ -192,10 +193,10 @@ def test_cli_exit_codes(tmp_path): ...                # subprocess: 1 when block
   - **Service** `ClusterIP`. **NetworkPolicy** chặn mọi ingress, trừ từ namespace ingress-controller.
   - **`infra/README.md`:** ghi rõ các file này **chỉ là đối tượng cho IaC Scan**, không `terraform apply`.
 
-- [ ] **Step 1: Viết** các file theo Interfaces.
-- [ ] **Step 2: Chạy** `docker run --rm -v "$PWD:/repo" bridgecrew/checkov:3.4.3 -d /repo/infra --framework terraform kubernetes --compact --quiet`. Ghi lại danh sách check FAILED. Check nào sửa được bằng cấu hình đúng thực hành (không phải comment skip) thì sửa. Check còn lại không hợp lý cho đồ án (ví dụ cross-region replication, VPC flow logs bắt buộc KMS riêng) thì giữ nguyên làm dữ liệu FP và ghi vào `docs/baseline-scan.md` ở Task 7.
-- [ ] **Step 3: Chạy** `terraform fmt -check` và `terraform validate` qua image `hashicorp/terraform:1.9` (`init -backend=false`). Kỳ vọng: hợp lệ.
-- [ ] **Step 4: Commit** `feat(infra): Terraform AWS và K8s manifest mẫu cho IaC Scan`
+- [x] **Step 1: Viết** các file theo Interfaces.
+- [x] **Step 2: Chạy** `docker run --rm -v "$PWD:/repo" bridgecrew/checkov:3.4.3 -d /repo/infra --framework terraform kubernetes --compact --quiet`. Ghi lại danh sách check FAILED. Check nào sửa được bằng cấu hình đúng thực hành (không phải comment skip) thì sửa. Check còn lại không hợp lý cho đồ án (ví dụ cross-region replication, VPC flow logs bắt buộc KMS riêng) thì giữ nguyên làm dữ liệu FP và ghi vào `docs/baseline-scan.md` ở Task 7.
+- [x] **Step 3: Chạy** `terraform fmt -check` và `terraform validate` qua image `hashicorp/terraform:1.9` (`init -backend=false`). Kỳ vọng: hợp lệ.
+- [x] **Step 4: Commit** `feat(infra): Terraform AWS và K8s manifest mẫu cho IaC Scan`
 
 ---
 
@@ -209,9 +210,9 @@ def test_cli_exit_codes(tmp_path): ...                # subprocess: 1 when block
   - Hook `gitleaks` từ `https://github.com/gitleaks/gitleaks`, `rev: v8.30.1`, id `gitleaks`, `args: ["--config", "security/gitleaks.toml"]`.
   - Hook `ruff` và `ruff-format --check` từ `astral-sh/ruff-pre-commit`, rev bản mới nhất, `files: ^(app|security)/`.
 
-- [ ] **Step 1: Viết** config. Chạy `uvx pre-commit run --all-files`. Kỳ vọng: gitleaks Passed. Ruff có thể báo lỗi format, nếu có thì chạy `ruff format` trên `app/` và commit riêng.
-- [ ] **Step 2: Kiểm thử thủ công:** tạo file tạm có chuỗi giống AWS key (`AKIA` + 16 ký tự hoa), `git add` rồi `uvx pre-commit run gitleaks`. Kỳ vọng: **Failed**. Xóa file tạm, **không commit nó**.
-- [ ] **Step 3: Commit** `ci(pre-commit): chặn secret trước khi commit bằng Gitleaks`
+- [x] **Step 1: Viết** config. Chạy `uvx pre-commit run --all-files`. Kỳ vọng: gitleaks Passed. Ruff có thể báo lỗi format, nếu có thì chạy `ruff format` trên `app/` và commit riêng.
+- [x] **Step 2: Kiểm thử thủ công:** tạo file tạm có chuỗi giống AWS key (`AKIA` + 16 ký tự hoa), `git add` rồi `uvx pre-commit run gitleaks`. Kỳ vọng: **Failed**. Xóa file tạm, **không commit nó**.
+- [x] **Step 3: Commit** `ci(pre-commit): chặn secret trước khi commit bằng Gitleaks`
 
 ---
 
@@ -240,19 +241,19 @@ def test_cli_exit_codes(tmp_path): ...                # subprocess: 1 when block
     - Để sẵn chỗ cho kế hoạch C: input `--report out/report.json` và `--agent-exit` chỉ được truyền khi có artifact `agent-report`.
   - `BASE_SHA` và `HEAD_SHA` đặt ở `env:` cấp workflow từ `github.event.pull_request.base.sha` và `.head.sha`. Không nhúng `${{ }}` vào `run:`.
 
-- [ ] **Step 1: Viết** workflow. Lấy SHA của từng Action bằng `gh api`, kèm comment tag.
-- [ ] **Step 2: Chạy** `actionlint` (binary từ Task 1, hoặc `docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12`). Kỳ vọng: không lỗi. Chạy `uvx zizmor==1.32.0 .github/workflows`. Kỳ vọng: không còn lỗi mức medium trở lên (template injection, unpinned uses, excessive permissions).
-- [ ] **Step 3: Commit, push nhánh, mở PR nháp.** Theo dõi bằng `gh pr checks --watch`. Kỳ vọng:
+- [x] **Step 1: Viết** workflow. Lấy SHA của từng Action bằng `gh api`, kèm comment tag.
+- [x] **Step 2: Chạy** `actionlint` (binary từ Task 1, hoặc `docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12`). Kỳ vọng: không lỗi. Chạy `uvx zizmor==1.32.0 .github/workflows`. Kỳ vọng: không còn lỗi mức medium trở lên (template injection, unpinned uses, excessive permissions).
+- [x] **Step 3: Commit, push nhánh, mở PR nháp.** Theo dõi bằng `gh pr checks --watch`. Kỳ vọng:
   - mọi job xanh;
   - `quality-gate` đạt, vì PR này không đụng `app/` nên không có phát hiện nào trong file thay đổi;
   - tab Security có kết quả theo từng category.
   Ghi lại thời gian chạy từng job.
-- [ ] **Step 4: Kiểm thử gate trên CI bằng PR thử nghiệm** (nhánh tạm, không merge):
+- [x] **Step 4: Kiểm thử gate trên CI bằng PR thử nghiệm** (nhánh tạm, không merge):
   - Thêm vào `app/medicare/patient/service.py` một hàm dùng `text(f"... {q}")`.
   - Kỳ vọng: `semgrep` (rule `medicare.sqlalchemy-text-fstring`) và `bandit` (B608) báo lỗi, `quality-gate` **đỏ**, job summary liệt kê đúng file:line.
   - Đóng PR, xóa nhánh tạm.
   - Ghi kết quả (ảnh hoặc link run) vào `docs/pipeline.md` ở Task 7.
-- [ ] **Step 5: Commit** các chỉnh sửa phát sinh: `ci: pipeline bảo mật cho Pull Request`
+- [x] **Step 5: Commit** các chỉnh sửa phát sinh: `ci: pipeline bảo mật cho Pull Request`
 
 ---
 
@@ -276,15 +277,15 @@ def test_cli_exit_codes(tmp_path): ...                # subprocess: 1 when block
       - `down -v` (`if: always()`).
   - **`nightly-sca.yml`** (`schedule: cron "0 19 * * *"` tức 02:00 giờ Việt Nam, kèm `workflow_dispatch`): `trivy fs` trên `app/uv.lock` bằng DB mới nhất (không cache), upload SARIF với category `nightly-trivy`. Có thêm `trivy image ghcr.io/<owner>/medicare-hms:latest`.
 
-- [ ] **Step 1: Viết** 2 workflow. Chạy actionlint và zizmor như Task 5. Kỳ vọng sạch.
-- [ ] **Step 2: Kiểm thử bằng `workflow_dispatch` trên nhánh:** `gh workflow run main-ci.yml --ref feat/pipeline`, rồi `gh run watch`. Kỳ vọng:
+- [x] **Step 1: Viết** 2 workflow. Chạy actionlint và zizmor như Task 5. Kỳ vọng sạch.
+- [x] **Step 2: Kiểm thử bằng `workflow_dispatch` trên nhánh:** `gh workflow run main-ci.yml --ref feat/pipeline`, rồi `gh run watch`. Kỳ vọng:
   - các job xanh;
   - image có trên GHCR;
   - artifact SBOM tồn tại;
   - log staging cho thấy smoke test đạt.
   Nếu `trivy image` chặn do CVE Critical của base image đã có bản sửa, thì nâng base image lên patch mới nhất của `python:3.12-slim` trong `app/Dockerfile`. Không được hạ ngưỡng.
   Chạy `gh workflow run nightly-sca.yml --ref feat/pipeline`. Kỳ vọng: xanh.
-- [ ] **Step 3: Commit** `ci: pipeline main (quét toàn bộ, image, SBOM, GHCR, staging) và quét SCA hằng đêm`
+- [x] **Step 3: Commit** `ci: pipeline main (quét toàn bộ, image, SBOM, GHCR, staging) và quét SCA hằng đêm`
 
 ---
 
@@ -295,7 +296,7 @@ def test_cli_exit_codes(tmp_path): ...                # subprocess: 1 when block
 
 **Interfaces:**
 - Produces:
-  - **`security/scan-local.sh <out-dir>`:** chạy Semgrep, Bandit, Trivy, Gitleaks, Checkov và zizmor bằng **Docker image** đúng phiên bản trong `tool-versions.env` trên cây hiện tại, ghi `<out-dir>/<tool>.sarif`. Kế hoạch D sẽ dùng lại script này; CodeQL chạy trên CI. Image dùng:
+  - **`security/scan-local.sh <out-dir>`:** chạy Semgrep, Bandit, Trivy, Gitleaks, Checkov và zizmor bằng **Docker image** đúng phiên bản trong `tool-versions.env` trên cây hiện tại, ghi `<out-dir>/<tool>.sarif`. Script dùng để thử nhanh trên máy, kể cả khi viết kịch bản benchmark (benchmark chính thức chạy qua PR thật, spec mục 8.5); CodeQL chỉ chạy trên CI. Image dùng:
     - `semgrep/semgrep:<v>`, `aquasec/trivy:<v>`, `zricethezav/gitleaks:v<v>`, `bridgecrew/checkov:<v>`;
     - Bandit và zizmor chạy trong `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` bằng `uvx`.
   - **`docs/baseline-scan.md`:** bảng phát hiện trên `v0.1-baseline` theo tool × severity, cộng danh sách từng phát hiện (tool, rule, file:line, nhận định ngắn: FP hay chấp nhận được). Lấy từ `scan-local.sh` + kết quả CodeQL của lần chạy `main-ci` (tải bằng `gh api .../code-scanning/alerts`). Đây là **mốc FP của bản sạch** cho thực nghiệm (RQ1).
@@ -312,8 +313,8 @@ def test_cli_exit_codes(tmp_path): ...                # subprocess: 1 when block
     - `allow_force_pushes: false`, `allow_deletions: false`.
   - **Biến repo** `SECURITY_GATE_MODE=traditional` (`gh variable set`).
 
-- [ ] **Step 1: Chạy** `bash security/scan-local.sh /tmp/baseline` trên tag `v0.1-baseline` (`git worktree add /tmp/bl v0.1-baseline`). Kỳ vọng: tạo đủ 6 file SARIF hợp lệ. Chạy `python security/gate/gate.py --sarif-dir /tmp/baseline --mode traditional`, ghi lại số lượng.
-- [ ] **Step 2: Thêm test hồi quy** `test_parses_real_tool_output`: copy (rút gọn nếu lớn) SARIF thật của mỗi tool vào `security/gate/tests/fixtures/real/`, và test rằng `load_sarif` đọc được mọi file mà không lỗi. Kỳ vọng: PASS. Nếu FAIL thì sửa `gate.py` theo hình dạng thật.
-- [ ] **Step 3: Viết** `docs/baseline-scan.md` và `docs/pipeline.md`.
-- [ ] **Step 4: Bật branch protection và đặt biến repo.** Kiểm tra bằng `gh api repos/{owner}/{repo}/branches/main/protection --jq .required_status_checks.contexts`. Kỳ vọng: `["build-test","quality-gate"]`.
-- [ ] **Step 5: Commit** `docs: kết quả quét bản sạch, mô tả pipeline; bật branch protection`
+- [x] **Step 1: Chạy** `bash security/scan-local.sh /tmp/baseline` trên tag `v0.1-baseline` (`git worktree add /tmp/bl v0.1-baseline`). Kỳ vọng: tạo đủ 6 file SARIF hợp lệ. Chạy `python security/gate/gate.py --sarif-dir /tmp/baseline --mode traditional`, ghi lại số lượng.
+- [x] **Step 2: Thêm test hồi quy** `test_parses_real_tool_output`: copy (rút gọn nếu lớn) SARIF thật của mỗi tool vào `security/gate/tests/fixtures/real/`, và test rằng `load_sarif` đọc được mọi file mà không lỗi. Kỳ vọng: PASS. Nếu FAIL thì sửa `gate.py` theo hình dạng thật.
+- [x] **Step 3: Viết** `docs/baseline-scan.md` và `docs/pipeline.md`.
+- [x] **Step 4: Bật branch protection và đặt biến repo.** Kiểm tra bằng `gh api repos/{owner}/{repo}/branches/main/protection --jq .required_status_checks.contexts`. Kỳ vọng: `["build-test","quality-gate"]`.
+- [x] **Step 5: Commit** `docs: kết quả quét bản sạch, mô tả pipeline; bật branch protection`

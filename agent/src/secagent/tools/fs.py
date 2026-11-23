@@ -38,7 +38,7 @@ def _is_denied(rel: str) -> bool:
 
 
 def wrap_untrusted(label: str, text: str) -> str:
-    """Code from the PR is data, never instructions (spec 4.6); its closing tag is neutralised."""
+    """Code from the PR is data, never instructions (spec 5.7); its closing tag is neutralised."""
     safe_label = label.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;")
     body = _CLOSE_TAG.sub(r"<\\/untrusted-code", text)
     return f'<untrusted-code source="{safe_label}">\n{body}\n</untrusted-code>'

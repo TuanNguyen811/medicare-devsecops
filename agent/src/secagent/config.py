@@ -1,6 +1,6 @@
-"""Run settings from environment variables and CLI flags (spec 4.4, plan C Global Constraints).
+"""Run settings from environment variables and CLI flags (spec 5.4, plan C Global Constraints).
 
-LLM_PROVIDER picks one of four modes (spec addendum 4.1): `anthropic` (default), `openai` and
+LLM_PROVIDER picks one of four modes (spec 5.5): `anthropic` (default), `openai` and
 `gemini` call the provider's API with LLM_API_KEY; `claude-mcp` uses the Claude Code CLI logged in
 on this machine (no key, never in CI). LLM_MODEL / LLM_BASE_URL override the preset.
 """
@@ -147,7 +147,7 @@ def _number(name: str, raw: str) -> float:
 
 
 def step_limit(n_clusters: int) -> int:
-    """Maximum LLM calls of one review session (spec 4.1)."""
+    """Maximum LLM calls of one review session (spec 5.1)."""
     return min(10 + 3 * n_clusters, 60)
 
 

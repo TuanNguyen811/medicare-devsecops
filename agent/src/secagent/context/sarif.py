@@ -1,4 +1,4 @@
-"""Scanner SARIF → findings → clusters (spec 4.1 phase 0, roadmap Contract 2).
+"""Scanner SARIF → findings → clusters (spec 5.1 phase 0, roadmap Contract 2).
 
 Finding ids and severities must be byte-for-byte those of security/gate/gate.py: the gate
 matches report.json → finding_ids against its own ids. normalize_path, severity_of and the rule

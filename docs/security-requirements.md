@@ -4,7 +4,7 @@ Tài liệu này mô tả **quy tắc bảo mật nghiệp vụ** mà MediCare H
 
 - **Lập trình viên:** mọi tính năng mới phải giữ đúng các quy tắc R-xx. Phân quyền theo đối tượng chỉ được thực hiện qua các hàm `can_*` trong `app/medicare/policy.py`. Docstring của mỗi hàm ghi mã quy tắc mà nó thực thi.
 - **AI Security Agent:** đọc tài liệu này (công cụ `read_security_requirements`) để biết thế nào là *sai* đối với nghiệp vụ, từ đó phát hiện lỗi logic và phân quyền mà công cụ quét tĩnh không thấy được.
-- **Bộ benchmark:** mỗi lỗ hổng logic trong `benchmark/ground_truth.yaml` được gắn với quy tắc bị vi phạm (`violated_rule: R-xx`).
+- **Bộ benchmark:** mỗi lỗ hổng logic trong `benchmark/scenarios/<ID>/ground_truth.yaml` được gắn với quy tắc bị vi phạm (`violated_rule: R-xx`).
 
 ## Vai trò
 

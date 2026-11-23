@@ -1,4 +1,4 @@
-"""Mask secrets before any text reaches the LLM, the trace or a report (spec 4.6)."""
+"""Mask secrets before any text reaches the LLM, the trace or a report (spec 5.7)."""
 
 from __future__ import annotations
 

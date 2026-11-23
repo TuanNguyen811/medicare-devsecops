@@ -1,6 +1,6 @@
 # Kết quả benchmark
 
-Chấm theo spec gốc mục 5.3 và spec bổ sung mục 8.4. Ô có ± là trung bình ± độ lệch chuẩn qua các lần chạy; `-` là không xác định (không có dự đoán nào).
+Chấm theo spec mục 8.6. Ô có ± là trung bình ± độ lệch chuẩn qua các lần chạy; `-` là không xác định (không có dự đoán nào).
 
 ## Độ chính xác
 

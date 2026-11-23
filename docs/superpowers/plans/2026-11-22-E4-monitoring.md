@@ -18,7 +18,7 @@
 
 **Tech Stack:** prometheus-client 0.26, Prometheus v3.16.0, Alertmanager v0.35.0, Grafana 13.3.1 (ghim digest).
 
-**Spec:** `docs/superpowers/specs/2026-11-21-ops-dast-benchmark-design.md` mục 7 (các quyết định khi làm ở 7.4).
+**Spec:** `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md` mục 7 (các quyết định khi làm ở 7.4).
 
 ## Global Constraints
 

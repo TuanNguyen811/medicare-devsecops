@@ -1,14 +1,14 @@
-"""Score the benchmark (spec 5.3, addendum 8.4) and write the result tables.
+"""Score the benchmark (spec 8.6) and write the result tables.
 
     uv run --project agent --with pyyaml==6.0.2 python benchmark/evaluate.py \\
         --scan pr-<tag> --select test --out benchmark/results/summary/pr-<tag>-test
 
 Data comes from benchmark/pr_bench.py (results/scans/pr-<tag>/ and results/runs/pr-<tag>/C2/).
-Units and matching (addendum 8.4):
+Units and matching (spec 8.6):
 - C1 (the scanners) and C1+DAST (with ZAP) predict every cluster of scanner findings the
   quality gate considers (clusters.json). An agent run (C2) predicts each report entry whose
   verdict is TP. NEEDS_REVIEW is never a detection: the strict view counts it as an FP, the
-  lenient view ignores it (spec 5.3).
+  lenient view ignores it (spec 8.6).
 - A prediction matches a ground-truth vulnerability when one of its locations is in the same
   file with lines within +-3 of the vulnerable range (or of one of the truth's `also` ranges:
   other places where the same bug can be pinned, e.g. source and sink; still one bug) and in
@@ -174,7 +174,7 @@ def score(predictions: list[Prediction], truths: list[Truth], strict: bool,
         if p.needs_review:
             s.needs_review += 1
             if strict and not is_known(p, known):
-                false_positive(p)  # spec 5.3: NEEDS_REVIEW counts as an FP in the strict view
+                false_positive(p)  # spec 8.6: NEEDS_REVIEW counts as an FP in the strict view
             continue
         hit = [t.id for t in truths if matches(p, t)]
         if hit:
@@ -388,7 +388,7 @@ def _mean(values: list) -> str:
 
 def render(summary: dict, data: dict) -> str:
     lines = ["# Kết quả benchmark", "",
-             "Chấm theo spec gốc mục 5.3 và spec bổ sung mục 8.4. Ô có ± là trung bình ± độ "
+             "Chấm theo spec mục 8.6. Ô có ± là trung bình ± độ "
              "lệch chuẩn qua các lần chạy; `-` là không xác định (không có dự đoán nào).",
              "", "## Độ chính xác", "",
              "Chặt: NEEDS_REVIEW tính là FP. Lỏng: bỏ qua NEEDS_REVIEW. TP, FN và recall "

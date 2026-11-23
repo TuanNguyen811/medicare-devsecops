@@ -1,4 +1,4 @@
-# Chốt prompt trước khi viết tập test (chống thiên vị, spec bổ sung 8.2).
+# Chốt prompt trước khi viết tập test (chống thiên vị, spec mục 8.8).
 # Prompt của agent (agent/src/secagent/prompts) không đổi kể từ commit chốt. Kiểm lại bằng:
 #   git rev-parse <commit>:agent/src/secagent/prompts
 prompts_tree: c33491a31d9184b288747e1542cdbdf03af3f806

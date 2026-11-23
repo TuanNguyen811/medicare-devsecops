@@ -1,4 +1,4 @@
-"""Merge the ZAP JSON reports of several roles into one SARIF file (spec addendum 5.2).
+"""Merge the ZAP JSON reports of several roles into one SARIF file (spec 4.2).
 
     python3 zap2sarif.py --routes routes.json --out zap.sarif DOCTOR=zap-DOCTOR.json ...
 

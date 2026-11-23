@@ -1,4 +1,4 @@
-# Alert rules (spec addendum 7.2). Thresholds over 5-minute windows; simulate-traffic.py
+# Alert rules (spec 7.2). Thresholds over 5-minute windows; simulate-traffic.py
 # triggers each security alert on demand.
 groups:
   - name: medicare-security

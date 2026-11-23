@@ -4,7 +4,7 @@
 - `app/`: giống hệt tag `v0.1-baseline`.
 - `infra/terraform`, `infra/k8s`, `security/`, `.github/workflows`: thêm ở kế hoạch B.
 
-Cây đầy đủ này được gắn tag **`v0.2-baseline`** khi merge kế hoạch B. Mọi patch kịch bản benchmark sẽ áp lên tag đó.
+Cây đầy đủ này được gắn tag **`v0.2-baseline`** khi merge kế hoạch B. Mốc dùng cho benchmark là **`v0.3-baseline`** (thêm metrics và quy tắc R-16–R-19, không thêm phát hiện mới cho các công cụ quét tĩnh); xem spec mục 8.2.
 
 **Công cụ:** dùng đúng phiên bản trong [`security/tool-versions.env`](../security/tool-versions.env).
 - Semgrep 1.184.0 (bộ rule `p/python`, `p/owasp-top-ten` và rule tùy chỉnh `security/semgrep/medicare.yml`)
@@ -37,7 +37,7 @@ Ngày quét: 2026-11-07.
 
 Nếu chạy quality gate chế độ `traditional` trên toàn bộ cây thì kết quả là **CHẶN**, với 13 phát hiện mức HIGH.
 
-Vì `main` là bản sạch đã qua review độc lập, **cả 15 phát hiện đều được coi là báo nhầm (FP) hoặc rủi ro chấp nhận được**. Đây là dữ liệu đầu vào để đo khả năng của AI Agent trong việc loại FP (RQ1).
+Vì `main` là bản sạch đã qua review độc lập, **cả 15 phát hiện đều được coi là báo nhầm (FP) hoặc rủi ro chấp nhận được**. Gate chỉ xét một phát hiện có sẵn khi PR sửa đúng file chứa nó; khi đó phát hiện này là dữ liệu báo nhầm để đo khả năng loại FP của AI Agent (RQ1, spec mục 8.6).
 
 ## Chi tiết từng phát hiện
 
@@ -69,7 +69,7 @@ Vì `main` là bản sạch đã qua review độc lập, **cả 15 phát hiện
 
 ## DAST (ZAP) trên bản sạch
 
-Bổ sung 2026-11-22, giai đoạn 2 (spec bổ sung mục 5).
+Bổ sung 2026-11-22, giai đoạn E2 (spec mục 4).
 
 **Cách chạy:**
 - App là bản `main` lúc đó (merge PR #8), dựng bằng `docker compose -p dast` với secret sinh tại chỗ và dữ liệu mẫu (`python -m medicare.seed`).
@@ -107,7 +107,7 @@ Tổng cộng khoảng 26 phút khi chạy lần lượt. Trên CI, 5 vai trò c
 
 **Nhận xét cho báo cáo:**
 - App chưa gửi các header bảo mật (CSP, `X-Frame-Options` hoặc `frame-ancestors`, `X-Content-Type-Options`). Đây là phát hiện đúng về mặt kỹ thuật nhưng mức thấp, và nằm ngoài các quy tắc R-xx. Chúng được giữ làm dữ liệu báo nhầm và nhiễu của DAST, không bị chặn bằng cấu hình (giống nguyên tắc của mục trên).
-- Mọi PR đều mang lại 11 kết quả này, vì DAST quét cả app chứ không chỉ phần thay đổi. AI Agent phải thẩm định chúng ở mỗi PR. Đây là chi phí cần đo trong benchmark.
+- Mọi PR đều mang lại 11 kết quả này, vì DAST quét cả app chứ không chỉ phần thay đổi. AI Agent phải thẩm định chúng ở mỗi PR. Benchmark không tính chúng là TP hay FP mà đếm riêng, vì chúng không do PR gây ra (spec mục 8.6).
 - Không có cảnh báo High nên bật DAST không làm PR sạch bị chặn.
-- Quét chủ động bị giới hạn thời gian, nên kết quả giữa các lần chạy có thể lệch nhẹ (hạn chế đã nêu trong spec bổ sung mục 11).
+- Quét chủ động bị giới hạn thời gian, nên kết quả giữa các lần chạy có thể lệch nhẹ (hạn chế đã nêu trong spec mục 9).
 - Báo cáo thô không chứa cookie phiên (đã kiểm tra: không có `medicare_session=`).

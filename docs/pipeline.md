@@ -7,23 +7,27 @@ Pipeline chạy trên GitHub Actions, gồm 3 workflow, cộng thêm pre-commit 
 | Giai đoạn | Khi nào | Công cụ | Nơi cấu hình |
 |---|---|---|---|
 | **Code** | Trước mỗi commit, trên máy lập trình viên | Gitleaks, Ruff | `.pre-commit-config.yaml` |
-| **Pull Request** | Mỗi lần mở hoặc cập nhật PR vào `main` | Semgrep, CodeQL, Bandit (SAST); Trivy (SCA); Gitleaks (Secret); Checkov, zizmor (IaC và workflow CI); **quality gate** | `.github/workflows/pr-security.yml` |
-| **Merge vào main** | Mỗi lần push lên `main` | Quét toàn bộ (lên tab Security); build image, Trivy quét image, SBOM CycloneDX, push GHCR; staging tạm thời + smoke test | `.github/workflows/main-ci.yml` |
+| **Pull Request** | Mỗi lần mở hoặc cập nhật PR vào `main` | Semgrep, CodeQL, Bandit (SAST); Trivy (SCA); Gitleaks (Secret); Checkov, zizmor (IaC và workflow CI); ZAP (DAST, 5 vai trò); **AI Security Agent**; **quality gate** | `.github/workflows/pr-security.yml` |
+| **Merge vào main** | Mỗi lần push lên `main` | Quét toàn bộ (lên tab Security); build image, Trivy quét image, SBOM CycloneDX, push GHCR, cosign ký và gắn SBOM attestation; staging tạm thời + smoke test | `.github/workflows/main-ci.yml` |
+| **Deploy** | Khi chạy `deploy/pull-deploy.sh` trên máy | cosign verify, Kyverno, smoke test, giám sát | [`deploy/README.md`](../deploy/README.md) |
 | **Hằng đêm** | 02:00 giờ Việt Nam | Trivy với cơ sở dữ liệu CVE mới nhất (thư viện + image `latest`) | `.github/workflows/nightly-sca.yml` |
 
-Phiên bản mọi công cụ quét nằm ở **một file duy nhất**: [`security/tool-versions.env`](../security/tool-versions.env). Binary (trivy, gitleaks, actionlint) được tải bằng [`security/install-tools.sh`](../security/install-tools.sh) và kiểm tra sha256. Công cụ Python (semgrep, bandit, checkov, zizmor) được cài đúng phiên bản bằng `uvx`.
+Phiên bản mọi công cụ quét nằm ở **một file duy nhất**: [`security/tool-versions.env`](../security/tool-versions.env). Binary (trivy, gitleaks, actionlint, cosign) được tải bằng [`security/install-tools.sh`](../security/install-tools.sh) và kiểm tra sha256. Công cụ Python (semgrep, bandit, checkov, zizmor) được cài đúng phiên bản bằng `uvx`.
 
 ## Workflow Pull Request (`pr-security.yml`)
 
 ```
 pull_request → main
- ├─ build-test ─────── pytest app (254 test, PostgreSQL thật qua Testcontainers) + ruff + test gate + test Agent
+ ├─ build-test ─────── pytest app (264 test, PostgreSQL thật qua Testcontainers) + ruff + test gate + test Agent
  ├─ sast-semgrep ─────┐  chỉ báo phát hiện mới so với commit gốc (--baseline-commit); app/ và agent/src
  ├─ sast-bandit ──────┤  app/medicare và agent/src
  ├─ sast-codeql ──────┤  security-extended, app/medicare và agent/src
  ├─ sca-trivy ────────┤  mọi file khai báo thư viện trong repo (app/uv.lock, agent/uv.lock); CSDL CVE cache theo ngày
  ├─ secret-gitleaks ──┤  chỉ các commit của PR, che giá trị secret (--redact)
  ├─ iac-checkov ──────┤  Checkov (Terraform, K8s, Dockerfile) + zizmor (workflow CI, chạy từ gốc repo)
+ ├─ dast-zap ×5 ──────┤  build image của PR, compose up, ZAP quét có đăng nhập (ADMIN, RECEPTIONIST,
+ │                    │  DOCTOR, NURSE, PATIENT), mỗi vai trò một runner
+ ├─ dast ─────────────┤  gộp báo cáo 5 vai trò thành zap.sarif
  │                    ▼  mỗi job: artifact sarif-<tool> + upload lên tab Security
  ├─ ai-security-agent ─ đọc diff + SARIF + mã nguồn + quy tắc R-xx → out/report.json; job duy nhất có
  │                      LLM_API_KEY, không chạy ứng dụng hay test của PR; upload agent-report, gate tải theo ID
@@ -31,7 +35,9 @@ pull_request → main
  └─ quality-gate ───── chặn hoặc cho qua (bắt buộc đạt, theo branch protection)
 ```
 
-**AI Security Agent** (kế hoạch C, chi tiết ở [`agent/README.md`](../agent/README.md)):
+**DAST** (thiết kế ở spec mục 4): ZAP quét bản chạy thật của PR theo đặc tả OpenAPI xuất lúc build. Kết quả của `zap` luôn được gate xét, không lọc theo file thay đổi. Job `dast` lỗi (ZAP crash, app không lên, timeout) thì gate chặn. Kết quả trên bản sạch ở [`baseline-scan.md`](baseline-scan.md).
+
+**AI Security Agent** (chi tiết ở [`agent/README.md`](../agent/README.md)):
 - Chạy sau khi mọi job quét xong, kể cả khi chúng không có phát hiện, vì lỗi logic chỉ Agent tìm được. PR từ fork bị bỏ qua vì không có secret.
 - Nhà cung cấp LLM chọn bằng biến repo `LLM_PROVIDER`: `anthropic` (mặc định), `openai`, `gemini`. Key là secret `LLM_API_KEY`.
 - `LLM_PROVIDER=claude-mcp` (tài khoản Claude Code, không cần key): Claude Code không bao giờ chạy trên CI. Pipeline vẫn chạy đủ các job, nhưng phần gọi LLM diễn ra trên máy người review:
@@ -48,19 +54,19 @@ pull_request → main
   - Trong chế độ này, gate tin vào máy của người review: người chạy script chịu trách nhiệm về kết quả. Người khác mở PR không gửi thay được: comment của tài khoản khác hoặc comment đã bị sửa đều bị bỏ qua. Nhưng khi chính `AGENT_REPORT_AUTHOR` mở PR (luôn đúng khi một người làm), họ gửi được bất kỳ kết luận nào. Vì vậy chế độ này không phải lớp kiểm soát độc lập với người review.
   - Nội dung PR vẫn đến được phiên Claude trên máy người review, dù chỉ dưới dạng dữ liệu đọc qua các công cụ chỉ đọc của `secagent`. Prompt injection trong PR có thể làm lệch kết luận và tốn hạn mức của tài khoản đó, nhưng không chạy được lệnh trên máy.
 - Khi chưa có key, Agent thoát với mã 2, không comment gì, và gate dùng chế độ `traditional`.
-- Agent lỗi không làm đỏ pipeline: job quality-gate chỉ bắt buộc build-test và 6 job quét thành công. Thiếu `report.json` hoặc mã thoát khác 0 thì gate quay về `traditional`.
+- Agent lỗi không làm đỏ pipeline: job quality-gate chỉ bắt buộc build-test, 6 job quét và `dast` thành công. Thiếu `report.json` hoặc mã thoát khác 0 thì gate quay về `traditional`.
 
-**Thời gian đo được** (lần chạy 42357232710, PR #3):
+**Thời gian đo được** (PR #64, lượt chạy 45044581687, chế độ `claude-mcp`):
 
-| Job | build-test | codeql | checkov+zizmor | semgrep | trivy | gitleaks | bandit | gate | **Tổng** |
-|---|---|---|---|---|---|---|---|---|---|
-| Giây | 44 | 40 | 29 | 27 | 26 | 18 | 17 | 5 | **54** |
+| Job | build-test | codeql | semgrep | bandit | trivy | gitleaks | checkov+zizmor | dast-zap (5 vai trò) | dast | ai-security-agent | agent-comment | gate | **Tổng** |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Giây | 64 | 53 | 32 | 28 | 28 | 17 | 39 | 193–210 | 24 | 117 | 6 | 8 | **381** |
 
-Các job quét chạy song song nên tổng thời gian chỉ khoảng 1 phút, thấp hơn nhiều so với mục tiêu ≤ 5 phút của spec. Job AI Agent chạy sau các job quét; thời gian đo được ghi ở mục Agent bên dưới.
+Các job quét và DAST chạy song song; DAST là chặng dài nhất. Thời gian của `ai-security-agent` gồm cả thời gian chờ report từ máy người review. Tổng khoảng 6,4 phút, trong mục tiêu ≤ 15 phút của spec (mục 3.6). Riêng phần AI mất trung bình 46 giây mỗi PR ([`benchmark-results.md`](benchmark-results.md), RQ3).
 
 ## Quality gate
 
-Gate là script [`security/gate/gate.py`](../security/gate/gate.py), chỉ dùng thư viện chuẩn và có 70 test (một phần dùng SARIF thật của từng công cụ). Script đọc mọi file `sarif/*.sarif`, quy đổi mức độ rồi ra quyết định.
+Gate là script [`security/gate/gate.py`](../security/gate/gate.py), chỉ dùng thư viện chuẩn và có 84 test (một phần dùng SARIF thật của từng công cụ). Script đọc mọi file `sarif/*.sarif`, quy đổi mức độ rồi ra quyết định.
 
 **Quy đổi mức độ:**
 - Gitleaks luôn là HIGH.
@@ -81,12 +87,12 @@ Gate là script [`security/gate/gate.py`](../security/gate/gate.py), chỉ dùng
 | Chế độ | Chặn khi |
 |---|---|
 | `traditional` (mặc định) | Có bất kỳ phát hiện HIGH/CRITICAL nào |
-| `ai-assisted` (kế hoạch C) | Phát hiện HIGH/CRITICAL được Agent kết luận `TP`/`NEEDS_REVIEW`, hoặc **chưa được Agent thẩm định**. Nếu có nhiều kết luận cho cùng một phát hiện, chỉ cần một kết luận khác `FP` là chặn. Kết luận `FP` miễn chặn mức Critical chỉ khi PR có label `security-reviewed`. Ngoài ra chặn khi Agent kết luận `TP` mức HIGH/CRITICAL với độ tin cậy ≥ 0.7, dù là lỗi Agent tự tìm thêm hay một phát hiện của PR (trong phạm vi gate xét) mà công cụ chấm thấp hơn, ví dụ bandit chấm LOW nhưng Agent xác nhận là SSRF; chỉ cần một kết luận như vậy, không phụ thuộc thứ tự các kết luận |
+| `ai-assisted` | Phát hiện HIGH/CRITICAL được Agent kết luận `TP`/`NEEDS_REVIEW`, hoặc **chưa được Agent thẩm định**. Nếu có nhiều kết luận cho cùng một phát hiện, chỉ cần một kết luận khác `FP` là chặn. Kết luận `FP` miễn chặn mức Critical chỉ khi PR có label `security-reviewed`. Ngoài ra chặn khi Agent kết luận `TP` mức HIGH/CRITICAL với độ tin cậy ≥ 0.7, dù là lỗi Agent tự tìm thêm hay một phát hiện của PR (trong phạm vi gate xét) mà công cụ chấm thấp hơn, ví dụ bandit chấm LOW nhưng Agent xác nhận là SSRF; chỉ cần một kết luận như vậy, không phụ thuộc thứ tự các kết luận |
 
 **Fail-safe:**
 - Agent lỗi (mã thoát 2, thiếu hoặc hỏng `report.json`) → gate quay về `traditional`.
 - File SARIF hỏng → chặn.
-- Một job quét hoặc build-test không thành công → chặn.
+- Một job quét, `dast` hoặc build-test không thành công → chặn. Thiếu SARIF của DAST không bao giờ được hiểu là "không có phát hiện".
 
 Bảng tóm tắt gate ghi vào job summary của Actions. Bảng này **không in nội dung `message`** của SARIF, vì message của Gitleaks có thể chứa secret.
 
@@ -114,19 +120,21 @@ Bảng tóm tắt gate ghi vào job summary của Actions. Bảng này **không 
 
 ## Main CI/CD (`main-ci.yml`)
 
-Lần chạy đầu tiên trên `main`, ngay sau khi merge PR #3 (run 42360734824, thành công; lần chạy thử trước đó trên nhánh là 42357471271):
+Lượt chạy sau khi merge PR #82 (run 45120873223, thành công):
 
 | Job | Giây | Kết quả |
 |---|---|---|
-| build-test | 40 | ✅ |
-| full-scan (7 công cụ, upload SARIF theo category `main-*`) | 137 | ✅ (chỉ báo cáo, không chặn) |
-| image (build → Trivy chặn nếu có CRITICAL đã có bản sửa → SBOM → push GHCR) | 48 | ✅ không có CRITICAL có bản sửa; SBOM khoảng 45 KB; push `ghcr.io/tuannguyen811/medicare-hms` với tag `sha` và `latest` |
-| staging (compose up → smoke test → seed → down -v) | 36 | ✅ |
+| build-test | 42 | ✅ |
+| full-scan (7 công cụ, upload SARIF theo category `main-*`) | 110 | ✅ (chỉ báo cáo, không chặn) |
+| image (build → Trivy chặn nếu có CRITICAL đã có bản sửa → SBOM → push GHCR → cosign ký keyless và gắn SBOM attestation) | 71 | ✅ push `ghcr.io/tuannguyen811/medicare-hms` với tag `sha` và `latest`; chữ ký và attestation ghi vào Rekor. Job cần thêm quyền `packages: write`, `id-token: write` |
+| staging (compose up → smoke test → seed → down -v) | 35 | ✅ |
+
+Mọi lần chạy `main-ci` đều ký image, nhưng chứng chỉ ghi rõ workflow và nhánh, và `:latest` chỉ được đẩy khi chạy trên `main`. `deploy/pull-deploy.sh` và Kyverno chỉ nhận danh tính `main-ci.yml@refs/heads/main`, nên image do nhánh khác ký vẫn bị từ chối (spec mục 6).
 
 ## Các trường hợp thực tế (dữ liệu cho báo cáo)
 
 1. **Gate truyền thống chặn PR vì báo nhầm.** PR #3 thêm hạ tầng mẫu `infra/terraform` và `infra/k8s`. Gate ở chế độ `traditional` chặn với **10 phát hiện Checkov mức HIGH**, và cả 10 đều là FP hoặc rủi ro chấp nhận được (xem [`baseline-scan.md`](baseline-scan.md)). Nguyên nhân: Checkov không có mức độ nếu không có API key, nên mọi check không đạt đều mang level `error`. Đây đúng là vấn đề "alert fatigue / FP chặn luồng phát triển" mà Agent cần giải quyết.
-2. **Gate chặn lỗ hổng thật** (PR #4, run 42361081208; PR đã đóng, nhánh đã xóa).
+2. **Gate chặn lỗ hổng thật** (PR #4, run 42361081208, chạy khi pipeline mới có các công cụ quét tĩnh, chưa có DAST và Agent; PR đã đóng, nhánh đã xóa).
    - **Kịch bản:** lập trình viên thêm tính năng "tìm bệnh nhân theo số điện thoại", trong đó ghép chuỗi tìm kiếm thẳng vào SQL: `text(f"SELECT id FROM patients WHERE phone LIKE '{term}%'")`. Đoạn này chỉ chạy khi chuỗi bắt đầu bằng `0`, nên **255 test, kể cả các test bảo mật có sẵn, vẫn pass**. Ví dụ khai thác: `0' OR 1=1 --`.
    - **Kết quả:** build-test xanh, gate ở chế độ `traditional` **CHẶN** với 3 phát hiện mức HIGH, cùng ở `app/medicare/patient/service.py:55`:
 
@@ -139,9 +147,10 @@ Lần chạy đầu tiên trên `main`, ngay sau khi merge PR #3 (run 4236073482
 
      Thời gian từ lúc mở PR đến khi gate có kết quả: **61 giây**.
    - **Nhận xét cho báo cáo:**
-     - Ba công cụ cùng chỉ một dòng. Khi chuyển sang chế độ `ai-assisted`, Agent sẽ gộp ba phát hiện này thành một kết luận (`finding_ids` có 3 id).
+     - Ba công cụ cùng chỉ một dòng. Ở chế độ `ai-assisted`, Agent gộp ba phát hiện này thành một cụm và đưa ra một kết luận (`finding_ids` có 3 id).
      - Bandit đánh giá thấp lỗi SQL injection rõ ràng này.
      - Rule tự viết không bắt được dạng có biến trung gian (`sql = f"..."; text(sql)`). Dạng đó được dùng trong benchmark để đo phần Agent bổ sung so với công cụ quét.
+3. **Pipeline đầy đủ có AI:** 5 PR trưng bày `[Demo 1]`–`[Demo 5]` (#20, #22–#25) và 35 PR benchmark (#47–#81) chạy toàn bộ pipeline ở chế độ `ai-assisted`. Kết quả và phân tích ở [`benchmark-results.md`](benchmark-results.md).
 
 ## Chạy công cụ quét trên máy
 

@@ -1,4 +1,4 @@
-# Monitoring for the local deployment (spec addendum 7.2): Prometheus, Alertmanager, Grafana in
+# Monitoring for the local deployment (spec 7.2): Prometheus, Alertmanager, Grafana in
 # namespace monitoring. Applied by deploy/pull-deploy.sh with: kubectl apply -k deploy/monitoring
 # Everything is reached through kubectl port-forward on 127.0.0.1 (deploy/README.md).
 # Config maps get a content hash suffix, so a config change rolls the pods.

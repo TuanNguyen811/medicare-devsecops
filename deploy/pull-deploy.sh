@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pull-based deploy of MediCare HMS to the local Kubernetes of Docker Desktop (spec addendum 6.4).
+# Pull-based deploy of MediCare HMS to the local Kubernetes of Docker Desktop (spec 6.4).
 #
 #   bash deploy/pull-deploy.sh [--digest sha256:<64 hex>] [--dast]
 #
