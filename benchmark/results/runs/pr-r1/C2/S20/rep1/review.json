@@ -1,0 +1,13 @@
+{
+  "commit_id": "cb4cc00b74a40ed049dad635efc474144b81aa86",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/billing/service.py",
+      "line": 151,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Cho phép đổi trạng thái hóa đơn PAID → UNPAID (quay ngược luồng)\nCWE-841 · vi phạm R-17\n\nchange_status chỉ kiểm tra status nằm trong InvoiceStatus và khác trạng thái hiện tại. Lễ tân có thể POST status=UNPAID lên hóa đơn đã PAID, vi phạm R-17 (không quay ngược). Sau đó có thể thêm dòng dịch vụ vào hóa đơn đã thu tiền, làm thay đổi tổng tiền sau khi thu và dễ gian lận/biển thủ.\n\n**Đề xuất sửa:** Trong service.change_status chỉ cho phép chuyển UNPAID → PAID (bảng chuyển trạng thái cho phép); từ chối mọi chuyển khác, kể cả PAID → UNPAID, bằng Conflict. Có thể bỏ tham số status tự do ở router và dùng endpoint /pay riêng."
+    }
+  ],
+  "body": "<!-- secagent-review:cb4cc00b74a40ed049dad635efc474144b81aa86 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

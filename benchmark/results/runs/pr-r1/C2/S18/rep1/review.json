@@ -1,0 +1,13 @@
+{
+  "commit_id": "9b7d84d155ba862e5329766d26e9075eed460964",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/appointment/service.py",
+      "line": 133,
+      "side": "RIGHT",
+      "body": "**secagent · TP · MEDIUM** — Race condition: đặt lịch trùng giờ do bỏ unique index và chỉ kiểm tra overlap ở tầng ứng dụng\nCWE-362 · vi phạm R-13\n\nPR bỏ unique index uq_doctor_slot_active, vốn là ràng buộc DB chống trùng giờ. Thay vào đó, book() chỉ SELECT _active_around rồi INSERT, không có khóa hay ràng buộc. Hai request đồng thời cho cùng bác sĩ và cùng giờ đều thấy không có xung đột và đều insert thành công. Điều này vi phạm R-13 (một bác sĩ không có hai lịch hẹn còn hiệu lực trùng giờ).\n\n**Đề xuất sửa:** Trong service.book(), khóa hàng bác sĩ bằng SELECT ... FOR UPDATE (db.get(User, doctor_id, with_for_update=True)) trước khi gọi _active_around, để các lần đặt lịch cho cùng bác sĩ được tuần tự hóa. Cách khác là thêm exclusion constraint của PostgreSQL (btree_gist) trên doctor_id và tstzrange(scheduled_at, scheduled_at + duration) với điều kiện status <> 'CANCELLED', trong migration 0004. Bắt lỗi vi phạm constraint và chuyển thành Conflict."
+    }
+  ],
+  "body": "<!-- secagent-review:9b7d84d155ba862e5329766d26e9075eed460964 -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

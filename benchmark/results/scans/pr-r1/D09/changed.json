@@ -1,0 +1,11 @@
+[
+  "app/medicare/department/models.py",
+  "app/medicare/department/router.py",
+  "app/medicare/department/service.py",
+  "app/medicare/main.py",
+  "app/medicare/templates/base.html",
+  "app/medicare/templates/department/edit.html",
+  "app/medicare/templates/department/list.html",
+  "app/migrations/versions/0004_department_description.py",
+  "app/tests/test_department.py"
+]

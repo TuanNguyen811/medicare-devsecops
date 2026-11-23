@@ -1,0 +1,222 @@
+diff --git a/app/medicare/prescription/models.py b/app/medicare/prescription/models.py
+index 37a1107..7dc3f57 100644
+--- a/app/medicare/prescription/models.py
++++ b/app/medicare/prescription/models.py
+@@ -20,6 +20,7 @@ class Medicine(Base):
+     unit: Mapped[str] = mapped_column(String(20))
+     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 0))
+     is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
++    discontinued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+ 
+ 
+ class Prescription(Base):
+diff --git a/app/medicare/prescription/router.py b/app/medicare/prescription/router.py
+index 8090af7..c37afd6 100644
+--- a/app/medicare/prescription/router.py
++++ b/app/medicare/prescription/router.py
+@@ -150,3 +150,29 @@ def add_medicine(
+     db.commit()
+     flash(request, "Đã thêm thuốc vào danh mục")
+     return RedirectResponse("/admin/medicines", status_code=303)
++
++
++@router.post("/admin/medicines/{medicine_id}/discontinue", dependencies=[Depends(verify_csrf)])
++def discontinue_medicine(
++    request: Request,
++    medicine_id: ObjectId,
++    user: User = Depends(admin_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    medicine = service.set_medicine_active(db, medicine_id, False)
++    db.commit()
++    flash(request, f"Đã ngừng sử dụng thuốc {medicine.code}")
++    return RedirectResponse("/admin/medicines", status_code=303)
++
++
++@router.post("/admin/medicines/{medicine_id}/reactivate", dependencies=[Depends(verify_csrf)])
++def reactivate_medicine(
++    request: Request,
++    medicine_id: ObjectId,
++    user: User = Depends(admin_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    medicine = service.set_medicine_active(db, medicine_id, True)
++    db.commit()
++    flash(request, f"Đã sử dụng lại thuốc {medicine.code}")
++    return RedirectResponse("/admin/medicines", status_code=303)
+diff --git a/app/medicare/prescription/service.py b/app/medicare/prescription/service.py
+index 9037824..02331cc 100644
+--- a/app/medicare/prescription/service.py
++++ b/app/medicare/prescription/service.py
+@@ -1,3 +1,4 @@
++from datetime import UTC, datetime
+ from decimal import Decimal
+ 
+ from sqlalchemy import select
+@@ -111,3 +112,20 @@ def add_medicine(db: Session, code: str, name: str, unit: str, unit_price: str)
+     db.add(medicine)
+     db.flush()
+     return medicine
++
++
++def set_medicine_active(db: Session, medicine_id: int, active: bool) -> Medicine:
++    """Discontinue or reactivate a catalogue entry.
++
++    Discontinued medicines are no longer offered for new prescriptions; prescriptions
++    that already reference them are left untouched.
++    """
++    medicine = db.get(Medicine, medicine_id)
++    if medicine is None:
++        raise NotFound
++    if medicine.is_active == active:
++        return medicine
++    medicine.is_active = active
++    medicine.discontinued_at = None if active else datetime.now(UTC)
++    db.flush()
++    return medicine
+diff --git a/app/medicare/templates/prescription/detail.html b/app/medicare/templates/prescription/detail.html
+index 41cacb0..125acee 100644
+--- a/app/medicare/templates/prescription/detail.html
++++ b/app/medicare/templates/prescription/detail.html
+@@ -14,7 +14,7 @@
+         {% for item in prescription.items %}
+         <tr>
+           <td>{{ loop.index }}</td>
+-          <td>{{ item.medicine.name }}</td>
++          <td>{{ item.medicine.name }}{% if not item.medicine.is_active %} <span class="badge text-bg-secondary">Ngừng sử dụng</span>{% endif %}</td>
+           <td>{{ item.dosage }}</td>
+           <td class="text-end">{{ item.quantity }} {{ item.medicine.unit }}</td>
+           <td class="text-end">{{ item.medicine.unit_price | vnd }}</td>
+diff --git a/app/medicare/templates/prescription/medicines.html b/app/medicare/templates/prescription/medicines.html
+index 7d384e6..358b561 100644
+--- a/app/medicare/templates/prescription/medicines.html
++++ b/app/medicare/templates/prescription/medicines.html
+@@ -23,7 +23,7 @@
+ <div class="card mc-card">
+   <div class="table-responsive">
+     <table class="table table-sm table-hover align-middle mb-0">
+-      <thead><tr><th>Mã</th><th>Tên thuốc</th><th>Đơn vị</th><th class="text-end">Đơn giá</th><th>Trạng thái</th></tr></thead>
++      <thead><tr><th>Mã</th><th>Tên thuốc</th><th>Đơn vị</th><th class="text-end">Đơn giá</th><th>Trạng thái</th><th></th></tr></thead>
+       <tbody>
+         {% for m in medicines %}
+         <tr>
+@@ -31,10 +31,23 @@
+           <td>{{ m.name }}</td>
+           <td>{{ m.unit }}</td>
+           <td class="text-end">{{ m.unit_price | vnd }}</td>
+-          <td>{% if m.is_active %}<span class="badge text-bg-success">Đang dùng</span>{% else %}<span class="badge text-bg-secondary">Ngừng</span>{% endif %}</td>
++          <td>
++            {% if m.is_active %}<span class="badge text-bg-success">Đang dùng</span>
++            {% else %}<span class="badge text-bg-secondary">Ngừng</span>{% if m.discontinued_at %} <span class="small text-secondary">từ {{ m.discontinued_at | datetime_vn }}</span>{% endif %}{% endif %}
++          </td>
++          <td class="text-end">
++            <form method="post" action="/admin/medicines/{{ m.id }}/{{ 'discontinue' if m.is_active else 'reactivate' }}">
++              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++              {% if m.is_active %}
++              <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-pause-circle"></i> Ngừng sử dụng</button>
++              {% else %}
++              <button class="btn btn-outline-success btn-sm" type="submit"><i class="bi bi-arrow-counterclockwise"></i> Dùng lại</button>
++              {% endif %}
++            </form>
++          </td>
+         </tr>
+         {% else %}
+-        <tr><td colspan="5" class="text-center text-secondary py-3">Chưa có thuốc</td></tr>
++        <tr><td colspan="6" class="text-center text-secondary py-3">Chưa có thuốc</td></tr>
+         {% endfor %}
+       </tbody>
+     </table>
+diff --git a/app/migrations/versions/0004_medicine_discontinued_at.py b/app/migrations/versions/0004_medicine_discontinued_at.py
+new file mode 100644
+index 0000000..a0e716a
+--- /dev/null
++++ b/app/migrations/versions/0004_medicine_discontinued_at.py
+@@ -0,0 +1,23 @@
++"""medicines.discontinued_at records when a medicine was taken off the catalogue
++
++Revision ID: 0004
++Revises: 0003
++"""
++import sqlalchemy as sa
++from alembic import op
++
++revision = '0004'
++down_revision = '0003'
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.add_column(
++        'medicines',
++        sa.Column('discontinued_at', sa.DateTime(timezone=True), nullable=True),
++    )
++
++
++def downgrade() -> None:
++    op.drop_column('medicines', 'discontinued_at')
+diff --git a/app/tests/test_prescription.py b/app/tests/test_prescription.py
+index 6d6c421..a625e59 100644
+--- a/app/tests/test_prescription.py
++++ b/app/tests/test_prescription.py
+@@ -162,3 +162,60 @@ def test_record_page_offers_prescribing_to_attending_only(client, db):
+     client.cookies.clear()
+     login(client, make_user(db, Role.NURSE, department=dept))
+     assert f"/records/{record.id}/prescriptions/new" not in client.get(f"/records/{record.id}").text
++
++
++def set_active(client, med, action):
++    data = {"csrf_token": csrf_token(client, "/admin/medicines")}
++    return client.post(f"/admin/medicines/{med.id}/{action}", data=data, follow_redirects=False)
++
++
++def test_admin_discontinues_and_reactivates_medicine(client, db):
++    med = make_medicine(db)
++    login(client, make_user(db, Role.ADMIN))
++    assert set_active(client, med, "discontinue").status_code == 303
++    db.refresh(med)
++    assert not med.is_active and med.discontinued_at is not None
++    assert "Dùng lại" in client.get("/admin/medicines").text
++    assert set_active(client, med, "reactivate").status_code == 303
++    db.refresh(med)
++    assert med.is_active and med.discontinued_at is None
++
++
++def test_discontinued_medicine_not_offered_for_new_prescription(client, db):
++    _, doc, _, record = ward(db)
++    kept, dropped = make_medicine(db), make_medicine(db)
++    login(client, make_user(db, Role.ADMIN))
++    set_active(client, dropped, "discontinue")
++    client.cookies.clear()
++    login(client, doc)
++    html = client.get(f"/records/{record.id}/prescriptions/new").text
++    assert kept.name in html and dropped.name not in html
++    assert prescribe(client, record, [(dropped.id, 1, "Sáng")]).status_code == 400
++
++
++def test_existing_prescription_keeps_discontinued_medicine(client, db):
++    _, doc, _, record = ward(db)
++    med = make_medicine(db)
++    p = make_prescription(db, record, doc, [(med, 2)])
++    login(client, make_user(db, Role.ADMIN))
++    set_active(client, med, "discontinue")
++    client.cookies.clear()
++    login(client, doc)
++    html = client.get(f"/prescriptions/{p.id}").text
++    assert med.name in html and "Ngừng sử dụng" in html
++
++
++def test_only_admin_changes_medicine_status(client, db):
++    med = make_medicine(db)
++    login(client, make_user(db, Role.DOCTOR))
++    data = {"csrf_token": csrf_token(client, "/")}
++    r = client.post(f"/admin/medicines/{med.id}/discontinue", data=data)
++    assert r.status_code == 403
++    db.refresh(med)
++    assert med.is_active
++
++
++def test_discontinue_unknown_medicine_is_404(client, db):
++    login(client, make_user(db, Role.ADMIN))
++    data = {"csrf_token": csrf_token(client, "/admin/medicines")}
++    assert client.post("/admin/medicines/999999/discontinue", data=data).status_code == 404

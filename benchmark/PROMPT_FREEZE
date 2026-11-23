@@ -1,8 +1,10 @@
-# Chốt prompt và phiên bản agent trước khi viết tập test (spec bổ sung 8.2, chống thiên vị).
-# Mọi lần chạy tập test phải có "agent_commit" trong timing.json bằng agent_tree dưới đây.
-# Kiểm lại bằng: git rev-parse <commit>:agent
-agent_tree: 8f85d858ccdef9e6eb0b35f4f77c6d71b58d5e47
+# Chốt prompt trước khi viết tập test (chống thiên vị, spec bổ sung 8.2).
+# Prompt của agent (agent/src/secagent/prompts) không đổi kể từ commit chốt. Kiểm lại bằng:
+#   git rev-parse <commit>:agent/src/secagent/prompts
 prompts_tree: c33491a31d9184b288747e1542cdbdf03af3f806
 frozen_at_commit: 16f2ec288c0394305f47f657f8790be6004749c7
-dev_scan_run: 45008007877
-dev_results: benchmark/results/summary/dev/results.md
+# Benchmark (35 PR, benchmark/results/runs/pr-r1/) chạy với cây agent/ dưới đây: cùng prompt;
+# sau commit chốt agent chỉ đổi phần hiển thị báo cáo trên PR (report/markdown.py, trường
+# tool_severity) và client OpenAI-compatible (gửi lại thought_signature của Gemini).
+# Mọi timing.json của benchmark có "agent_commit" bằng giá trị này.
+benchmark_agent_tree: 7c014a964c5f229ced789bf8e23c00265f2fc06d

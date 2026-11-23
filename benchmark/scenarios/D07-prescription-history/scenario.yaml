@@ -1,0 +1,9 @@
+id: D07
+title: Lịch sử đơn thuốc của bệnh nhân
+split: test
+kind: decoy
+commit_message: Thêm trang lịch sử đơn thuốc của bệnh nhân, mới nhất trước, có phân trang
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được trên PR benchmark (đo, không đoán)
+  scan: pr-r1
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

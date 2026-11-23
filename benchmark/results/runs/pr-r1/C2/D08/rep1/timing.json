@@ -1,0 +1,17 @@
+{
+  "config": "C2",
+  "scenario": "D08",
+  "rep": 1,
+  "scan": "pr-r1",
+  "pr": 79,
+  "run": 45050064573,
+  "base": "5bc0eb1691618105a7bf4dd454db6f0d0214b3ff",
+  "head": "d47731e4e3584dc2ab0de3df419edaa56a5342fd",
+  "agent_commit": "7c014a964c5f229ced789bf8e23c00265f2fc06d",
+  "agent_dirty": false,
+  "exit": 0,
+  "wall_s": 59.12,
+  "late": false,
+  "attempt": 0,
+  "finished_at": "2026-11-22T17:40:26+00:00"
+}

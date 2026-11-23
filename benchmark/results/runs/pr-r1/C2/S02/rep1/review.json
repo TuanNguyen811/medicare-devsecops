@@ -1,0 +1,19 @@
+{
+  "commit_id": "71ec2a7033ae9fab56237b6d9d7d107950752673",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 30,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — py/path-injection (codeql)\nCWE-22 · vi phạm R-14\n\nTham số query `letterhead` do người dùng kiểm soát được nối trực tiếp vào `LETTERHEAD_DIR / name` rồi đọc bằng `read_text`, không có allowlist. Nội dung file đọc được sẽ được chèn vào phản hồi (header của bệnh án), nên có thể đọc file tuỳ ý (`../../...`, hoặc đường dẫn tuyệt đối) có đuôi bất kỳ. Vi phạm R-14.\n\n**Đề xuất sửa:** Trong `read_letterhead` (export.py), chỉ chấp nhận `name` nếu nằm trong allowlist `letterheads()` (so sánh chính xác với tên file liệt kê); nếu không thì dùng DEFAULT_LETTERHEAD. Không nối đường dẫn từ input thô; có thể kiểm tra thêm resolve() nằm trong LETTERHEAD_DIR."
+    },
+    {
+      "path": "app/medicare/record/export.py",
+      "line": 38,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — IDOR: export_record không kiểm tra policy.can_view_record\nCWE-639 · vi phạm R-01\n\n`get_record_for_export` chỉ gọi `db.get(MedicalRecord, record_id)` rồi trả bệnh án; route chỉ yêu cầu vai trò DOCTOR/NURSE/PATIENT mà không gọi `policy.can_view_record(user, patient)`. Bất kỳ bác sĩ/y tá khoa khác hoặc bệnh nhân khác đều tải được bệnh án của người khác (chẩn đoán, ghi chú). Vi phạm R-01, R-02, R-15 (nên trả 404 thống nhất). Test `test_patient_exports_own_record` chỉ kiểm tra trường hợp hợp lệ. Ngoài ra audit log được ghi trước khi kiểm tra quyền.\n\n**Đề xuất sửa:** Trong `get_record_for_export` dùng lại `service.get_record_for(db, user, record_id, ip)` hoặc gọi `policy.can_view_record(user, record.patient)` và raise NotFound (404 giống hệt bản ghi không tồn tại) khi không được phép, trước khi ghi audit/trả dữ liệu. Thêm test cho bệnh nhân/bác sĩ/y tá khác khoa."
+    }
+  ],
+  "body": "<!-- secagent-review:71ec2a7033ae9fab56237b6d9d7d107950752673 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

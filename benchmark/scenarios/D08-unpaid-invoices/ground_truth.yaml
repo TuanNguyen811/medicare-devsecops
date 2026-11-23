@@ -1,0 +1,7 @@
+# PR tính năng thông thường, không có mồi nhử. Trang chỉ đọc (GET), chỉ lễ tân và ADMIN
+# (require_roles), đúng phạm vi xem hóa đơn trong ma trận phân quyền. Ngày lọc qua
+# date.fromisoformat, ngày biên hoặc sai định dạng rơi về mặc định, khoảng ngược được đảo lại;
+# lọc và tính tổng bằng biểu thức SQLAlchemy có tham số, số dòng hiển thị có giới hạn. Chỉ hiện mã
+# và họ tên bệnh nhân cùng số tiền, không có CCCD/BHYT hay nội dung lâm sàng (R-11, R-12);
+# template autoescape. Không có lỗ hổng.
+findings: []

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-640",
+              "name": "secagent/CWE-640",
+              "shortDescription": {
+                "text": "Token đặt lại mật khẩu không hết hạn sau 15 phút và không dùng một lần"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-640"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "secagent/CWE-204",
+              "name": "secagent/CWE-204",
+              "shortDescription": {
+                "text": "Liệt kê tài khoản qua phản hồi /forgot-password khác nhau"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-204"
+                ],
+                "security-severity": "5.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-640",
+          "level": "error",
+          "message": {
+            "text": "Token đặt lại mật khẩu không hết hạn sau 15 phút và không dùng một lần: RESET_TOKEN_TTL được khai báo nhưng user_for_token không so sánh created_at với TTL; reset_password không xóa/đánh dấu token đã dùng. Token vì vậy có hiệu lực vô thời hạn và dùng được nhiều lần, vi phạm R-18."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/auth/reset.py"
+                },
+                "region": {
+                  "startLine": 47
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-204",
+          "level": "warning",
+          "message": {
+            "text": "Liệt kê tài khoản qua phản hồi /forgot-password khác nhau: Khi email không tồn tại, server trả lỗi \"Không tìm thấy tài khoản nào đăng ký với email này\"; khi tồn tại thì chuyển hướng 303 kèm flash. R-18 và R-07 yêu cầu phản hồi giống hệt. Không có rate limit nên có thể dò email hàng loạt của nhân viên/bệnh nhân."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/auth/router.py"
+                },
+                "region": {
+                  "startLine": 122
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        }
+      ]
+    }
+  ]
+}

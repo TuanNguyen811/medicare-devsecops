@@ -3,3 +3,7 @@ title: Lịch khám theo ngày
 split: test
 kind: decoy
 commit_message: Thêm trang lịch khám theo ngày có lọc theo trạng thái, bác sĩ và phân trang
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được trên PR benchmark (đo, không đoán)
+  scan: pr-r1
+  sast_sca: []
+  dast: []  # chỉ DAST bắt, SAST/SCA không bắt

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-639",
+              "name": "secagent/CWE-639",
+              "shortDescription": {
+                "text": "IDOR: can_reschedule_appointment không kiểm tra lịch hẹn thuộc về bệnh nhân"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-639"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-639",
+          "level": "error",
+          "message": {
+            "text": "IDOR: can_reschedule_appointment không kiểm tra lịch hẹn thuộc về bệnh nhân: Với vai trò PATIENT, hàm chỉ kiểm tra user.patient_id is not None và trạng thái REQUESTED, thiếu so sánh user.patient_id == appt.patient_id (như can_cancel_appointment). Bất kỳ bệnh nhân nào cũng đổi được lịch REQUESTED của người khác qua GET/POST /appointments/{id}/reschedule; trang reschedule.html còn lộ mã và tên bệnh nhân khác (appt.patient.code, full_name). Test chỉ kiểm tra \"self\" nên không phát hiện lỗi."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/policy.py"
+                },
+                "region": {
+                  "startLine": 119
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-636",
+              "name": "secagent/CWE-636",
+              "shortDescription": {
+                "text": "Fail-open trong get_current_user: shift không hợp lệ vô hiệu hóa kiểm tra session"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-636"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-636",
+          "level": "error",
+          "message": {
+            "text": "Fail-open trong get_current_user: shift không hợp lệ vô hiệu hóa kiểm tra session: `login` nhận `shift` từ form không validate và `start_session` lưu thẳng vào session. `_max_age` dùng `SHIFT_MAX_AGE[...]` nên giá trị lạ (ví dụ \"x\") gây KeyError. Lỗi này nằm trong `_session_user`, bị `except Exception` trong `get_current_user` bắt, và nhánh fallback lấy user từ session mà không kiểm tra hạn tuyệt đối (iat), `session_version` hay `is_active`. Kết quả: session không bao giờ hết hạn, không bị thu hồi (revoke_sessions, đổi mật khẩu, khóa tài khoản đều vô hiệu), và người dùng bị khóa vẫn truy cập được."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/common/auth.py"
+                },
+                "region": {
+                  "startLine": 88
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

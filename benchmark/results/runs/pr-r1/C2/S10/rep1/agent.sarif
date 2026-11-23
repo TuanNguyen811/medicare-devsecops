@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-732",
+              "name": "secagent/CWE-732",
+              "shortDescription": {
+                "text": "Bucket policy backups cho phép Principal \"*\" đọc/liệt kê dump DB"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-732"
+                ],
+                "security-severity": "9.5"
+              }
+            },
+            {
+              "id": "secagent/CWE-1104",
+              "name": "secagent/CWE-1104",
+              "shortDescription": {
+                "text": "Image CronJob backup dùng digest giả toàn số 0 và imagePullPolicy Always"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-1104"
+                ],
+                "security-severity": "3.0"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-732",
+          "level": "error",
+          "message": {
+            "text": "Bucket policy backups cho phép Principal \"*\" đọc/liệt kê dump DB: Statement RestoreDownload (Allow mặc định) cấp s3:GetObject và s3:ListBucket cho mọi principal (type \"*\", \"*\") trên bucket backups. Kết hợp với public access block đã tắt, bất kỳ ai không cần xác thực đều tải được bản dump PostgreSQL chứa dữ liệu bệnh nhân. Statement Deny chỉ ép HTTPS, không giới hạn người dùng."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "infra/terraform/main.tf"
+                },
+                "region": {
+                  "startLine": 371
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "9.5",
+            "verdict": "TP",
+            "confidence": 0.95
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-1104",
+          "level": "note",
+          "message": {
+            "text": "Image CronJob backup dùng digest giả toàn số 0 và imagePullPolicy Always: Digest placeholder toàn 0 không phải image thật được xác minh; job có quyền AWS và kết nối DB nên cần pin image đã ký. Ngoài ra bucket \"medicare-staging-db-backups\" bị hard-code, không theo môi trường."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "infra/k8s/backup-cronjob.yaml"
+                },
+                "region": {
+                  "startLine": 33
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "3.0",
+            "verdict": "TP",
+            "confidence": 0.5
+          }
+        }
+      ]
+    }
+  ]
+}

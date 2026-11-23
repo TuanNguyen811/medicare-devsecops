@@ -1,0 +1,290 @@
+{
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "provider": "claude-mcp",
+    "strategy": "agent",
+    "started_at": "2026-11-22T16:51:03+00:00",
+    "duration_s": 42.99,
+    "llm_calls": 19,
+    "tool_calls": 18,
+    "tokens_in": 109336,
+    "tokens_out": 6531,
+    "cost_usd": 0.147865,
+    "step_limit": 40,
+    "limit_hit": false,
+    "uncovered_before_check": 0,
+    "error": null
+  },
+  "findings": [
+    {
+      "finding_id": "agent:1",
+      "finding_ids": [],
+      "source": "agent",
+      "title": "claim_patient cho phép bác sĩ bất kỳ tự nhận phụ trách bệnh nhân của khoa khác (bỏ qua policy)",
+      "verdict": "TP",
+      "confidence": 0.9,
+      "severity": "HIGH",
+      "tool_severity": null,
+      "cwe": "CWE-639",
+      "owasp": "A01",
+      "violated_rule": "R-02",
+      "reasoning": "service.claim_patient chỉ kiểm tra bệnh nhân tồn tại rồi gán attending_doctor_id = doctor.id, không qua hàm policy.can_*. Mọi bác sĩ có thể nhận bất kỳ bệnh nhân nào (khác khoa, hoặc đang do bác sĩ khác phụ trách). Vì can_write_record/can_prescribe/can_view_record dựa trên attending, bác sĩ tự cấp cho mình quyền xem, ghi bệnh án và kê đơn (R-02, R-03, R-12). Việc đổi bác sĩ phụ trách cũng không được ghi audit log.",
+      "evidence": [
+        {
+          "file": "app/medicare/patient/service.py",
+          "start_line": 127,
+          "end_line": 138,
+          "snippet": "    patient = db.get(Patient, patient_id)\n    if patient is None:\n        raise NotFound\n    if patient.attending_doctor_id == doctor.id:\n        raise PatientDataError(\"Bạn đang là bác sĩ phụ trách bệnh nhân này\")\n    patient.attending_doctor_id = doctor.id"
+        }
+      ],
+      "exploit_scenario": "Bác sĩ khoa Nhi gửi POST /patients/<id>/claim với id bệnh nhân khoa khác (id tuần tự, dễ đoán). Bệnh nhân trở thành bệnh nhân do mình phụ trách, rồi bác sĩ đọc bệnh án, ghi bệnh án và kê đơn thuốc cho bệnh nhân ngoài phạm vi.",
+      "fix": {
+        "description": "Thêm hàm policy.can_claim_patient(user, patient) trong app/medicare/policy.py (ghi rõ R-02/R-03), chỉ cho DOCTOR cùng khoa (_same_department) và theo luồng bàn giao được duyệt. Gọi hàm này trong service.claim_patient và dùng cho cờ can_claim trong _detail_ctx thay cho biểu thức tự viết. Nếu không đủ quyền thì raise NotFound để trả 404 giống bệnh nhân không tồn tại (R-15). Ghi audit log cho việc đổi bác sĩ phụ trách."
+      },
+      "file": "app/medicare/patient/service.py",
+      "line": 127
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Ứng dụng không có middleware đặt header bảo mật (tìm không thấy X-Frame-Options/frame-ancestors), nên dễ bị clickjacking.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm middleware trong app/medicare/main.py đặt X-Frame-Options: DENY hoặc CSP frame-ancestors 'none' cho mọi response."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10020:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10020 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-1021",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Trang /login thiếu header chống clickjacking; không có middleware nào đặt header này.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Dùng chung middleware security headers trong app/medicare/main.py (X-Frame-Options DENY / frame-ancestors 'none')."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /appointments:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có Content-Security-Policy nào được đặt trong ứng dụng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm Content-Security-Policy chặt (default-src 'self', frame-ancestors 'none') trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:POST /appointments",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong ứng dụng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware chung trong app/medicare/main.py."
+      },
+      "file": "dast:POST /patients",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/claim:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/claim:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong ứng dụng, áp dụng cả route claim mới.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware chung trong app/medicare/main.py."
+      },
+      "file": "dast:POST /patients/{patient_id}/claim",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "MEDIUM",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có CSP trong ứng dụng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm CSP qua middleware chung trong app/medicare/main.py."
+      },
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Thiếu X-Content-Type-Options, không có middleware đặt header.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm X-Content-Type-Options: nosniff qua middleware chung trong app/medicare/main.py."
+      },
+      "file": "dast:GET /",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10021:dast:GET /health:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "source": "zap",
+      "title": "10021 (zap)",
+      "verdict": "TP",
+      "confidence": 0.7,
+      "severity": "LOW",
+      "tool_severity": "LOW",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "/health cũng không có X-Content-Type-Options; rủi ro thấp nhưng sửa chung bằng middleware.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Middleware security headers toàn cục trong app/medicare/main.py sẽ phủ cả /health."
+      },
+      "file": "dast:GET /health",
+      "line": 0
+    },
+    {
+      "finding_id": "zap:10038:dast:GET /login:0",
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "source": "zap",
+      "title": "10038 (zap)",
+      "verdict": "TP",
+      "confidence": 0.8,
+      "severity": "LOW",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-693",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "Không có middleware đặt X-Content-Type-Options trong ứng dụng.",
+      "evidence": [],
+      "exploit_scenario": "",
+      "fix": {
+        "description": "Thêm header X-Content-Type-Options: nosniff trong middleware security headers ở app/medicare/main.py."
+      },
+      "file": "dast:GET /login",
+      "line": 0
+    },
+    {
+      "finding_id": "codeql:py/url-redirection:app/medicare/patient/router.py:196",
+      "finding_ids": [
+        "codeql:py/url-redirection:app/medicare/patient/router.py:196"
+      ],
+      "source": "codeql",
+      "title": "py/url-redirection (codeql)",
+      "verdict": "FP",
+      "confidence": 0.95,
+      "severity": "LOW",
+      "tool_severity": "MEDIUM",
+      "cwe": "CWE-601",
+      "owasp": null,
+      "violated_rule": null,
+      "reasoning": "URL chuyển hướng là đường dẫn tương đối cố định '/patients/' cộng patient_id kiểu int (ObjectId = Annotated[int, Path(ge=1, le=INT4_MAX)]), nên không thể điều hướng sang host khác.",
+      "evidence": [
+        {
+          "file": "app/medicare/patient/router.py",
+          "start_line": 196,
+          "end_line": 196,
+          "snippet": "return RedirectResponse(f\"/patients/{patient_id}\", status_code=303)"
+        },
+        {
+          "file": "app/medicare/common/ids.py",
+          "start_line": 14,
+          "end_line": 14,
+          "snippet": "ObjectId = Annotated[int, Path(ge=1, le=INT4_MAX)]"
+        }
+      ],
+      "exploit_scenario": "",
+      "fix": null,
+      "file": "app/medicare/patient/router.py",
+      "line": 196
+    }
+  ]
+}

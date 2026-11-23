@@ -1,0 +1,375 @@
+diff --git a/app/medicare/department/models.py b/app/medicare/department/models.py
+index 63ea7de..74b9ab5 100644
+--- a/app/medicare/department/models.py
++++ b/app/medicare/department/models.py
+@@ -10,3 +10,4 @@ class Department(Base):
+     id: Mapped[int] = mapped_column(primary_key=True)
+     code: Mapped[str] = mapped_column(String(20), unique=True)
+     name: Mapped[str] = mapped_column(String(100))
++    description: Mapped[str | None] = mapped_column(String(500))
+diff --git a/app/medicare/department/router.py b/app/medicare/department/router.py
+new file mode 100644
+index 0000000..89ca666
+--- /dev/null
++++ b/app/medicare/department/router.py
+@@ -0,0 +1,101 @@
++from fastapi import APIRouter, Depends, Form, Request
++from fastapi.responses import RedirectResponse, Response
++from sqlalchemy.orm import Session
++
++from medicare.auth.models import Role, User
++from medicare.common.auth import require_roles
++from medicare.common.csrf import verify_csrf
++from medicare.common.errors import NotFound
++from medicare.common.ids import ObjectId
++from medicare.common.templating import flash, render
++from medicare.db import get_db
++from medicare.department import service
++from medicare.department.models import Department
++
++router = APIRouter()
++
++admin_user = require_roles(Role.ADMIN)
++_CRUMBS = [("Trang chủ", "/"), ("Khoa", "/admin/departments")]
++
++
++def _list_page(request: Request, db: Session, *, values=None, errors=None, status_code=200):
++    return render(request, "department/list.html", {
++        "departments": service.list_departments(db),
++        "values": values or {},
++        "errors": errors or [],
++        "breadcrumbs": [("Trang chủ", "/"), ("Khoa", None)],
++    }, status_code=status_code)
++
++
++def _get_department(db: Session, department_id: int) -> Department:
++    department = db.get(Department, department_id)
++    if department is None:
++        raise NotFound
++    return department
++
++
++@router.get("/admin/departments")
++def departments_page(
++    request: Request, user: User = Depends(admin_user), db: Session = Depends(get_db)
++) -> Response:
++    return _list_page(request, db)
++
++
++@router.post("/admin/departments", dependencies=[Depends(verify_csrf)])
++def create_department(
++    request: Request,
++    code: str = Form(""),
++    name: str = Form(""),
++    description: str = Form(""),
++    user: User = Depends(admin_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    try:
++        department = service.create(db, code, name, description)
++    except service.DepartmentError as exc:
++        values = {"code": code, "name": name, "description": description}
++        return _list_page(request, db, values=values, errors=[str(exc)], status_code=400)
++    db.commit()
++    flash(request, f"Đã thêm {department.name}")
++    return RedirectResponse("/admin/departments", status_code=303)
++
++
++def _edit_page(request, department, *, values=None, errors=None, status_code=200):
++    return render(request, "department/edit.html", {
++        "department": department,
++        "values": values or {"name": department.name,
++                             "description": department.description or ""},
++        "errors": errors or [],
++        "breadcrumbs": [*_CRUMBS, (department.code, None)],
++    }, status_code=status_code)
++
++
++@router.get("/admin/departments/{department_id}/edit")
++def edit_department_form(
++    request: Request,
++    department_id: ObjectId,
++    user: User = Depends(admin_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    return _edit_page(request, _get_department(db, department_id))
++
++
++@router.post("/admin/departments/{department_id}/edit", dependencies=[Depends(verify_csrf)])
++def edit_department(
++    request: Request,
++    department_id: ObjectId,
++    name: str = Form(""),
++    description: str = Form(""),
++    user: User = Depends(admin_user),
++    db: Session = Depends(get_db),
++) -> Response:
++    department = _get_department(db, department_id)
++    try:
++        service.update(db, department, name, description)
++    except service.DepartmentError as exc:
++        values = {"name": name, "description": description}
++        return _edit_page(request, department, values=values, errors=[str(exc)],
++                          status_code=400)
++    db.commit()
++    flash(request, f"Đã cập nhật {department.name}")
++    return RedirectResponse("/admin/departments", status_code=303)
+diff --git a/app/medicare/department/service.py b/app/medicare/department/service.py
+new file mode 100644
+index 0000000..0176cc2
+--- /dev/null
++++ b/app/medicare/department/service.py
+@@ -0,0 +1,52 @@
++import re
++
++from sqlalchemy import func, select
++from sqlalchemy.orm import Session
++
++from medicare.department.models import Department
++
++MAX_NAME = 100
++MAX_DESCRIPTION = 500
++_CODE = re.compile(r"[A-Z0-9_]{2,20}")
++
++
++class DepartmentError(ValueError):
++    """Invalid department data; the message is user-facing."""
++
++
++def list_departments(db: Session) -> list[Department]:
++    return list(db.scalars(select(Department).order_by(Department.name)))
++
++
++def _clean(db: Session, name: str, description: str, *, exclude_id: int | None = None):
++    name, description = name.strip(), description.strip()
++    if not 1 <= len(name) <= MAX_NAME:
++        raise DepartmentError(f"Tên khoa: bắt buộc, tối đa {MAX_NAME} ký tự")
++    if len(description) > MAX_DESCRIPTION:
++        raise DepartmentError(f"Mô tả: tối đa {MAX_DESCRIPTION} ký tự")
++    same_name = select(Department.id).where(func.lower(Department.name) == name.lower())
++    if exclude_id is not None:
++        same_name = same_name.where(Department.id != exclude_id)
++    if db.scalar(same_name) is not None:
++        raise DepartmentError("Tên khoa đã tồn tại")
++    return name, description or None
++
++
++def create(db: Session, code: str, name: str, description: str) -> Department:
++    code = code.strip().upper()
++    if not (_CODE.fullmatch(code) and code.isascii()):
++        raise DepartmentError("Mã khoa: 2-20 ký tự A-Z, 0-9 hoặc gạch dưới")
++    if db.scalar(select(Department.id).where(Department.code == code)) is not None:
++        raise DepartmentError("Mã khoa đã tồn tại")
++    name, description = _clean(db, name, description)
++    department = Department(code=code, name=name, description=description)
++    db.add(department)
++    db.flush()
++    return department
++
++
++def update(db: Session, department: Department, name: str, description: str) -> None:
++    department.name, department.description = _clean(
++        db, name, description, exclude_id=department.id
++    )
++    db.flush()
+diff --git a/app/medicare/main.py b/app/medicare/main.py
+index 5bbb0d2..067e1ae 100644
+--- a/app/medicare/main.py
++++ b/app/medicare/main.py
+@@ -15,6 +15,7 @@ from medicare.common.errors import CatchAllErrorsMiddleware, register_error_hand
+ from medicare.common.metrics import MetricsMiddleware, start_metrics_server
+ from medicare.config import Settings
+ from medicare.db import create_db
++from medicare.department.router import router as department_router
+ from medicare.patient.router import router as patient_router
+ from medicare.prescription.router import router as prescription_router
+ from medicare.record.router import router as record_router
+@@ -66,6 +67,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
+     app.include_router(prescription_router)
+     app.include_router(billing_router)
+     app.include_router(admin_router)
++    app.include_router(department_router)
+     app.include_router(audit_router)
+ 
+     @app.get("/health")
+diff --git a/app/medicare/templates/base.html b/app/medicare/templates/base.html
+index a678d05..a702d51 100644
+--- a/app/medicare/templates/base.html
++++ b/app/medicare/templates/base.html
+@@ -52,6 +52,7 @@
+         {% if role == "ADMIN" %}
+         <li class="mc-nav-heading">Quản trị</li>
+         <li class="nav-item"><a class="nav-link" href="/admin/users"><i class="bi bi-person-gear"></i> Tài khoản</a></li>
++        <li class="nav-item"><a class="nav-link" href="/admin/departments"><i class="bi bi-diagram-3"></i> Khoa</a></li>
+         <li class="nav-item"><a class="nav-link" href="/admin/medicines"><i class="bi bi-capsule"></i> Danh mục thuốc</a></li>
+         <li class="nav-item"><a class="nav-link" href="/admin/audit"><i class="bi bi-journal-text"></i> Nhật ký</a></li>
+         {% endif %}
+diff --git a/app/medicare/templates/department/edit.html b/app/medicare/templates/department/edit.html
+new file mode 100644
+index 0000000..826dea9
+--- /dev/null
++++ b/app/medicare/templates/department/edit.html
+@@ -0,0 +1,27 @@
++{% extends "base.html" %}
++{% block title %}Sửa khoa{% endblock %}
++{% block content %}
++<h1 class="h5 mb-3">Sửa thông tin khoa <span class="font-monospace text-secondary">{{ department.code }}</span></h1>
++{% if errors %}
++<div class="alert alert-danger py-2" role="alert">
++  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
++</div>
++{% endif %}
++<div class="card mc-card" style="max-width: 640px;">
++  <div class="card-body">
++    <form method="post" action="/admin/departments/{{ department.id }}/edit">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <div class="mb-3">
++        <label class="form-label" for="name">Tên khoa</label>
++        <input class="form-control" id="name" name="name" value="{{ values.name }}" maxlength="100" required>
++      </div>
++      <div class="mb-3">
++        <label class="form-label" for="description">Mô tả</label>
++        <textarea class="form-control" id="description" name="description" rows="4" maxlength="500">{{ values.description }}</textarea>
++      </div>
++      <button class="btn btn-primary" type="submit">Lưu</button>
++      <a class="btn btn-link" href="/admin/departments">Hủy</a>
++    </form>
++  </div>
++</div>
++{% endblock %}
+diff --git a/app/medicare/templates/department/list.html b/app/medicare/templates/department/list.html
+new file mode 100644
+index 0000000..2025331
+--- /dev/null
++++ b/app/medicare/templates/department/list.html
+@@ -0,0 +1,41 @@
++{% extends "base.html" %}
++{% block title %}Khoa{% endblock %}
++{% block content %}
++<h1 class="h5 mb-3">Danh mục khoa</h1>
++{% if errors %}
++<div class="alert alert-danger py-2" role="alert">
++  <ul class="mb-0 ps-3">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
++</div>
++{% endif %}
++<div class="card mc-card mb-3">
++  <div class="card-header">Thêm khoa</div>
++  <div class="card-body">
++    <form class="row g-2 align-items-end" method="post" action="/admin/departments">
++      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
++      <div class="col-md-2"><label class="form-label" for="code">Mã</label><input class="form-control form-control-sm" id="code" name="code" value="{{ values.code or '' }}" maxlength="20" required></div>
++      <div class="col-md-3"><label class="form-label" for="name">Tên khoa</label><input class="form-control form-control-sm" id="name" name="name" value="{{ values.name or '' }}" maxlength="100" required></div>
++      <div class="col-md-5"><label class="form-label" for="description">Mô tả</label><input class="form-control form-control-sm" id="description" name="description" value="{{ values.description or '' }}" maxlength="500"></div>
++      <div class="col-md-2"><button class="btn btn-primary btn-sm w-100" type="submit">Thêm</button></div>
++    </form>
++  </div>
++</div>
++<div class="card mc-card">
++  <div class="table-responsive">
++    <table class="table table-sm table-hover align-middle mb-0">
++      <thead><tr><th>Mã</th><th>Tên khoa</th><th>Mô tả</th><th class="text-end"></th></tr></thead>
++      <tbody>
++        {% for d in departments %}
++        <tr>
++          <td class="font-monospace">{{ d.code }}</td>
++          <td>{{ d.name }}</td>
++          <td class="text-secondary">{{ d.description or "" }}</td>
++          <td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/admin/departments/{{ d.id }}/edit"><i class="bi bi-pencil"></i> Sửa</a></td>
++        </tr>
++        {% else %}
++        <tr><td colspan="4" class="text-center text-secondary py-3">Chưa có khoa</td></tr>
++        {% endfor %}
++      </tbody>
++    </table>
++  </div>
++</div>
++{% endblock %}
+diff --git a/app/migrations/versions/0004_department_description.py b/app/migrations/versions/0004_department_description.py
+new file mode 100644
+index 0000000..f90eca1
+--- /dev/null
++++ b/app/migrations/versions/0004_department_description.py
+@@ -0,0 +1,20 @@
++"""departments.description shown on the department admin pages
++
++Revision ID: 0004
++Revises: 0003
++"""
++import sqlalchemy as sa
++from alembic import op
++
++revision = '0004'
++down_revision = '0003'
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.add_column('departments', sa.Column('description', sa.String(length=500), nullable=True))
++
++
++def downgrade() -> None:
++    op.drop_column('departments', 'description')
+diff --git a/app/tests/test_department.py b/app/tests/test_department.py
+new file mode 100644
+index 0000000..da77eca
+--- /dev/null
++++ b/app/tests/test_department.py
+@@ -0,0 +1,57 @@
++from sqlalchemy import select
++
++from medicare.auth.models import Role
++from medicare.department.models import Department
++from tests.conftest import csrf_token, login
++from tests.factories import make_department, make_user
++
++
++def post(client, path, **data):
++    data["csrf_token"] = csrf_token(client, "/admin/departments")
++    return client.post(path, data=data, follow_redirects=False)
++
++
++def test_admin_creates_department(client, db):
++    make_department(db, "NOI")
++    login(client, make_user(db, Role.ADMIN))
++    assert "Khoa NOI" in client.get("/admin/departments").text
++    r = post(client, "/admin/departments", code="mat", name="Khoa Mắt", description="Nhãn khoa")
++    assert r.status_code == 303
++    dept = db.scalar(select(Department).where(Department.code == "MAT"))
++    assert (dept.name, dept.description) == ("Khoa Mắt", "Nhãn khoa")
++    assert 'href="/admin/departments"' in client.get("/").text
++
++
++def test_create_rejects_invalid_or_duplicate(client, db):
++    make_department(db, "NOI")
++    login(client, make_user(db, Role.ADMIN))
++    assert post(client, "/admin/departments", code="NOI", name="Khoa khác").status_code == 400
++    assert post(client, "/admin/departments", code="NOI2", name="khoa noi").status_code == 400
++    assert post(client, "/admin/departments", code="X", name="Khoa X").status_code == 400
++    assert post(client, "/admin/departments", code="DAI", name="Khoa Dài",
++                description="x" * 501).status_code == 400
++
++
++def test_admin_edits_department(client, db):
++    make_department(db, "NOI")
++    dept = make_department(db, "NHI")
++    login(client, make_user(db, Role.ADMIN))
++    assert "Khoa NHI" in client.get(f"/admin/departments/{dept.id}/edit").text
++    r = post(client, f"/admin/departments/{dept.id}/edit", name="Khoa NOI")
++    assert r.status_code == 400 and "Tên khoa đã tồn tại" in r.text
++    r = post(client, f"/admin/departments/{dept.id}/edit", name="Khoa Nhi", description="Trẻ em")
++    assert r.status_code == 303
++    db.refresh(dept)
++    assert (dept.code, dept.name, dept.description) == ("NHI", "Khoa Nhi", "Trẻ em")
++    assert client.get("/admin/departments/999999/edit").status_code == 404
++
++
++def test_non_admin_cannot_manage_departments(client, db):
++    dept = make_department(db)
++    login(client, make_user(db, Role.DOCTOR, department=dept))
++    assert client.get("/admin/departments").status_code == 403
++    r = client.post(f"/admin/departments/{dept.id}/edit",
++                    data={"name": "Khoa mới", "csrf_token": csrf_token(client, "/")})
++    assert r.status_code == 403
++    db.refresh(dept)
++    assert dept.name == "Khoa NOI"

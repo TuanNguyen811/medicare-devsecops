@@ -1,0 +1,13 @@
+{
+  "commit_id": "ebb4e2cc6a17235cbd533516ce7cec2e6cec057e",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/prescription/service.py",
+      "line": 71,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — quick_prescribe cho phép y tá và bác sĩ không phụ trách kê đơn (bỏ qua policy.can_prescribe)\nCWE-862 · vi phạm R-03\n\nRoute mới dùng ward_staff (DOCTOR, NURSE) và service.quick_prescribe chỉ kiểm tra policy.can_view_record, không gọi policy.can_prescribe (chỉ bác sĩ phụ trách). Do đó y tá cùng khoa và bác sĩ cùng khoa không phụ trách đều tạo được đơn thuốc, vi phạm R-03. Luồng cũ qua get_record_for_prescribing có kiểm tra này nhưng bị bỏ qua.\n\n**Đề xuất sửa:** Trong service.quick_prescribe, dùng get_record_for_prescribing (hoặc policy.can_prescribe(user, patient)) thay cho can_view_record và trả NotFound nếu không đạt. Đổi route sang doctor_user thay vì ward_staff, và đặt can_quick_prescribe trong record/router.py bằng policy.can_prescribe(user, patient). Thêm test cho y tá và bác sĩ không phụ trách."
+    }
+  ],
+  "body": "<!-- secagent-review:ebb4e2cc6a17235cbd533516ce7cec2e6cec057e -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

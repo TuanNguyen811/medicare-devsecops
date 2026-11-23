@@ -1,0 +1,13 @@
+{
+  "commit_id": "e503967101ac8ae4ed64d2df8531883179b9fb7b",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/auth/schemas.py",
+      "line": 8,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — Mass assignment trong /account/profile cho phép tự nâng quyền (role, department_id, patient_id, is_active)\nCWE-915 · vi phạm R-16\n\nProfileForm dùng extra=\"allow\", nên mọi trường form thừa (role, department_id, patient_id, is_active, password_hash...) được giữ lại trong model_dump(). update_profile lặp qua toàn bộ dict và setattr lên User, nên người dùng bất kỳ có thể ghi đè các trường quản trị. Điều này vi phạm R-16 (chỉ cho phép full_name, phone).\n\n**Đề xuất sửa:** Trong schemas.py, đặt extra=\"forbid\" (hoặc \"ignore\") cho ProfileForm. Trong update_profile ở router.py, không lặp động qua model_dump. Chỉ gán tường minh user.full_name = form.full_name và user.phone = form.phone, hoặc dùng allowlist cố định {full_name, phone}. Nếu dùng forbid, hãy cho phép riêng csrf_token (khai báo trường này hoặc xử lý trước). Thêm test: gửi role/department_id/patient_id/is_active và xác nhận không đổi."
+    }
+  ],
+  "body": "<!-- secagent-review:e503967101ac8ae4ed64d2df8531883179b9fb7b -->\nAI Security Agent nêu 1 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

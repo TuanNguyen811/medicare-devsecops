@@ -1,0 +1,68 @@
+{
+  "C1": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "bandit:B404:app/medicare/patient/insurance_check.py:10",
+        "severity": "LOW"
+      },
+      {
+        "id": "bandit:B603:app/medicare/patient/insurance_check.py:57",
+        "severity": "LOW"
+      }
+    ]
+  },
+  "C1+DAST": {
+    "errors": [],
+    "findings": [
+      {
+        "id": "bandit:B404:app/medicare/patient/insurance_check.py:10",
+        "severity": "LOW"
+      },
+      {
+        "id": "bandit:B603:app/medicare/patient/insurance_check.py:57",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10020:dast:GET /:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10020:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10021:dast:GET /:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /health:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10021:dast:GET /login:0",
+        "severity": "LOW"
+      },
+      {
+        "id": "zap:10038:dast:GET /login:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /appointments:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients/{patient_id}/edit:0",
+        "severity": "MEDIUM"
+      },
+      {
+        "id": "zap:10038:dast:POST /patients/{patient_id}/insurance-check:0",
+        "severity": "MEDIUM"
+      }
+    ]
+  }
+}

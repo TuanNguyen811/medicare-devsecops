@@ -1,0 +1,14 @@
+{
+  "C1": {
+    "block": true,
+    "blocking": [
+      "codeql:py/path-injection:app/medicare/record/export.py:30"
+    ]
+  },
+  "C1+DAST": {
+    "block": true,
+    "blocking": [
+      "codeql:py/path-injection:app/medicare/record/export.py:30"
+    ]
+  }
+}

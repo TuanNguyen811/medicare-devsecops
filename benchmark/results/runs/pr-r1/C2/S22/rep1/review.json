@@ -1,0 +1,19 @@
+{
+  "commit_id": "d5e113cfc54eef4656614e4476e1706e5a2b2902",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/patient/router.py",
+      "line": 102,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — Export CSV mở cho DOCTOR/NURSE và lộ CCCD, BHYT không che\nCWE-639 · vi phạm R-11\n\nRoute /patients/export dùng staff_user (gồm DOCTOR, NURSE) trong khi ma trận phân quyền chỉ cho ADMIN và RECEPTIONIST xuất danh sách. Hơn nữa national_id và insurance_number được xuất thô, không che, vi phạm R-11 và R-19. Bác sĩ/y tá chỉ thấy CCCD bị che trên giao diện, nhưng qua CSV lấy được đầy đủ.\n\n**Đề xuất sửa:** Đổi dependency của export_patients sang editor_user (require_roles(*EDITORS) = RECEPTIONIST, ADMIN). Ngoài ra dùng cơ chế che định danh hiện có của R-11 (hàm _identifiers/mask) khi dựng rows để CCCD và BHYT chỉ đầy đủ với vai trò được phép."
+    },
+    {
+      "path": "app/medicare/common/csv_export.py",
+      "line": 15,
+      "side": "RIGHT",
+      "body": "**secagent · TP · MEDIUM** — Export CSV không trung hòa ô công thức (CSV injection)\nCWE-1236 · vi phạm R-19\n\ncsv_response ghi trực tiếp str(value) vào csv.writer mà không xử lý ô bắt đầu bằng =, +, -, @, tab hoặc xuống dòng. Các trường như full_name, address do lễ tân nhập có thể chứa công thức.\n\n**Đề xuất sửa:** Trong app/medicare/common/csv_export.py, thêm hàm trung hòa ô: nếu chuỗi bắt đầu bằng '=', '+', '-', '@', tab hoặc '\\r'/'\\n' thì thêm tiền tố dấu nháy đơn ('). Áp dụng cho mọi ô (kể cả header) trước khi writerow trong csv_response."
+    }
+  ],
+  "body": "<!-- secagent-review:d5e113cfc54eef4656614e4476e1706e5a2b2902 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

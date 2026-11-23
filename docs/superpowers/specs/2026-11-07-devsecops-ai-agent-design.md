@@ -74,9 +74,9 @@ medicare-devsecops/
 │   ├── k8s/                # manifest mẫu, CHỈ dùng để quét
 │   └── docker-compose.yml  # chạy thật: app + postgres
 ├── security/               # semgrep/ (rule tùy chỉnh), .gitleaks.toml, checkov.yaml
-├── benchmark/              # scenarios/, ground_truth.yaml, run.py, evaluate.py, results/
+├── benchmark/              # scenarios/ (patch, ground_truth.yaml, scenario.yaml), pr_bench.py, evaluate.py, results/
 ├── docs/                   # security-requirements.md, sơ đồ, tài liệu báo cáo
-├── .github/workflows/      # pr-security.yml, main-ci.yml, nightly-sca.yml, benchmark.yml
+├── .github/workflows/      # pr-security.yml, main-ci.yml, nightly-sca.yml
 └── .pre-commit-config.yaml
 ```
 
@@ -84,14 +84,14 @@ medicare-devsecops/
 
 - **Monorepo:** một PR có thể sửa cả `app/` lẫn `infra/`, giống thực tế, và demo đơn giản hơn.
 - **Terraform/K8s chỉ để quét:** có đối tượng thật cho IaC Scan mà không tốn chi phí cloud.
-- **Kịch bản benchmark lưu dưới dạng patch** áp lên một commit gốc đã cố định, thay vì để nhánh sống lâu, nên chạy lại được bất cứ lúc nào. Khi demo thì áp patch vào nhánh mới và mở PR thật.
+- **Kịch bản benchmark lưu dưới dạng patch** viết trên một commit gốc đã cố định, thay vì để nhánh sống lâu, nên chạy lại được bất cứ lúc nào. Mỗi kịch bản được áp vào một nhánh mới và mở thành PR thật vào `main`, đi qua đúng pipeline PR và quality gate.
 - **Agent chạy sau công cụ quét:** Agent thẩm định và bổ sung cho công cụ quét, không thay thế chúng.
 
 ### 1.4 Hosting và môi trường chạy
 
 | Môi trường | Chạy ở đâu | Chi phí |
 |---|---|---|
-| CI (PR, main, nightly, benchmark) | GitHub-hosted runner | Miễn phí (repo public) |
+| CI (PR, kể cả PR benchmark; main; nightly) | GitHub-hosted runner | Miễn phí (repo public) |
 | Staging | Tạm thời ngay trên runner: `docker compose up` → smoke test → dọn dẹp | Miễn phí |
 | Container registry | GHCR | Miễn phí (repo public) |
 | Demo và phát triển | Máy cá nhân: Docker Desktop + `docker compose` | Miễn phí |
@@ -144,7 +144,7 @@ Gồm ma trận phân quyền và các quy tắc R-xx, ví dụ:
 - **R-04:** Tỷ lệ BHYT chi trả được tính ở server theo mã thẻ, client không được gửi lên.
 - **R-05:** Mọi lần truy cập bệnh án đều phải được ghi audit log.
 
-Tài liệu này có 3 vai trò: (1) Agent đọc được qua công cụ, (2) làm đáp án cho các lỗi logic trong benchmark, (3) là biến số trong thí nghiệm ablation C4.
+Tài liệu này có 2 vai trò: (1) Agent đọc được qua công cụ, (2) làm đáp án cho các lỗi logic trong benchmark (quy tắc bị vi phạm).
 
 ---
 
@@ -198,7 +198,7 @@ build-test → full-scan (upload lên tab Security) → docker build → Trivy q
 
 Pipeline PR ≤ 5 phút (dự kiến 3,5–5 phút: các bước quét khoảng 1,5–2 phút, Agent khoảng 1,5–3 phút). Bật cache `uv`. Cache Trivy DB theo khóa **ngày** để làm mới mỗi ngày, còn job quét đêm luôn tải DB mới nhất. Thời gian thực tế được đo và đưa vào RQ3.
 
-**Nguyên tắc:** tối ưu cho demo không được thay đổi Agent. Benchmark chạy đúng cấu hình như CI, thời gian báo cáo đúng như đo được.
+**Nguyên tắc:** tối ưu cho demo không được thay đổi Agent. Benchmark chạy qua đúng pipeline PR, thời gian báo cáo đúng như đo được.
 
 ---
 
@@ -244,7 +244,7 @@ Agent dùng mô hình **review một lượt**: chỉ có một phiên Agent duy
 ### 4.4 Chế độ chạy và cấu hình
 
 - `--mode ci | cli | benchmark`. Chế độ `cli` hiển thị trực tiếp từng bước suy luận và từng lần gọi công cụ, dùng khi demo.
-- Cờ ablation: `--strategy single-shot` (không dùng công cụ), `--no-requirements`, `--no-ast-tools`, `--model <name>`.
+- Cờ tùy chọn: `--strategy single-shot` (không dùng công cụ đọc code), `--no-requirements`, `--no-ast-tools`, `--model <name>`.
 - Biến môi trường: `LLM_PROVIDER` (mặc định `anthropic`), `LLM_API_KEY` (không cần với `claude-mcp`), `LLM_MODEL`, `LLM_BASE_URL` (mặc định theo nhà cung cấp), `LLM_TEMPERATURE`.
 - `--thinking`: dùng chế độ suy luận của mô hình (chậm hơn, có thể chính xác hơn). Claude là extended thinking, OpenAI/Gemini là `reasoning_effort`.
 - `temperature = 0`. Thử lại với thời gian chờ tăng dần (3 lần), timeout cho mỗi lần gọi, ngân sách token cho mỗi lần chạy.
@@ -273,13 +273,12 @@ Agent dùng mô hình **review một lượt**: chỉ có một phiên Agent duy
 
 - **RQ1:** Agent có giảm FP mà không loại nhầm lỗi thật không?
 - **RQ2:** Agent phát hiện bổ sung được bao nhiêu lỗi mà công cụ quét bỏ sót?
-- **RQ3:** Chi phí vận hành (thời gian, token, USD mỗi PR)?
-- **RQ4 (ablation):** Function Calling, ngữ cảnh nghiệp vụ và công cụ AST mỗi thứ đóng góp bao nhiêu?
-- **Phụ:** độ ổn định qua 3 lần chạy; khả năng chống prompt injection.
+- **RQ3:** Chi phí vận hành (thời gian, token, USD quy đổi theo giá API mỗi PR)?
+- **Phụ:** khả năng chống prompt injection (S15).
 
 ### 5.2 Bộ dữ liệu
 
-**Khoảng 14 kịch bản có lỗ hổng** (khoảng 20–25 lỗi):
+Bộ dữ liệu hiện hành (35 kịch bản: tập test 30 PR gồm 20 PR có lỗ hổng và 10 PR không có lỗ hổng kể cả S00; tập dev 5 kịch bản) ở spec bổ sung `2026-11-21-ops-dast-benchmark-design.md` mục 8.2. Các kịch bản S01–S15:
 
 | Mã | Tính năng mới | Lỗi được cài | OWASP 2025 | Nhóm |
 |---|---|---|---|---|
@@ -299,38 +298,37 @@ Agent dùng mô hình **review một lượt**: chỉ có một phiên Agent duy
 | S14 | Kê đơn nhanh | Y tá kê được đơn (vi phạm R-03) | A01/A06 | logic |
 | S15 | Thử tấn công Agent | Comment chứa prompt injection, kèm một lỗi SQLi thật | — | độ vững |
 
-**Khoảng 4 kịch bản mồi nhử (code an toàn):** `text()` có bind parameter, tên cột lấy từ whitelist, `subprocess` truyền tham số dạng list, `|safe` sau khi làm sạch bằng `bleach`, `yaml.safe_load`.
+**Mồi nhử (code an toàn nhưng trông giống lỗi với công cụ quét):** ví dụ `text()` có bind parameter, tên cột lấy từ whitelist, `subprocess` truyền tham số dạng list, `|safe` sau khi làm sạch bằng `bleach`, `yaml.safe_load`. Ngoài mồi nhử còn có các PR tính năng sạch thông thường.
 
-**Bản sạch trên `main`:** mọi phát hiện đều là FP.
+**Bản gốc (S00, PR rỗng):** mọi phát hiện đều là FP hoặc vấn đề có sẵn.
 
-**Tùy chọn:** kiểm chứng bên ngoài trên OWASP PyGoat.
+**Hướng phát triển:** kiểm chứng bên ngoài trên OWASP PyGoat.
 
-**Chia dữ liệu:** khoảng 4 kịch bản làm tập **dev** (dùng để tinh chỉnh prompt), phần còn lại làm tập **test**, chỉ chạy sau khi prompt đã chốt. `ground_truth.yaml` được commit trước khi chạy tập test.
+**Chia dữ liệu:** 5 kịch bản làm tập **dev** (S01, S07, S10, S14, D01; dùng để tinh chỉnh prompt, báo cáo riêng), phần còn lại làm tập **test**, chỉ chạy sau khi prompt đã chốt. `ground_truth.yaml` của mỗi kịch bản test được commit trước khi kịch bản đó chạy.
 
 ### 5.3 Chấm điểm
 
-- Khớp đáp án (cùng file, dòng giao nhau ±3, cùng nhóm CWE): TP. Nhiều công cụ cùng báo một lỗi chỉ tính 1.
+- Khớp đáp án (cùng file, dòng giao nhau ±3, và cùng nhóm CWE, hoặc cùng rule của công cụ quét, hoặc cùng quy tắc nghiệp vụ R-xx bị vi phạm; chi tiết ở spec bổ sung mục 8.4): TP. Nhiều công cụ cùng báo một lỗi chỉ tính 1.
 - Không khớp: FP. Lỗi trong đáp án không ai báo: FN.
 - `NEEDS_REVIEW` được báo cáo theo 2 cách: chặt (tính là FP) và lỏng (bỏ qua).
 
 ### 5.4 Cấu hình so sánh
 
-C1 truyền thống · **C2 Agent đầy đủ** · C3 LLM gọi một lần · C4 không có tài liệu quy tắc · C5 không có công cụ AST. Bảng cấu hình hiện hành (model, số lần chạy) ở spec bổ sung `2026-11-21-ops-dast-benchmark-design.md` mục 8.3.
+C1 (chỉ công cụ quét, gate `traditional`) · C1+DAST (thêm ZAP) · **C2** (công cụ quét + DAST + Agent, gate `ai-assisted`). Mỗi PR chạy Agent một lần. Chi tiết (model, cách chạy) ở spec bổ sung `2026-11-21-ops-dast-benchmark-design.md` mục 8.3.
 
 ### 5.5 Chỉ số
 
-Precision, Recall, F1 (tách theo nhóm pattern/logic và theo OWASP) · tỷ lệ giảm FP · **tỷ lệ loại nhầm lỗi thật** · số lỗi phát hiện bổ sung · thời gian, token, USD mỗi PR · số cảnh báo người review phải đọc mỗi PR · độ lệch chuẩn F1 · **tỷ lệ chạm giới hạn bước** · **tỷ lệ phát hiện bị Agent bỏ sót kết luận** (trước khi kiểm tra độ phủ) · kết quả kịch bản prompt injection.
+Precision, Recall, F1 (tách theo nhóm pattern/logic và theo nhóm đo được) · tỷ lệ giảm FP · **tỷ lệ loại nhầm lỗi thật** · số lỗi phát hiện bổ sung · quyết định gate cấp PR (PR có lỗ hổng bị chặn, PR sạch được qua) và mức khớp với quyết định thật của pipeline · thời gian, token, USD quy đổi mỗi PR · số cảnh báo người review phải đọc mỗi PR · **tỷ lệ chạm giới hạn bước** · **tỷ lệ phát hiện bị Agent bỏ sót kết luận** (trước khi kiểm tra độ phủ) · kết quả kịch bản prompt injection.
 
 ### 5.6 Cách chạy và sản phẩm
 
-- `benchmark/run.py` chạy các công cụ quét qua Docker (cùng phiên bản với CI) và Agent ở chế độ `benchmark`.
-- `benchmark/evaluate.py` sinh `summary.csv`, các biểu đồ (matplotlib) và bảng Markdown.
-- Workflow `benchmark.yml` để chạy thủ công trên GitHub Actions.
-- Sản phẩm cho báo cáo: bảng tổng hợp, biểu đồ C1 với C2, biểu đồ ablation, heatmap theo OWASP, bảng chi phí, nghiên cứu tình huống điều tra IDOR.
+- `benchmark/pr_bench.py` mở mỗi kịch bản thành một PR thật vào `main`, gọi review của Agent (`claude-mcp`, qua `security/handoff/local_review.py`) và thu SARIF, quyết định của pipeline cùng đầu ra Agent.
+- `benchmark/evaluate.py` chấm và sinh bảng Markdown (`results.md`) cùng số liệu JSON.
+- Sản phẩm cho báo cáo (`docs/benchmark-results.md`): bảng tổng hợp C1, C1+DAST, C2, quyết định gate cấp PR, bảng chi phí, nghiên cứu tình huống.
 
 ### 5.7 Hạn chế
 
-Dữ liệu tự tạo có thể thiên vị (giảm thiểu bằng đăng ký đáp án trước, tách dev/test, kiểm chứng trên PyGoat) · mẫu nhỏ · LLM không ổn định và phiên bản mô hình thay đổi · có thể rò rỉ dữ liệu huấn luyện · gửi mã nguồn cho bên thứ ba (nhà cung cấp LLM), cần cân nhắc trong môi trường bệnh viện thật.
+Dữ liệu tự tạo có thể thiên vị (giảm thiểu bằng chốt prompt và đăng ký đáp án trước, tách dev/test; các đe dọa còn lại ở spec bổ sung mục 8.2) · mẫu nhỏ · mỗi PR chạy Agent một lần nên không đo độ dao động giữa các lần chạy · LLM không ổn định và phiên bản mô hình thay đổi · có thể rò rỉ dữ liệu huấn luyện · gửi mã nguồn cho bên thứ ba (nhà cung cấp LLM), cần cân nhắc trong môi trường bệnh viện thật.
 
 **Đánh đổi tốc độ và độ chính xác** (được đo, không giấu):
 
@@ -338,7 +336,7 @@ Dữ liệu tự tạo có thể thiên vị (giảm thiểu bằng đăng ký �
 |---|---|---|
 | Giới hạn số bước của Agent | Có thể cắt ngang khi chưa điều tra xong | Chạm giới hạn thì kết luận NEEDS_REVIEW. Đo tỷ lệ chạm giới hạn, chỉnh giới hạn trên tập dev |
 | Agent chỉ chủ động săn lỗi trong phần PR thay đổi | Bỏ sót lỗi có sẵn ở file không bị đụng tới | Giống cách review PR thực tế. Nhánh `main` vẫn quét toàn bộ bằng công cụ truyền thống. Rà soát toàn repo theo lịch là hướng phát triển |
-| Chế độ thường và chế độ suy luận của mô hình | Nhanh hơn nhưng có thể kém chính xác hơn | So sánh trực tiếp C2 với C2-thinking |
+| Chế độ thường và chế độ suy luận của mô hình | Nhanh hơn nhưng có thể kém chính xác hơn | Benchmark dùng chế độ thường (`claude-mcp` không nhận `--thinking`); so sánh với chế độ suy luận là hướng phát triển |
 | Semgrep chỉ quét phần thay đổi trong PR | Bỏ sót lỗi phát sinh gián tiếp ở file không đổi (hiếm) | Nhánh `main` quét toàn bộ |
 | Cache Trivy DB | Có thể sót CVE mới nhất trong ngày | Làm mới cache hằng ngày, job quét đêm dùng DB mới nhất |
 
@@ -351,7 +349,7 @@ Dữ liệu tự tạo có thể thiên vị (giảm thiểu bằng đăng ký �
 3. Pipeline truyền thống: pr-security (chưa có Agent), main-ci, nightly-sca, branch protection.
 4. AI Security Agent: tiền xử lý → công cụ → phiên review → kiểm tra (độ phủ, chống bịa) → báo cáo.
 5. Tích hợp Agent vào pr-security + quality gate 2 chế độ.
-6. Benchmark: các kịch bản, đáp án, run/evaluate, chạy thực nghiệm.
+6. Benchmark: các kịch bản, đáp án, `pr_bench.py`/`evaluate.py`, chạy thực nghiệm bằng PR thật.
 7. Tài liệu cho báo cáo và chuẩn bị demo (chạy sẵn PR, chế độ CLI, video dự phòng).
 
 Các bước 2–3 và một phần bước 4 (tiền xử lý, công cụ) có thể làm song song nếu chia việc cho các thành viên trong nhóm.

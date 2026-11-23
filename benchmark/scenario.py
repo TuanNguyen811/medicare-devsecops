@@ -1,7 +1,6 @@
-"""Benchmark scenarios: build a scenario's repository state, list what CI must scan.
+"""Benchmark scenarios: load them, and build the repository state the agent reviews.
 
     python benchmark/scenario.py materialize <ID> <dest>      # prints {"base": sha, "head": sha}
-    python benchmark/scenario.py matrix --select all|S01,S07  # GitHub Actions matrices
     python benchmark/scenario.py list
 
 A scenario lives in benchmark/scenarios/<ID>-<slug>/:
@@ -10,12 +9,12 @@ A scenario lives in benchmark/scenarios/<ID>-<slug>/:
   patch.diff        the Pull Request, applied with `git apply` on BASE_COMMIT (absent = no change)
   ground_truth.yaml the expected vulnerabilities (read by evaluate.py, never by the agent)
 
-materialize is deterministic: the same scenario gives the same commit SHAs on any machine
-(fixed author, committer and dates; patches go to git as bytes; no hooks), so SARIF from GitHub
-Actions and the local agent run refer to the same commits. The base commit is BASE_COMMIT made
-neutral: whatever documents the experiment (design documents describe the planted bugs, the
-baseline scan report labels the clean tree's findings) is removed or rewritten, and the agent's
-own code is not part of the application under review.
+materialize is deterministic (fixed author, committer and dates; patches go to git as bytes; no
+hooks). Its tree defines what the agent may see: BASE_COMMIT made neutral (whatever documents
+the experiment, such as design documents that describe the planted bugs or the baseline scan
+report, is removed or rewritten, and the agent's own code is not part of the application under
+review) plus the scenario's patch. When a scenario runs as a real PR on main (pr_bench.py),
+security/handoff/local_review.py --benchmark-view rebuilds exactly this tree.
 Fake secrets are written as @@FAKE:<kind>:<label>@@ in patches and expanded here, so no
 secret-looking string is ever committed to this repository.
 
@@ -274,14 +273,6 @@ def materialize(scenario: Scenario, dest: Path, repo: Path) -> dict[str, str]:
     return {"id": scenario.id, "base": base, "head": head}
 
 
-def matrix(scenarios: list[Scenario]) -> dict[str, list]:
-    """What CI scans: every scenario with the static tools; ZAP for each scenario that changes
-    app/ (the others reuse the S00 baseline's DAST), one job per role."""
-    dast_ids = [s.id for s in scenarios if s.touches_app() or s.id == BASELINE]
-    return {"scan": [s.id for s in scenarios],
-            "dast": [{"id": i, "role": r} for i in dast_ids for r in ROLES]}
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -289,8 +280,6 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("id")
     m.add_argument("dest", type=Path)
     m.add_argument("--repo", type=Path, default=HERE.parent)
-    x = sub.add_parser("matrix")
-    x.add_argument("--select", default="all")
     sub.add_parser("list")
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):
@@ -300,9 +289,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "materialize":
             (scenario,) = select(args.id)
             print(json.dumps(materialize(scenario, args.dest.resolve(), args.repo.resolve())))
-        elif args.cmd == "matrix":
-            for key, value in matrix(select(args.select)).items():
-                print(f"{key}={json.dumps(value, separators=(',', ':'))}")
         else:
             for s in all_scenarios():
                 print(f"{s.id}\t{s.split}\t{s.kind}\tapp={s.touches_app()}\t{s.title}")

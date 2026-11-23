@@ -3,7 +3,7 @@ title: Lọc danh sách bệnh nhân theo năm
 split: dev
 kind: decoy
 commit_message: Lọc danh sách bệnh nhân theo năm sinh hoặc năm tiếp nhận
-measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được (đo, không đoán)
-  scan_run: 45008007877
+measured_detection:  # lỗi trong đáp án mà công cụ quét bắt được trên PR benchmark (đo, không đoán)
+  scan: pr-r1
   sast_sca: []
   dast: []  # chỉ DAST bắt, SAST/SCA không bắt

@@ -1,0 +1,7 @@
+# PR tính năng thông thường, không có mồi nhử. Trang chỉ đọc (GET), bệnh nhân được tải qua
+# get_patient_for_records (policy.can_view_patient rồi policy.can_view_record): bác sĩ cùng khoa
+# hoặc phụ trách, y tá cùng khoa, bệnh nhân chính mình; lễ tân/ADMIN và người ngoài phạm vi nhận
+# 404 như nhau (R-03, R-12, R-15). Việc xem danh sách ghi audit LIST_PRESCRIPTIONS (R-05). Truy vấn
+# lọc theo patient_id bằng biểu thức SQLAlchemy, trang qua parse_id và bị kẹp trong khoảng hợp lệ;
+# template autoescape, không hiện CCCD/BHYT. Không có lỗ hổng.
+findings: []

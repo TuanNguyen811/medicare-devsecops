@@ -69,9 +69,9 @@ secagent/mcp_bridge.py (MCP stdio) ── socket 127.0.0.1, token riêng của p
 | `--base`, `--head` | Commit gốc và commit của PR; diff được tính từ merge base, giống quality gate |
 | `--sarif-dir` | Thư mục `*.sarif`. Tên công cụ lấy theo tên file |
 | `--requirements` | `docs/security-requirements.md` (các quy tắc R-xx) |
-| `--strategy single-shot` | Ablation C3: một lần gọi, không có công cụ điều tra |
-| `--no-requirements` | Ablation C4: không có tài liệu quy tắc nghiệp vụ |
-| `--no-ast-tools` | Ablation C5: bỏ `list_routes`, `get_function`, `find_callers` |
+| `--strategy single-shot` | Mỗi lô phát hiện chỉ hỏi LLM một lần, không có công cụ điều tra |
+| `--no-requirements` | Không đưa tài liệu quy tắc nghiệp vụ cho LLM |
+| `--no-ast-tools` | Bỏ các công cụ phân tích AST (`list_routes`, `get_function`, `find_callers`) |
 | `--thinking` | Chế độ suy luận của model (`anthropic`, `openai`, `gemini`) |
 | `--model`, `--time-budget-s` | Ghi đè model; ngân sách thời gian (mặc định 360 s) |
 

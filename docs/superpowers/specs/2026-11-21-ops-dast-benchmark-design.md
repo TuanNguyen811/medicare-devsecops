@@ -2,7 +2,7 @@
 
 - **Ngày:** 2026-11-21
 - **Bổ sung cho:** `2026-11-07-devsecops-ai-agent-design.md` (gọi tắt là *spec gốc*). Phần nào ở đây khác spec gốc thì **tài liệu này thắng**. Phần không nhắc tới giữ nguyên.
-- **Trạng thái:** đã duyệt; bản hiện hành 2026-11-22.
+- **Trạng thái:** đã duyệt; bản hiện hành 2026-11-23.
 
 ## 0. Vì sao bổ sung
 
@@ -15,10 +15,10 @@
 
 **Thành công là khi:**
 
-- Một PR đi hết luồng: 6 nhóm công cụ quét + DAST → Agent (`secagent`, khi có API key; chưa có key thì gate chạy chế độ truyền thống) → comment → gate. Không cần thao tác tay.
+- Một PR đi hết luồng: 6 nhóm công cụ quét + DAST → Agent (`secagent`: trên CI bằng API key, hoặc report `claude-mcp` do người review chạy trên máy rồi đăng lên PR; không có report thì gate chạy chế độ truyền thống) → comment → gate.
 - `main` được build, ký, gắn SBOM, rồi deploy về cụm Kubernetes trên máy bằng một lệnh. Image không có chữ ký hợp lệ bị cụm từ chối.
 - Dashboard Grafana có số liệu, và cảnh báo dò mật khẩu bật lên khi chạy script giả lập.
-- Benchmark chạy đủ C1, C1+DAST, C2–C5 trên khoảng 30 kịch bản. Kết quả thô và bảng tổng hợp được commit.
+- Benchmark: 35 kịch bản, mỗi kịch bản là một PR thật đi qua đúng pipeline PR và gate thật; chấm C1, C1+DAST và C2. Kết quả thô và bảng tổng hợp được commit.
 
 ## 1. Mục tiêu, không làm, và những điều cấm
 
@@ -49,7 +49,8 @@
                         → ZAP quét sau deploy
 5. GIÁM SÁT [MỚI]       /metrics → Prometheus → Grafana; Alertmanager; script giả lập truy cập
                         nightly-sca (đã có)
-6. BENCHMARK [MỞ RỘNG]  ~30 kịch bản × C1, C1+DAST, C2–C5 (claude-mcp) → evaluate → bảng, biểu đồ
+6. BENCHMARK [MỞ RỘNG]  35 PR thật "[Bench] <ID>" → pr-security.yml (công cụ quét, ZAP, agent claude-mcp
+                        qua handoff, gate ai-assisted) → pr_bench.py thu kết quả → evaluate (C1, C1+DAST, C2)
 ```
 
 ## 3. Các phương án đã cân nhắc
@@ -112,7 +113,7 @@ secagent (y nguyên): pha 0 (SARIF, diff, che secret) → review theo lô cluste
 - `--strict-mcp-config`: chỉ nạp cầu MCP của secagent. Các công cụ của cầu chỉ đọc trong repo; `.git/` và `sarif/` bị cấm (SARIF thô chưa che secret).
 - `--permission-mode dontAsk` cộng `--allowedTools mcp__secagent`: mọi thứ khác bị từ chối, không hỏi.
 - **Mỗi lượt là một phiên sạch** (`--setting-sources project --disable-slash-commands --no-session-persistence`): không nạp cài đặt, hook, plugin hay MCP cá nhân, không có lịch sử hội thoại.
-- **Trong benchmark:** thư mục chạy không chứa đáp án. Phiên Claude Code điều phối benchmark không chấm thay.
+- **Trong benchmark:** agent chỉ thấy cây `scenario.materialize` (mục 8.4), không có đáp án, kết quả hay tài liệu thiết kế. Phiên Claude Code điều phối benchmark không chấm thay.
 - Thông tin đăng nhập là của Claude Code trên máy. `secagent` không đọc, không chép và không truyền nó đi đâu.
 
 ### 4.4 Trên CI
@@ -162,7 +163,7 @@ Phiên bản ZAP ghim bằng digest image trong `security/tool-versions.env` (`Z
    - Job `dast` gom và chạy `zap2sarif`, upload artifact `sarif-zap` và SARIF category `dast`.
    - Bỏ qua PR từ fork giống các job khác có upload SARIF.
 2. **Sau deploy:** `pull-deploy.sh` chạy `run-dast.sh` vào bản vừa deploy (qua port-forward), quét đủ 5 vai trò. Báo cáo lưu ở `deploy/reports/<thời điểm>/` (không commit).
-3. **Benchmark:** cấu hình C1+DAST (mục 8).
+3. **Benchmark:** mỗi PR `[Bench]` chạy DAST như mọi PR; số liệu dùng cho cấu hình C1+DAST (mục 8).
 
 ### 5.5 Mục tiêu thời gian
 
@@ -215,7 +216,7 @@ Chạy trong Git Bash trên Windows (cũng chạy được trên Linux):
 6. `kubectl rollout status --timeout=180s`. Port-forward tạm, rồi smoke test giống job staging (`/health`, `/login`, chuyển hướng, 401 của API).
 7. Smoke test lỗi → `kubectl rollout undo`, thoát mã khác 0.
 8. Thành công → ghi lịch sử vào `deploy/.history` (không commit). Với cờ `--dast`: `run-dast.sh` quét bản vừa deploy.
-   *(Sửa 2026-11-22: DAST sau deploy là tùy chọn, vì quét 5 vai trò lần lượt mất khoảng 25 phút, trong khi mỗi PR đã được quét trên CI trước khi merge.)*
+   DAST sau deploy là tùy chọn, vì quét 5 vai trò lần lượt mất khoảng 25 phút, trong khi mỗi PR đã được quét trên CI trước khi merge.
 
 Thêm `deploy/demo-unsigned.sh`: thử deploy một image thẻ `sha` (chưa ký) và in lỗi Kyverno trả về.
 
@@ -274,17 +275,19 @@ Mỗi luật có `annotations.description` ngắn bằng tiếng Việt. Cảnh 
   - **R-17:** hóa đơn chỉ chuyển trạng thái theo đúng luồng cho phép. Số lượng và thành tiền phải dương, tính ở server.
   - **R-18:** token đặt lại mật khẩu ngẫu nhiên an toàn, dùng một lần, hết hạn sau 15 phút. Phản hồi không tiết lộ tài khoản có tồn tại hay không.
   - **R-19:** dữ liệu xuất ra file (CSV, Excel) phải trung hòa ký tự công thức và tuân theo R-11.
-- Gắn tag **`v0.3-baseline`** sau khi xong các phần 4–7 (app đã có `/metrics`, rule đã bổ sung). `benchmark/BASE_COMMIT` trỏ vào mốc này. Mọi patch kịch bản áp lên mốc này.
+- Gắn tag **`v0.3-baseline`** sau khi xong các phần 4–7 (app đã có `/metrics`, rule đã bổ sung). `benchmark/BASE_COMMIT` trỏ vào mốc này. Patch kịch bản viết trên mốc này và áp được lên `main` để mở PR.
 
 ### 8.2 Bộ dữ liệu
 
-- **24 kịch bản lỗi:**
-  - S01–S14 giữ như spec gốc;
-  - S16–S24 mới, bảng dưới;
-  - mỗi kịch bản là một tính năng nghe hợp lý.
-- **S15:** tấn công chính Agent (prompt injection + SQLi thật).
-- **~4 mồi nhử:** code an toàn nhưng trông giống lỗi.
-- **Bản `main` sạch.**
+35 kịch bản trong `benchmark/scenarios/<ID>-<tên>/`, mỗi kịch bản gồm `patch.diff` (thay đổi của PR), `ground_truth.yaml` (đáp án) và `scenario.yaml` (`id`, `title`, `split`, `kind`, `commit_message`):
+
+- **Tập test (30 PR):**
+  - S00: PR rỗng (bản gốc), làm mốc cho phát hiện có sẵn.
+  - 20 PR có lỗ hổng được cài, tổng cộng 28 lỗi: S02–S06, S08, S09, S11–S13, S15–S24. S15 là kịch bản độ vững: tấn công chính Agent bằng prompt injection, kèm một lỗi SQLi thật.
+  - 9 PR tính năng không có lỗ hổng: D02–D04 là mồi nhử (code an toàn nhưng có mẫu dễ bị nghi là lỗi); D05–D10 là PR tính năng sạch thông thường. Cùng S00 là 10 PR không có lỗ hổng.
+- **Tập dev (5 PR):** S01, S07, S10, S14, D01. Dùng để chỉnh prompt của `secagent` trước khi viết tập test; kết quả báo cáo riêng, không gộp vào tập test.
+
+S01–S15 như spec gốc. S16–S24 là các tính năng mới dưới đây, mỗi kịch bản là một tính năng nghe hợp lý:
 
 | Mã | Tính năng mới | Lỗi cài vào | Quy tắc | CWE |
 |---|---|---|---|---|
@@ -292,7 +295,7 @@ Mỗi luật có `annotations.description` ngắn bằng tiếng Việt. Cảnh 
 | S17 | Tự cập nhật hồ sơ cá nhân | Nhận cả trường `role` (mass assignment) → tự nâng quyền | R-16 | 915 |
 | S18 | Đặt lịch nhanh | Bỏ ràng buộc unique, kiểm tra rồi mới ghi, không khóa → trùng lịch bác sĩ | R-13 | 362 |
 | S19 | Danh sách bệnh nhân theo khoa cho y tá | Khoa lấy từ tham số client → xem được khoa khác | R-02, R-03 | 639 |
-| S20 | Hóa đơn nhiều dòng | Số lượng âm; chuyển thẳng sang PAID bỏ qua bước | R-17, R-04 | 840 |
+| S20 | Hóa đơn nhiều dòng | Số lượng âm làm giảm tổng tiền; trạng thái lấy từ request nên chuyển ngược PAID → UNPAID được | R-17, R-04 | 840 |
 | S21 | Quên mật khẩu | Token không hết hạn, dùng lại được; thông báo khác nhau theo tài khoản | R-18 | 640, 204 |
 | S22 | Xuất danh sách bệnh nhân CSV | CSV injection, lộ CCCD/BHYT đầy đủ | R-19, R-11 | 1236, 359 |
 | S23 | Bác sĩ tự nhận bệnh nhân | Bác sĩ tự gán `attending_doctor_id` = mình → đọc bệnh án | R-02, ma trận | 285 |
@@ -302,79 +305,70 @@ Mỗi luật có `annotations.description` ngắn bằng tiếng Việt. Cảnh 
 
 - Trang mới có link trong menu để ZAP spider tìm thấy. API mới có trong OpenAPI xuất ra.
 - Lỗi được cài tự nhiên, không có comment gợi ý.
-- `ground_truth.yaml` ghi thêm `routes: ["GET /..."]` cho mỗi lỗi để chấm được finding của DAST.
+- `ground_truth.yaml` ghi cho mỗi lỗi: vị trí (`file`, `lines`, các vị trí phụ `also`), `category` (pattern hoặc logic), CWE, `rules` của công cụ quét, quy tắc bị vi phạm (`violated_rule`), và `routes: ["GET /..."]` để chấm được finding của DAST.
+- `commit_message` là tiêu đề PR, viết như một tính năng thật.
 
-**Cân bằng:** khoảng 9 kịch bản dạng pattern (công cụ có báo, để đo Agent lọc báo nhầm mà không loại nhầm lỗi thật) và khoảng 15 kịch bản dạng logic.
+**Nhóm theo số đo:** ngoài nhóm pattern/logic, `evaluate.py` chia lỗi theo nhóm đo được từ SARIF của chính các PR: C1 bắt được, chỉ C1+DAST bắt được, không công cụ nào bắt được.
 
-**Nhãn dựa trên số đo:**
-- Sau khi viết xong toàn bộ kịch bản, chạy C1 và C1+DAST.
-- Ghi `measured_detection` vào `scenario.yaml` của từng kịch bản, theo từng lỗi: `scan_run` (lượt quét), `sast_sca` (id các lỗi C1 bắt được), `dast` (id các lỗi chỉ C1+DAST bắt được). Ghi theo lỗi vì một kịch bản có thể có lỗi bị bắt và lỗi bị sót. `evaluate.py` tự tính lại nhóm này từ kết quả quét; trường trong `scenario.yaml` là bản ghi để đọc.
-- Bảng kết quả chia nhóm theo nhãn đo được, không theo nhãn dự đoán.
+**Người viết kịch bản:** một người (Claude) viết toàn bộ kịch bản, đáp án và prompt, theo quyết định của người dùng. Biện pháp chống thiên vị:
+1. **Thứ tự cố định:** viết tập dev → chỉnh prompt trên tập dev → **commit chốt prompt** → rồi mới viết kịch bản và đáp án tập test. `benchmark/PROMPT_FREEZE` ghi cây prompt `c33491a` (thư mục `agent/src/secagent/prompts`), chốt ở commit `16f2ec2`; lịch sử git chứng minh thứ tự này. Prompt không đổi từ đó. Các thay đổi sau đó của agent chỉ là phần hiển thị báo cáo trên PR, trường `tool_severity` và client Gemini; `PROMPT_FREEZE` ghi cây `agent/` dùng cho benchmark, và `timing.json` của mỗi lượt ghi `agent_commit` để đối chiếu.
+2. **Đáp án đăng ký trước:** `ground_truth.yaml` của mỗi kịch bản test được commit trước khi kịch bản đó chạy.
+3. **LLM không thấy đáp án:** agent chỉ thấy cây `scenario.materialize` (mục 8.4), không có đáp án, kết quả hay tài liệu thiết kế. Mỗi lượt LLM là một tiến trình `claude -p` riêng, không có lịch sử hội thoại. Phiên Claude điều phối benchmark không chấm và không trả lời thay.
+4. **Không chỉnh prompt sau khi đã thấy kết quả tập test.** Nếu buộc phải sửa thì chạy lại toàn bộ tập test và ghi rõ lý do trong báo cáo.
 
-**Chia dev/test:**
-- Khoảng 5 kịch bản làm tập dev (S01, S07, S10, S14, D1), dùng để chỉnh prompt của `secagent` (`prompts/system.md`, `review.md`, `single_shot.md`). Phần còn lại là tập test.
-- `ground_truth.yaml` và prompt được chốt (commit) trước khi chạy tập test.
-
-**Người viết kịch bản (thay quy ước tách người của Hợp đồng 3):** một người (Claude) viết toàn bộ kịch bản, đáp án và prompt, theo quyết định của người dùng. Biện pháp chống thiên vị:
-1. **Thứ tự cố định:** viết tập dev → chỉnh prompt trên tập dev → **commit chốt prompt** → rồi mới viết kịch bản và đáp án tập test. Lịch sử git chứng minh thứ tự này.
-2. **LLM không thấy đáp án:** `secagent` chạy trong worktree ở commit kịch bản (từ `v0.3-baseline`, không có thư mục `benchmark/`). Mỗi lượt LLM là một tiến trình `claude -p` riêng, không có lịch sử hội thoại. Phiên Claude điều phối benchmark không chấm và không trả lời thay.
-3. **Không chỉnh prompt sau khi đã thấy kết quả tập test.** Nếu buộc phải sửa thì chạy lại toàn bộ tập test và ghi rõ lý do trong báo cáo.
-4. Báo cáo nêu rõ hạn chế "người viết đề và người chỉnh prompt là một".
+**Đe dọa tính hợp lệ (ghi trong báo cáo):**
+- Người viết kịch bản, người viết đáp án và người chỉnh prompt là một.
+- Luật gate "agent xác nhận TP mức High/Critical trên một phát hiện mà công cụ quét chấm thấp hơn thì chặn" được thêm sau khi xem dữ liệu sơ bộ trên chính các kịch bản này.
+- D05–D10 được viết sau khi đã biết những kết quả đầu tiên; riêng D06–D10 viết sau khi có kết quả của 30 PR đầu, để có thêm PR sạch như trong thực tế.
+- Tập dev đã dùng để chỉnh prompt nên kết quả trên tập dev lạc quan; vì vậy báo cáo riêng.
+- Mỗi PR chạy agent một lần: không đo độ dao động giữa các lần chạy. Người dùng chọn tăng số PR thay vì lặp lại.
 
 ### 8.3 Cấu hình
 
-Mọi cấu hình có AI chạy `secagent` ở chế độ `claude-mcp` (mục 4), model `claude-sonnet-5-5`. Chế độ và model được ghi vào `meta` của từng lượt.
+Cấu hình có AI chạy `secagent` ở chế độ `claude-mcp` (mục 4), model `claude-sonnet-5-5`, qua Claude Code trên máy người review, không bao giờ trên CI. Chế độ và model được ghi vào `meta` của từng lượt.
 
-| Mã | Gồm | Chạy ở đâu | Số lần |
-|---|---|---|---|
-| C1 | 6 nhóm công cụ quét, **kể cả CodeQL** | GitHub Actions (`benchmark-scan.yml`) | 1 |
-| C1+DAST | C1 + ZAP 5 vai trò | GitHub Actions | 1 |
-| **C2** | C1+DAST + secagent đầy đủ | Máy | 3 trên tập test, 1 trên tập dev |
-| C3 | như C2, `--strategy single-shot` (mỗi lô phát hiện gọi LLM một lần, đưa sẵn diff, không có công cụ đọc code) | Máy | 1 trên tập test |
-| C4 | như C2, `--no-requirements` | Máy | 1 trên tập test |
-| C5 | như C2, `--no-ast-tools` | Máy | 1 trên tập test |
-| C2-api | như C2, chế độ `anthropic`, `openai` hoặc `gemini` bằng key, cùng script | GitHub hoặc máy | 3, khi có key |
+| Mã | Gồm | Quyết định cấp PR |
+|---|---|---|
+| C1 | Các công cụ quét của PR: CodeQL, Semgrep, Bandit, Trivy, Gitleaks, Checkov, zizmor | gate `traditional` |
+| C1+DAST | C1 + ZAP 5 vai trò | gate `traditional` |
+| **C2** | C1+DAST + secagent, **một lượt cho mỗi PR** | gate `ai-assisted` với `report.json` của agent |
+
+Cả ba cấu hình chấm trên cùng một lượt pipeline của mỗi PR: C1 và C1+DAST là các góc nhìn trên SARIF của PR đó, C2 thêm report của agent đã thực sự được gate dùng.
 
 **Câu hỏi nghiên cứu:**
-- RQ1 (giảm báo nhầm): C1+DAST so với C2, xét trên mồi nhử, bản sạch và các finding sai.
-- RQ2 (bắt thêm lỗi): C1+DAST so với C2.
-- RQ3 (chi phí): thời gian và token đo thật. Tiền quy đổi theo bảng giá API của Claude, tức đúng số tiền nếu chạy chế độ `anthropic` bằng key. Với model khác, tiền chỉ là ước tính bằng số token nhân bảng giá, ghi rõ là ước tính.
-- RQ4 (đóng góp từng phần): C2 so với C3 (Function Calling), C4 (ngữ cảnh nghiệp vụ), C5 (công cụ AST).
-- Phụ: độ ổn định qua 3 lần chạy C2; S15 (prompt injection).
+- RQ1 (giảm báo nhầm mà không loại nhầm lỗi thật): C1+DAST so với C2, xét trên mồi nhử, PR sạch, bản gốc và các finding sai.
+- RQ2 (bắt thêm lỗi): số lỗi công cụ quét bỏ sót mà C2 tìm được.
+- RQ3 (chi phí): thời gian, token đo thật, và tiền quy đổi mỗi PR. Tiền quy đổi theo bảng giá API của Claude, tức đúng số tiền nếu chạy chế độ `anthropic` bằng key. Chi phí là con số Claude Code tự báo, vì chạy bằng gói thuê bao.
+- Phụ: S15 (prompt injection); quyết định gate do `evaluate.py` tính lại so với quyết định thật của pipeline trên từng PR.
 
-**Hạn chế ghi trong báo cáo:** số liệu là của "kiến trúc secagent + Claude Sonnet". Con số tuyệt đối phụ thuộc model; C2-api đo ảnh hưởng của model khi có key.
+**Hạn chế ghi trong báo cáo:** số liệu là của "kiến trúc secagent + Claude Sonnet". Con số tuyệt đối phụ thuộc model.
 
-**CodeQL:** C1 chạy trên GitHub Actions bằng đúng các bước của `pr-security.yml` (cùng action CodeQL, cùng bộ query, cùng ZAP và plan), nên không cần CodeQL CLI trên máy. `security/scan-local.sh` vẫn dùng để thử nhanh khi viết kịch bản.
+**CodeQL và các công cụ khác** chạy trên GitHub Actions trong chính pipeline PR, nên không cần CodeQL CLI trên máy. `security/scan-local.sh` vẫn dùng để thử nhanh khi viết kịch bản.
 
-**Dùng lại kết quả:** `run.py` lưu SARIF của C1 và DAST theo commit kịch bản, và mọi cấu hình có agent dùng chung bộ SARIF đó. Kịch bản không sửa `app/` thì dùng lại DAST của bản sạch.
-
-**Khối lượng:** khoảng 155 lượt agent:
-- C2: 25×3 + 5;
-- C3, C4, C5: mỗi cấu hình 25 lượt;
-- cộng các lượt chỉnh prompt trên tập dev.
-
-Chạy `--jobs 3`. `run.py` chạy tiếp được từ chỗ dừng và tự chờ khi chạm hạn mức của gói Max. Đổi model giữa chừng thì phải chạy lại toàn bộ cấu hình đó. Chi phí là chi phí quy đổi mà Claude Code tự báo, vì chạy bằng gói thuê bao.
+**Khối lượng:** 35 lượt agent, mỗi PR một lượt. `pr_bench.py run` mở PR mới khi GitHub Actions còn dưới 30 job đang chờ hoặc đang chạy (`--max-jobs`), chạy tiếp được từ chỗ dừng, tự chờ khi chạm hạn mức của gói Max và thử lại lỗi tạm thời. Đổi model giữa chừng thì phải chạy lại toàn bộ.
 
 ### 8.4 Cách chạy và lưu kết quả
 
-1. **Quét (GitHub Actions):** `benchmark-scan.yml` chạy bằng `workflow_dispatch`, dạng ma trận theo kịch bản. Workflow không có secret, quyền chỉ đọc. Mỗi kịch bản:
-   - checkout `v0.3-baseline`, `git apply` patch, commit;
-   - chạy các job quét giống `pr-security.yml`, và ZAP 5 vai trò khi kịch bản sửa `app/`;
-   - upload `sarif-<kịch bản>`.
-2. **Tải về:** `benchmark/run.py fetch --run <id>` tải artifact về `benchmark/results/<run-id>/scan/<kịch bản>/`.
-3. **Chạy agent (máy):** `benchmark/run.py agent --config C2|C3|C4|C5 --set dev|test --reps N --jobs 3`. Mỗi lượt:
-   - tạo worktree tạm ở commit kịch bản (không có `benchmark/`);
-   - chạy `secagent --mode benchmark` (LLM `claude-mcp`);
-   - ghi `report.json`, `trace.jsonl`, `timing.json` và đầu ra stream-json của các lượt `claude -p` vào `benchmark/results/<run-id>/<config>/<kịch bản>/<rep>/`.
-4. **Chấm:** `benchmark/evaluate.py` sinh `summary.csv`, bảng Markdown và biểu đồ. Kết quả thô **được commit** để lưu vĩnh viễn, vì artifact của GitHub chỉ giữ tối đa 90 ngày.
-5. **PR trưng bày:** khoảng 5 PR, mỗi nhóm một kịch bản tiêu biểu, chạy toàn bộ luồng trên GitHub. Comment và check được lưu cả khi PR đã đóng. Nhánh có lỗi không bao giờ được deploy. Phần AI trên PR chỉ có khi secagent có API key; chưa có key thì gate chạy chế độ truyền thống, và kết quả AI nằm ở `benchmark/results/`.
+1. **Mở PR:** `benchmark/pr_bench.py run --tag <T>` áp patch của từng kịch bản lên `main` ở một nhánh mới và mở PR thật `[Bench] <ID> · <commit message>` vào `main`. Trạng thái ở `benchmark/results/pr/<T>/prs.json`.
+2. **Pipeline thật:** `.github/workflows/pr-security.yml` chạy các công cụ quét (CodeQL, Semgrep, Bandit, Trivy, Gitleaks, Checkov, zizmor), ZAP 5 vai trò, job `ai-security-agent`, `agent-comment` và `quality-gate` ở chế độ `ai-assisted`. Với `LLM_PROVIDER=claude-mcp`, job `ai-security-agent` chờ report từ người review.
+3. **Review trên máy:** khi job `ai-security-agent` của PR bắt đầu chạy, `pr_bench.py` gọi `security/handoff/local_review.py --benchmark-view`:
+   - tải SARIF của lượt chạy đó và checkout PR;
+   - cho agent thấy đúng cây mà `scenario.materialize` định nghĩa: commit gốc của benchmark đã làm trung tính cộng thay đổi của PR; đáp án, kết quả và tài liệu thiết kế bị ẩn. Cây này đã được kiểm tra là trùng khớp cho mọi kịch bản;
+   - chạy `secagent` (`claude-mcp`), rồi chuyển report cho job `ai-security-agent` qua một comment trên PR (`security/handoff/handoff.py`). Job chỉ nhận comment của tài khoản `AGENT_REPORT_AUTHOR`, chưa bị sửa, cho đúng commit HEAD.
+
+   Sau đó `agent-comment` đăng báo cáo lên PR và gate thật ra quyết định.
+4. **Thu kết quả:** khi lượt chạy của PR xong, `pr_bench.py` lưu:
+   - SARIF vào `benchmark/results/scans/pr-<T>/<ID>/`, cùng những gì gate và agent thấy (`benchmark/common.py` `scan_views`: `clusters.json`, `gate.json`, `gate_findings.json`, `changed.json`, `scenario.json`) và quyết định thật của pipeline (`pipeline.json`);
+   - đầu ra của agent (`report.json`, `report.md`, `trace.jsonl`, `timing.json`, transcript `claude-mcp`) vào `benchmark/results/runs/pr-<T>/C2/<ID>/rep1/`.
+5. **Chấm:** `benchmark/evaluate.py --scan pr-<T> --select test|dev --out benchmark/results/summary/pr-<T>-<tập>` sinh `results.md`, `summary.json`, `rows.json`. Báo cáo kết quả: `docs/benchmark-results.md`. Kết quả thô **được commit** để lưu vĩnh viễn, vì artifact của GitHub chỉ giữ tối đa 90 ngày.
+6. **PR giữ mở, không merge:** 35 PR `[Bench]` (#47–#81) và 5 PR trưng bày `[Demo 1]`–`[Demo 5]` (#20, #22–#25) giữ mở để trình bày. Comment, check và quyết định gate vẫn xem được trên PR. Nhánh có lỗi không bao giờ được deploy.
 
 **Chấm DAST:** finding `zap` khớp đáp án nếu cùng `route` (method + đường dẫn mẫu) và cùng nhóm CWE. Các luật chấm khác giữ như spec gốc mục 5.3.
 
-**Quy ước chấm (`benchmark/evaluate.py`, quyết định khi làm bước 2b):**
+**Quy ước chấm (`benchmark/evaluate.py`):**
 - **Đơn vị dự đoán:**
   - **C1, C1+DAST:** mỗi cụm phát hiện của công cụ quét mà quality gate xét (cùng cách gộp cụm của agent: cùng file, ±3 dòng, cùng nhóm CWE).
-  - **C2–C5:** mỗi mục `TP` trong `report.json`, gồm cả cụm được thẩm định lẫn phát hiện agent tự tìm. `NEEDS_REVIEW` không bao giờ là phát hiện: cách chấm chặt tính nó là FP, cách chấm lỏng bỏ qua (spec gốc 5.3).
+  - **C2:** mỗi mục `TP` trong `report.json`, gồm cả cụm được thẩm định lẫn phát hiện agent tự tìm. `NEEDS_REVIEW` không bao giờ là phát hiện: cách chấm chặt tính nó là FP, cách chấm lỏng bỏ qua (spec gốc 5.3).
 - **Khớp đáp án:**
   - cùng file, dòng nằm trong vùng lỗi ±3, và cùng nhóm CWE (theo `CWE_GROUPS` của agent). Với phát hiện agent tự tìm, chỉ cần **một** đoạn bằng chứng của nó khớp;
   - với phát hiện không có CWE (Checkov), khớp khi tên rule nằm trong `rules` của đáp án.
@@ -382,15 +376,14 @@ Chạy `--jobs 3`. `run.py` chạy tiếp được từ chỗ dừng và tự ch
   - với phát hiện của agent, cũng khớp khi cùng vị trí và `violated_rule` của nó nằm trong danh sách quy tắc mà đáp án ghi là bị vi phạm (một lỗi có thể vi phạm nhiều quy tắc, ví dụ S07 vi phạm R-04 và R-17). CWE của một lỗi logic là lựa chọn mang tính diễn giải (tỷ lệ BHYT do client gửi có thể ghi CWE-602, CWE-472 hay CWE-639), còn quy tắc bị vi phạm thì đáp án liệt kê đủ. Quy ước này chốt trên tập dev, trước khi viết tập test.
 - **Phát hiện SAST/IaC có sẵn trong file PR sửa** (ví dụ các finding Checkov của `infra/terraform/main.tf` khi PR thêm tài nguyên vào file đó) được tính như mọi dự đoán: không khớp đáp án thì là FP. Khác với DAST, chúng chỉ xuất hiện khi PR sửa đúng file, và người review PR thật cũng phải xem chúng; bảng kết quả ghi rõ số FP thuộc loại này để không phóng đại mức giảm FP ở RQ1.
 - **Phát hiện DAST có sẵn trên bản gốc S00** (cùng rule ZAP, trên bất kỳ route nào, ví dụ thiếu header CSP) xuất hiện ở mọi kịch bản, vì ZAP quét cả app. Đây là vấn đề có thật nhưng không do PR gây ra. Chúng không tính TP hay FP, được đếm riêng. Benchmark đo những gì mỗi PR đưa vào. Khớp đáp án được xét trước, nên quy ước này không che được lỗi được cài.
-- **Cấp PR:** quyết định của quality gate:
+- **Cấp PR:** quyết định của quality gate, do `evaluate.py` tính lại:
   - chế độ `traditional` cho C1 và C1+DAST;
-  - chế độ `ai-assisted` với `report.json` của agent cho C2–C5.
+  - chế độ `ai-assisted` với `report.json` của agent cho C2.
 
-  PR có lỗ hổng (`vuln`, `robustness`) phải bị chặn; mồi nhử và bản gốc phải được qua.
-- **Lần chạy agent lỗi hoặc thiếu** vẫn có trong mẫu số: không phát hiện được gì (các lỗ hổng thành FN). Ở cấp PR, gate quay về chế độ truyền thống, như pipeline thật khi agent lỗi. Lần chạy dừng giữa chừng vì hạn mức của gói không phải là kết quả: `run.py` chờ rồi chạy lại.
-- **Kết quả theo lần quét và phiên bản agent:** `results/runs/<scan>/<config>/<ID>/rep<N>/`. `timing.json` ghi hash cây `agent/` (gồm cả prompt). `evaluate.py` từ chối trộn kết quả của các phiên bản agent khác nhau.
-- **SARIF gốc không commit**, vì quá lớn: riêng `semgrep.sarif` khoảng 1,2 MB mỗi kịch bản. Lần chạy workflow giữ SARIF 90 ngày. `run.py fetch` ghi những gì cần để chấm lại (`clusters.json`, `gate.json`, `gate_findings.json`, `changed.json`, `scenario.json`), và các file này được commit.
-- `fetch` dựng lại commit kịch bản trên máy và dừng nếu SHA khác commit CI đã quét.
+  PR có lỗ hổng (`vuln`, `robustness`) phải bị chặn; mồi nhử, PR sạch và bản gốc phải được qua. Quyết định tính lại của C2 được đối chiếu với quyết định thật của pipeline (`pipeline.json`) trên từng PR.
+- **Lần chạy agent lỗi hoặc thiếu** vẫn có trong mẫu số: không phát hiện được gì (các lỗ hổng thành FN). Ở cấp PR, gate quay về chế độ truyền thống, như pipeline thật khi agent lỗi. Lần chạy dừng giữa chừng vì hạn mức của gói không phải là kết quả: `pr_bench.py` chờ rồi chạy lại.
+- **Kết quả theo phiên bản agent:** `timing.json` ghi `agent_commit` (hash cây `agent/`, gồm cả prompt). `evaluate.py` từ chối trộn kết quả của các phiên bản agent khác nhau.
+- **SARIF gốc không commit**, vì quá lớn: riêng `semgrep.sarif` khoảng 1,2 MB mỗi kịch bản. Lượt chạy workflow của PR giữ SARIF 90 ngày. Những gì cần để chấm lại (`clusters.json`, `gate.json`, `gate_findings.json`, `changed.json`, `scenario.json`, `pipeline.json`) được commit.
 
 ## 9. Thứ tự làm và ranh giới PR
 
@@ -401,7 +394,7 @@ Chạy `--jobs 3`. `run.py` chạy tiếp được từ chỗ dừng và tự ch
 | 2 | DAST: `security/dast/`, job `dast-zap`/`dast`, gate nhận `zap` | Có |
 | 3 | Ký image + `deploy/` + Kyverno | Có |
 | 4 | Metrics trong app + `deploy/monitoring/` + script giả lập | Có thể không (nếu không sửa `.github/`, `security/`) |
-| 5 | Benchmark: rule R-16–R-19, tag `v0.3-baseline`; chế độ `claude-mcp` và workflow quét benchmark; kịch bản, run/evaluate, chạy, kết quả | Có cho PR sửa `agent/` và `.github/` |
+| 5 | Benchmark: rule R-16–R-19, tag `v0.3-baseline`; chế độ `claude-mcp` và handoff report lên PR; kịch bản, `pr_bench.py`/`evaluate.py`, chạy 35 PR, kết quả | Có cho PR sửa `agent/` và `.github/` |
 | 6 | Tài liệu (`docs/pipeline.md`, README), kịch bản demo | Không |
 
 **Việc người dùng làm:**
@@ -412,12 +405,13 @@ Chạy `--jobs 3`. `run.py` chạy tiếp được từ chỗ dừng và tự ch
 
 - Ngưỡng cụ thể của các luật cảnh báo và bộ rule active scan của ZAP, chỉnh theo thử nghiệm.
 - Cách phục vụ metrics ở cổng 9000.
-- Cấu trúc nội bộ của `run.py` và `evaluate.py`.
+- Cấu trúc nội bộ của `pr_bench.py` và `evaluate.py`.
 - Phiên bản cụ thể của ZAP, cosign, Kyverno, Prometheus, Grafana (ghim lúc làm).
 - Nội dung chi tiết từng patch kịch bản, trong khuôn khổ bảng 8.2 và spec gốc.
 
 ## 11. Hạn chế bổ sung (ghi vào báo cáo)
 
-- Số liệu benchmark là của `secagent` với model Claude Sonnet (chế độ `claude-mcp`). Con số tuyệt đối phụ thuộc model; C2-api đo ảnh hưởng của model khi có key. Ở chế độ `claude-mcp`, Claude Code là lớp truyền tin giữa model và các công cụ của `secagent`, và có thể thêm phần ngữ cảnh nền của riêng nó (mức độ được kiểm khi làm bước 2); prompt và công cụ của `secagent` vẫn được dùng nguyên vẹn.
+- Số liệu benchmark là của `secagent` với model Claude Sonnet (chế độ `claude-mcp`). Con số tuyệt đối phụ thuộc model. Ở chế độ `claude-mcp`, Claude Code là lớp truyền tin giữa model và các công cụ của `secagent`, và có thể thêm phần ngữ cảnh nền của riêng nó (mức độ được kiểm khi làm bước 2); prompt và công cụ của `secagent` vẫn được dùng nguyên vẹn.
 - ZAP không thấy lỗi phân quyền giữa các vai trò, vì mỗi lần quét chỉ dùng một vai trò. Đây là giới hạn vốn có của DAST tự động và là điểm để so sánh với Agent.
 - Deploy và giám sát chạy trên một cụm một node trên máy cá nhân. Tính sẵn sàng cao và lưu trữ lâu dài nằm ngoài phạm vi.
+- Các đe dọa tính hợp lệ của benchmark (cùng một người viết kịch bản, đáp án và prompt; luật gate thêm sau khi xem dữ liệu sơ bộ; D05–D10 viết sau khi biết kết quả đầu; mỗi PR một lượt) ở mục 8.2. Kết quả: `docs/benchmark-results.md`.

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-639",
+              "name": "secagent/CWE-639",
+              "shortDescription": {
+                "text": "Export CSV mở cho DOCTOR/NURSE và lộ CCCD, BHYT không che"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-639"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "secagent/CWE-1236",
+              "name": "secagent/CWE-1236",
+              "shortDescription": {
+                "text": "Export CSV không trung hòa ô công thức (CSV injection)"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-1236"
+                ],
+                "security-severity": "5.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-639",
+          "level": "error",
+          "message": {
+            "text": "Export CSV mở cho DOCTOR/NURSE và lộ CCCD, BHYT không che: Route /patients/export dùng staff_user (gồm DOCTOR, NURSE) trong khi ma trận phân quyền chỉ cho ADMIN và RECEPTIONIST xuất danh sách. Hơn nữa national_id và insurance_number được xuất thô, không che, vi phạm R-11 và R-19. Bác sĩ/y tá chỉ thấy CCCD bị che trên giao diện, nhưng qua CSV lấy được đầy đủ."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/patient/router.py"
+                },
+                "region": {
+                  "startLine": 102
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        },
+        {
+          "ruleId": "secagent/CWE-1236",
+          "level": "warning",
+          "message": {
+            "text": "Export CSV không trung hòa ô công thức (CSV injection): csv_response ghi trực tiếp str(value) vào csv.writer mà không xử lý ô bắt đầu bằng =, +, -, @, tab hoặc xuống dòng. Các trường như full_name, address do lễ tân nhập có thể chứa công thức."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/common/csv_export.py"
+                },
+                "region": {
+                  "startLine": 15
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "verdict": "TP",
+            "confidence": 0.9
+          }
+        }
+      ]
+    }
+  ]
+}

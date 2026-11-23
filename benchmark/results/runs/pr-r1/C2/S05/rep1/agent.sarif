@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "secagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/TuanNguyen811/medicare-devsecops",
+          "rules": [
+            {
+              "id": "secagent/CWE-1336",
+              "name": "secagent/CWE-1336",
+              "shortDescription": {
+                "text": "Server-Side Template Injection: bác sĩ tự viết template Jinja2 chạy trên Environment không sandbox"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "CWE-1336"
+                ],
+                "security-severity": "9.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "secagent/CWE-1336",
+          "level": "error",
+          "message": {
+            "text": "Server-Side Template Injection: bác sĩ tự viết template Jinja2 chạy trên Environment không sandbox: Nội dung mẫu do bác sĩ nhập (body: Form) được lưu rồi biên dịch bằng `_env.from_string(body)` với `Environment(autoescape=True)` thông thường (không phải SandboxedEnvironment). validate() chỉ kiểm tra cú pháp và độ dài. Jinja2 cho phép truy cập thuộc tính dunder (ví dụ `{{ patient.__class__.__init__.__globals__ }}` hay `cycler.__init__.__globals__.os.popen(...)`), nên tài khoản bác sĩ (hoặc phiên bị chiếm) có thể thực thi mã tùy ý trên server, đọc secret, DB, toàn bộ dữ liệu bệnh án."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app/medicare/record/printing.py"
+                },
+                "region": {
+                  "startLine": 97
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "9.5",
+            "verdict": "TP",
+            "confidence": 0.93
+          }
+        }
+      ]
+    }
+  ]
+}

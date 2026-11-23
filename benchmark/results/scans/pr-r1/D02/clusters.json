@@ -1,0 +1,268 @@
+{
+  "C1": [
+    {
+      "id": "F1",
+      "file": "app/medicare/patient/insurance_check.py",
+      "line": 10,
+      "end_line": 10,
+      "severity": "LOW",
+      "tools": [
+        "bandit"
+      ],
+      "cwes": [
+        "CWE-78"
+      ],
+      "finding_ids": [
+        "bandit:B404:app/medicare/patient/insurance_check.py:10"
+      ],
+      "rules": [
+        "B404"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F2",
+      "file": "app/medicare/patient/insurance_check.py",
+      "line": 57,
+      "end_line": 58,
+      "severity": "LOW",
+      "tools": [
+        "bandit"
+      ],
+      "cwes": [
+        "CWE-78"
+      ],
+      "finding_ids": [
+        "bandit:B603:app/medicare/patient/insurance_check.py:57"
+      ],
+      "rules": [
+        "B603"
+      ],
+      "in_diff": true
+    }
+  ],
+  "C1+DAST": [
+    {
+      "id": "F1",
+      "file": "app/medicare/patient/insurance_check.py",
+      "line": 10,
+      "end_line": 10,
+      "severity": "LOW",
+      "tools": [
+        "bandit"
+      ],
+      "cwes": [
+        "CWE-78"
+      ],
+      "finding_ids": [
+        "bandit:B404:app/medicare/patient/insurance_check.py:10"
+      ],
+      "rules": [
+        "B404"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F2",
+      "file": "app/medicare/patient/insurance_check.py",
+      "line": 57,
+      "end_line": 58,
+      "severity": "LOW",
+      "tools": [
+        "bandit"
+      ],
+      "cwes": [
+        "CWE-78"
+      ],
+      "finding_ids": [
+        "bandit:B603:app/medicare/patient/insurance_check.py:57"
+      ],
+      "rules": [
+        "B603"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F3",
+      "file": "dast:GET /",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-1021"
+      ],
+      "finding_ids": [
+        "zap:10020:dast:GET /:0"
+      ],
+      "rules": [
+        "10020"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F4",
+      "file": "dast:GET /",
+      "line": 0,
+      "end_line": 0,
+      "severity": "LOW",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10021:dast:GET /:0"
+      ],
+      "rules": [
+        "10021"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F5",
+      "file": "dast:GET /health",
+      "line": 0,
+      "end_line": 0,
+      "severity": "LOW",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10021:dast:GET /health:0"
+      ],
+      "rules": [
+        "10021"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F6",
+      "file": "dast:GET /login",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-1021"
+      ],
+      "finding_ids": [
+        "zap:10020:dast:GET /login:0"
+      ],
+      "rules": [
+        "10020"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F7",
+      "file": "dast:GET /login",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10021:dast:GET /login:0",
+        "zap:10038:dast:GET /login:0"
+      ],
+      "rules": [
+        "10021",
+        "10038"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F8",
+      "file": "dast:POST /appointments",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10038:dast:POST /appointments:0"
+      ],
+      "rules": [
+        "10038"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F9",
+      "file": "dast:POST /patients",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10038:dast:POST /patients:0"
+      ],
+      "rules": [
+        "10038"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F10",
+      "file": "dast:POST /patients/{patient_id}/edit",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/edit:0"
+      ],
+      "rules": [
+        "10038"
+      ],
+      "in_diff": true
+    },
+    {
+      "id": "F11",
+      "file": "dast:POST /patients/{patient_id}/insurance-check",
+      "line": 0,
+      "end_line": 0,
+      "severity": "MEDIUM",
+      "tools": [
+        "zap"
+      ],
+      "cwes": [
+        "CWE-693"
+      ],
+      "finding_ids": [
+        "zap:10038:dast:POST /patients/{patient_id}/insurance-check:0"
+      ],
+      "rules": [
+        "10038"
+      ],
+      "in_diff": true
+    }
+  ]
+}

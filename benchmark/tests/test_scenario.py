@@ -41,7 +41,7 @@ def test_scenario_metadata_is_validated(tmp_path):
             sc.load(write(tmp_path / f"S02-x{len(list(tmp_path.iterdir()))}", **meta))
 
 
-def test_touched_paths_and_matrix(tmp_path, monkeypatch):
+def test_touched_paths_and_selection(tmp_path, monkeypatch):
     app = write(tmp_path / "S01-app", id="S01", title="t", split="dev", kind="vuln",
                 commit_message="m")
     (app / "patch.diff").write_text("--- a/app/x.py\n+++ b/app/x.py\n@@ -1 +1 @@\n-a\n+b\n",
@@ -53,9 +53,9 @@ def test_touched_paths_and_matrix(tmp_path, monkeypatch):
     write(tmp_path / "S00-baseline", id="S00", title="t", split="test", kind="baseline",
           commit_message="m")
     monkeypatch.setattr(sc, "SCENARIOS", tmp_path)
-    m = sc.matrix(sc.select("all"))
-    assert m["scan"] == ["S00", "S01", "S10"]
-    assert {d["id"] for d in m["dast"]} == {"S00", "S01"} and len(m["dast"]) == 10
+    assert [s.id for s in sc.select("all")] == ["S00", "S01", "S10"]
+    assert [s.id for s in sc.select("all") if s.touches_app()] == ["S01"]
+    assert sc.select("S10")[0].touched() == ["infra/k8s/d.yaml"]
     assert [s.id for s in sc.select("dev")] == ["S00", "S01", "S10"]
     assert [s.id for s in sc.select("S01, S01,S10")] == ["S01", "S10"]
     with pytest.raises(sc.ScenarioError):

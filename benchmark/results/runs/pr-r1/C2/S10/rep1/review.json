@@ -1,0 +1,55 @@
+{
+  "commit_id": "4d0daa373b4dd43cfe6ddbb54a5649992aea042f",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "infra/terraform/main.tf",
+      "line": 320,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — CKV2_AWS_6 (checkov)\nCWE-284\n\nPublic access block của bucket backups đặt block_public_policy=false và restrict_public_buckets=false, trong khi bucket policy cho Principal \"*\" s3:GetObject/ListBucket. Bucket chứa bản dump PostgreSQL (dữ liệu bệnh nhân, PII/PHI) nên bị công khai ra Internet. Khác với logs/imaging đều bật cả 4 cờ.\n\n**Đề xuất sửa:** Trong aws_s3_bucket_public_access_block.backups đặt block_public_policy = true và restrict_public_buckets = true (giống logs/imaging). Xóa statement RestoreDownload với principal \"*\" trong data.aws_iam_policy_document.backups; chỉ cấp quyền cho role IAM cụ thể của job backup/restore."
+    },
+    {
+      "path": "infra/terraform/main.tf",
+      "line": 324,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — CKV_AWS_54 (checkov)\nCWE-732\n\nBucket chứa bản dump PostgreSQL (dữ liệu bệnh nhân) có block_public_policy = false, và policy \"RestoreDownload\" cấp s3:GetObject/s3:ListBucket cho principal \"*\" không điều kiện. Bất kỳ ai trên internet đều liệt kê và tải được backup. Mã hóa AES256 không giúp vì S3 tự giải mã khi trả về.\n\n**Đề xuất sửa:** Trong aws_s3_bucket_public_access_block.backups đặt block_public_policy và restrict_public_buckets = true. Xóa statement RestoreDownload với principal \"*\" trong data.aws_iam_policy_document.backups; chỉ cấp s3:GetObject/ListBucket cho IAM role cụ thể của site standby. Giữ statement DenyInsecureTransport."
+    },
+    {
+      "path": "infra/terraform/main.tf",
+      "line": 324,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — CKV_AWS_56 (checkov)\nCWE-732\n\nrestrict_public_buckets = false cho phép policy công khai (Principal \"*\") có hiệu lực, nên bucket backup thực sự truy cập được từ internet.\n\n**Đề xuất sửa:** Đặt restrict_public_buckets = true (và block_public_policy = true) trong aws_s3_bucket_public_access_block.backups; cấp quyền restore qua IAM role cụ thể thay vì principal \"*\"."
+    },
+    {
+      "path": "infra/terraform/main.tf",
+      "line": 371,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — Bucket policy backups cho phép Principal \"*\" đọc/liệt kê dump DB\nCWE-732\n\nStatement RestoreDownload (Allow mặc định) cấp s3:GetObject và s3:ListBucket cho mọi principal (type \"*\", \"*\") trên bucket backups. Kết hợp với public access block đã tắt, bất kỳ ai không cần xác thực đều tải được bản dump PostgreSQL chứa dữ liệu bệnh nhân. Statement Deny chỉ ép HTTPS, không giới hạn người dùng.\n\n**Đề xuất sửa:** Xóa principal \"*\" khỏi statement RestoreDownload trong data.aws_iam_policy_document.backups; chỉ cho phép ARN role IAM cụ thể của site standby/job restore (và role của job backup), kèm bật đủ 4 cờ public access block."
+    },
+    {
+      "path": "infra/k8s/backup-cronjob.yaml",
+      "line": 3,
+      "side": "RIGHT",
+      "body": "**secagent · TP · MEDIUM** — CKV_K8S_23 (checkov)\nCWE-250\n\nPod CronJob chạy với runAsUser: 0 (root) ở mức pod, không có runAsNonRoot. Job sao lưu chỉ cần ghi vào /backup (emptyDir) nên không cần root.\n\n**Đề xuất sửa:** Trong infra/k8s/backup-cronjob.yaml, đặt runAsNonRoot: true và runAsUser/runAsGroup/fsGroup là UID cao không phải 0 (ví dụ 10001); đảm bảo image medicare-backup chạy được với user đó."
+    },
+    {
+      "path": "infra/k8s/backup-cronjob.yaml",
+      "line": 3,
+      "side": "RIGHT",
+      "body": "**secagent · TP · MEDIUM** — CKV_K8S_40 (checkov)\nCWE-250\n\nUID 0 được đặt tường minh, trái với yêu cầu UID cao (>=10000).\n\n**Đề xuất sửa:** Đổi runAsUser/runAsGroup/fsGroup sang UID/GID >= 10000 trong securityContext của pod, cùng runAsNonRoot: true."
+    },
+    {
+      "path": "infra/terraform/main.tf",
+      "line": 320,
+      "side": "RIGHT",
+      "body": "**secagent · TP · MEDIUM** — CKV_AWS_145 (checkov)\nCWE-311\n\nBucket backups chứa dump DB y tế nhưng dùng SSE-S3 (AES256) thay vì KMS key aws_kms_key.medicare đã có sẵn (\"Encrypts MediCare data at rest (RDS, S3, logs)\"), làm mất kiểm soát truy cập khóa riêng.\n\n**Đề xuất sửa:** Trong aws_s3_bucket_server_side_encryption_configuration.backups đặt sse_algorithm = \"aws:kms\" và kms_master_key_id = aws_kms_key.medicare.arn (có thể bật bucket_key_enabled)."
+    },
+    {
+      "path": "infra/k8s/backup-cronjob.yaml",
+      "line": 33,
+      "side": "RIGHT",
+      "body": "**secagent · TP · LOW** — Image CronJob backup dùng digest giả toàn số 0 và imagePullPolicy Always\nCWE-1104\n\nDigest placeholder toàn 0 không phải image thật được xác minh; job có quyền AWS và kết nối DB nên cần pin image đã ký. Ngoài ra bucket \"medicare-staging-db-backups\" bị hard-code, không theo môi trường.\n\n**Đề xuất sửa:** Thay digest bằng digest thật của image đã build và ký trong CI; tham số hóa tên bucket theo môi trường (ví dụ qua kustomize/overlay) thay vì hard-code staging."
+    }
+  ],
+  "body": "<!-- secagent-review:4d0daa373b4dd43cfe6ddbb54a5649992aea042f -->\nAI Security Agent nêu 8 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}

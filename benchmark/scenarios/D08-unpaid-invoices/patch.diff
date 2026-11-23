@@ -1,0 +1,296 @@
+diff --git a/app/medicare/billing/router.py b/app/medicare/billing/router.py
+index 8b9a485..481af00 100644
+--- a/app/medicare/billing/router.py
++++ b/app/medicare/billing/router.py
+@@ -1,3 +1,5 @@
++from datetime import date, datetime
++
+ from fastapi import APIRouter, Depends, Request
+ from fastapi.responses import RedirectResponse, Response
+ from sqlalchemy.orm import Session
+@@ -7,13 +9,14 @@ from medicare.billing import service
+ from medicare.common.auth import get_current_user, require_roles
+ from medicare.common.csrf import verify_csrf
+ from medicare.common.ids import ObjectId
+-from medicare.common.templating import flash, render
++from medicare.common.templating import VN_TZ, flash, render
+ from medicare.db import get_db
+ 
+ router = APIRouter()
+ 
+ receptionist_user = require_roles(Role.RECEPTIONIST)
+ invoice_reader = require_roles(Role.RECEPTIONIST, Role.ADMIN, Role.PATIENT)
++billing_staff = require_roles(Role.RECEPTIONIST, Role.ADMIN)
+ 
+ STATUS_LABELS = {"UNPAID": ("Chưa thanh toán", "warning"), "PAID": ("Đã thanh toán", "success")}
+ 
+@@ -43,11 +46,43 @@ def list_invoices(
+         "invoices": service.list_invoices(db, user),
+         "pending": service.pending_records(db) if is_reception else [],
+         "is_reception": is_reception,
++        "is_billing_staff": user.role in (Role.RECEPTIONIST, Role.ADMIN),
+         "status_labels": STATUS_LABELS,
+         "breadcrumbs": [("Trang chủ", "/"), ("Hóa đơn", None)],
+     })
+ 
+ 
++def _parse_day(value: str, default: date) -> date:
++    try:
++        day = date.fromisoformat(value.strip())
++    except ValueError:
++        return default
++    return day if date.min < day < date.max else default
++
++
++@router.get("/invoices/unpaid")
++def unpaid_invoices(
++    request: Request,
++    date_from: str = "",
++    date_to: str = "",
++    user: User = Depends(billing_staff),
++    db: Session = Depends(get_db),
++) -> Response:
++    today = datetime.now(VN_TZ).date()
++    first_day = _parse_day(date_from, today.replace(day=1))
++    last_day = _parse_day(date_to, today)
++    if first_day > last_day:
++        first_day, last_day = last_day, first_day
++    return render(request, "billing/unpaid.html", {
++        "report": service.unpaid_between(db, first_day, last_day),
++        "date_from": first_day,
++        "date_to": last_day,
++        "limit": service.UNPAID_LIMIT,
++        "breadcrumbs": [("Trang chủ", "/"), ("Hóa đơn", "/invoices"),
++                        ("Hóa đơn chưa thanh toán", None)],
++    })
++
++
+ @router.get("/invoices/{invoice_id}")
+ def invoice_detail(
+     request: Request,
+diff --git a/app/medicare/billing/service.py b/app/medicare/billing/service.py
+index d966fb7..5e80032 100644
+--- a/app/medicare/billing/service.py
++++ b/app/medicare/billing/service.py
+@@ -1,8 +1,10 @@
+ """Hospital fees and BHYT coverage, computed server-side only (R-04)."""
+ 
++from dataclasses import dataclass
++from datetime import date, datetime, time, timedelta
+ from decimal import ROUND_HALF_UP, Decimal
+ 
+-from sqlalchemy import select
++from sqlalchemy import func, select
+ from sqlalchemy.exc import IntegrityError
+ from sqlalchemy.orm import Session
+ 
+@@ -11,6 +13,7 @@ from medicare.auth.models import Role, User
+ from medicare.billing.models import Invoice, InvoiceStatus
+ from medicare.common import metrics
+ from medicare.common.errors import Conflict, NotFound
++from medicare.common.templating import VN_TZ
+ from medicare.patient.models import Patient
+ from medicare.prescription.service import list_for_record, prescription_total
+ from medicare.record.models import MedicalRecord
+@@ -19,6 +22,7 @@ from medicare.validators import coverage_rate
+ EXAM_FEE = Decimal(150000)
+ ALREADY_INVOICED = "Phiếu khám này đã có hóa đơn"
+ PENDING_LIMIT = 50
++UNPAID_LIMIT = 200
+ 
+ 
+ def compute_amounts(total: Decimal, rate: Decimal) -> tuple[Decimal, Decimal]:
+@@ -70,6 +74,40 @@ def list_invoices(db: Session, user: User) -> list[Invoice]:
+     return list(db.scalars(stmt).unique())
+ 
+ 
++@dataclass
++class UnpaidReport:
++    invoices: list[Invoice]
++    count: int
++    total_due: Decimal
++
++
++def unpaid_between(db: Session, first_day: date, last_day: date) -> UnpaidReport:
++    """Unpaid invoices issued from `first_day` to `last_day` inclusive (Vietnam time).
++
++    The count and the amount due cover the whole range; only the oldest UNPAID_LIMIT
++    invoices are listed.
++    """
++    start = datetime.combine(first_day, time.min, tzinfo=VN_TZ)
++    end = datetime.combine(last_day, time.min, tzinfo=VN_TZ) + timedelta(days=1)
++    conditions = (
++        Invoice.status == InvoiceStatus.UNPAID,
++        Invoice.created_at >= start,
++        Invoice.created_at < end,
++    )
++    count, total_due = db.execute(
++        select(func.count(Invoice.id), func.coalesce(func.sum(Invoice.patient_amount), 0))
++        .where(*conditions)
++    ).one()
++    stmt = (
++        select(Invoice)
++        .where(*conditions)
++        .order_by(Invoice.created_at, Invoice.id)
++        .limit(UNPAID_LIMIT)
++    )
++    return UnpaidReport(invoices=list(db.scalars(stmt).unique()), count=count,
++                        total_due=Decimal(total_due))
++
++
+ def pending_records(db: Session) -> list[MedicalRecord]:
+     """Visits not yet billed: administrative columns only are shown to reception."""
+     billed = select(Invoice.record_id)
+diff --git a/app/medicare/templates/billing/list.html b/app/medicare/templates/billing/list.html
+index 75f5811..e824bb3 100644
+--- a/app/medicare/templates/billing/list.html
++++ b/app/medicare/templates/billing/list.html
+@@ -1,7 +1,10 @@
+ {% extends "base.html" %}
+ {% block title %}Hóa đơn{% endblock %}
+ {% block content %}
+-<h1 class="h5 mb-3">Hóa đơn viện phí</h1>
++<div class="d-flex justify-content-between align-items-center mb-3">
++  <h1 class="h5 mb-0">Hóa đơn viện phí</h1>
++  {% if is_billing_staff %}<a class="btn btn-outline-primary btn-sm" href="/invoices/unpaid"><i class="bi bi-hourglass-split"></i> Hóa đơn chưa thanh toán</a>{% endif %}
++</div>
+ {% if is_reception %}
+ <div class="card mc-card mb-3">
+   <div class="card-header">Chờ lập hóa đơn</div>
+diff --git a/app/medicare/templates/billing/unpaid.html b/app/medicare/templates/billing/unpaid.html
+new file mode 100644
+index 0000000..8bf85a1
+--- /dev/null
++++ b/app/medicare/templates/billing/unpaid.html
+@@ -0,0 +1,41 @@
++{% extends "base.html" %}
++{% block title %}Hóa đơn chưa thanh toán{% endblock %}
++{% block content %}
++<h1 class="h5 mb-3">Hóa đơn chưa thanh toán</h1>
++<div class="card mc-card">
++  <div class="card-body pb-0">
++    <form class="row g-2 align-items-center mb-3" method="get" action="/invoices/unpaid">
++      <div class="col-auto"><label class="col-form-label col-form-label-sm" for="date_from">Từ ngày</label></div>
++      <div class="col-auto"><input class="form-control form-control-sm" type="date" id="date_from" name="date_from" value="{{ date_from.isoformat() }}"></div>
++      <div class="col-auto"><label class="col-form-label col-form-label-sm" for="date_to">đến ngày</label></div>
++      <div class="col-auto"><input class="form-control form-control-sm" type="date" id="date_to" name="date_to" value="{{ date_to.isoformat() }}"></div>
++      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-funnel"></i> Lọc</button></div>
++    </form>
++  </div>
++  <div class="table-responsive">
++    <table class="table table-sm table-hover align-middle mb-0">
++      <thead><tr><th>Số HĐ</th><th>Bệnh nhân</th><th>Ngày lập</th><th class="text-end">Tổng tiền</th><th class="text-end">BHYT chi trả</th><th class="text-end">Người bệnh trả</th></tr></thead>
++      <tbody>
++        {% for inv in report.invoices %}
++        <tr>
++          <td><a href="/invoices/{{ inv.id }}">#{{ inv.id }}</a></td>
++          <td>{{ inv.patient.code }} - {{ inv.patient.full_name }}</td>
++          <td>{{ inv.created_at | datetime_vn }}</td>
++          <td class="text-end">{{ inv.total_amount | vnd }}</td>
++          <td class="text-end">{{ inv.insurance_amount | vnd }}</td>
++          <td class="text-end">{{ inv.patient_amount | vnd }}</td>
++        </tr>
++        {% else %}
++        <tr><td colspan="6" class="text-center text-secondary py-3">Không có hóa đơn chưa thanh toán từ {{ date_from | date_vn }} đến {{ date_to | date_vn }}</td></tr>
++        {% endfor %}
++      </tbody>
++      <tfoot>
++        <tr><th colspan="5" class="text-end">Tổng người bệnh còn phải trả ({{ report.count }} hóa đơn)</th><th class="text-end">{{ report.total_due | vnd }}</th></tr>
++      </tfoot>
++    </table>
++  </div>
++  {% if report.count > report.invoices | length %}
++  <div class="card-footer small text-secondary">Đang hiển thị {{ limit }} hóa đơn cũ nhất; thu hẹp khoảng ngày để xem các hóa đơn còn lại.</div>
++  {% endif %}
++</div>
++{% endblock %}
+diff --git a/app/tests/test_billing.py b/app/tests/test_billing.py
+index 365b51c..6677bb9 100644
+--- a/app/tests/test_billing.py
++++ b/app/tests/test_billing.py
+@@ -1,4 +1,5 @@
+ import itertools
++from datetime import datetime
+ from decimal import Decimal
+ 
+ from sqlalchemy import select
+@@ -6,6 +7,7 @@ from sqlalchemy import select
+ from medicare.audit.models import AuditLog
+ from medicare.auth.models import Role
+ from medicare.billing.models import Invoice, InvoiceStatus
++from medicare.common.templating import VN_TZ
+ from medicare.prescription.models import Prescription, PrescriptionItem
+ from tests.conftest import csrf_token, login
+ from tests.factories import make_department, make_medicine, make_patient, make_record, make_user
+@@ -167,3 +169,71 @@ def test_patient_cannot_mark_paid(client, db):
+     login(client, make_user(db, Role.PATIENT, patient=me))
+     r = client.post(f"/invoices/{inv.id}/pay", data={"csrf_token": csrf_token(client, "/")})
+     assert r.status_code == 403
++
++
++def issued_invoice(db, issued_at, patient_amount, status=InvoiceStatus.UNPAID):
++    patient, record = visit(db, drug_cost=0)
++    inv = Invoice(record_id=record.id, patient_id=patient.id,
++                  created_by_id=make_user(db, Role.RECEPTIONIST).id,
++                  total_amount=Decimal(150000), coverage_rate=Decimal(0),
++                  insurance_amount=Decimal(150000) - patient_amount,
++                  patient_amount=patient_amount, status=status, created_at=issued_at)
++    db.add(inv)
++    db.flush()
++    return inv
++
++
++def vn_time(day, hour=9):
++    return datetime(2025, 3, day, hour, tzinfo=VN_TZ)
++
++
++def unpaid(client, **params):
++    return client.get("/invoices/unpaid", params=params)
++
++
++def test_unpaid_invoices_filtered_by_issue_date_with_total_due(client, db):
++    first = issued_invoice(db, vn_time(3), Decimal(30000))
++    late_evening = issued_invoice(db, vn_time(10, hour=23), Decimal(45000))
++    too_late = issued_invoice(db, vn_time(11, hour=0), Decimal(70000))
++    paid = issued_invoice(db, vn_time(5), Decimal(90000), status=InvoiceStatus.PAID)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    r = unpaid(client, date_from="2025-03-01", date_to="2025-03-10")
++    assert r.status_code == 200
++    assert f"/invoices/{first.id}" in r.text and f"/invoices/{late_evening.id}" in r.text
++    assert f"/invoices/{too_late.id}" not in r.text and f"/invoices/{paid.id}" not in r.text
++    assert "(2 hóa đơn)" in r.text and "75.000 ₫" in r.text
++
++
++def test_unpaid_reversed_range_is_swapped(client, db):
++    inv = issued_invoice(db, vn_time(4), Decimal(20000))
++    login(client, make_user(db, Role.ADMIN))
++    html = unpaid(client, date_from="2025-03-31", date_to="2025-03-01").text
++    assert f"/invoices/{inv.id}" in html and 'value="2025-03-01"' in html
++
++
++def test_unpaid_accepts_out_of_range_dates(client, db):
++    inv = issued_invoice(db, vn_time(4), Decimal(20000))
++    login(client, make_user(db, Role.RECEPTIONIST))
++    r = unpaid(client, date_from="0001-01-02", date_to="9999-12-30")
++    assert r.status_code == 200 and f"/invoices/{inv.id}" in r.text
++    for value in ("0001-01-01", "9999-12-31", "99999-01-01", "03/2025", ""):
++        assert unpaid(client, date_from=value, date_to=value).status_code == 200
++
++
++def test_unpaid_page_for_billing_staff_only(client, db):
++    me, _ = visit(db, drug_cost=0)
++    for user in (make_user(db, Role.DOCTOR), make_user(db, Role.PATIENT, patient=me),
++                 make_user(db, Role.NURSE, department=make_department(db, "KX"))):
++        client.cookies.clear()
++        login(client, user)
++        assert unpaid(client).status_code == 403
++    assert 'href="/invoices/unpaid"' not in client.get("/").text
++
++
++def test_unpaid_page_linked_from_invoice_list(client, db):
++    me, _ = visit(db, drug_cost=0)
++    login(client, make_user(db, Role.RECEPTIONIST))
++    assert 'href="/invoices/unpaid"' in client.get("/invoices").text
++    client.cookies.clear()
++    login(client, make_user(db, Role.PATIENT, patient=me))
++    assert 'href="/invoices/unpaid"' not in client.get("/invoices").text

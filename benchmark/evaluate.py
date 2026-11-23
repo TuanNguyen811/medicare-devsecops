@@ -1,17 +1,18 @@
-"""Score the benchmark (spec 5.3, addendum 8.3-8.4) and write the result tables.
+"""Score the benchmark (spec 5.3, addendum 8.4) and write the result tables.
 
     uv run --project agent --with pyyaml==6.0.2 python benchmark/evaluate.py \\
-        --scan <run> [--baseline-run <run holding S00>] --select test \\
-        --configs C2,C3,C4,C5 --out benchmark/results/summary/test
+        --scan pr-<tag> --select test --out benchmark/results/summary/pr-<tag>-test
 
+Data comes from benchmark/pr_bench.py (results/scans/pr-<tag>/ and results/runs/pr-<tag>/C2/).
 Units and matching (addendum 8.4):
-- C1 and C1+DAST predict every cluster of scanner findings the quality gate considers
-  (clusters.json from run.py fetch). An agent run predicts each report entry whose verdict is
-  TP. NEEDS_REVIEW is never a detection: the strict view counts it as an FP, the lenient view
-  ignores it (spec 5.3).
+- C1 (the scanners) and C1+DAST (with ZAP) predict every cluster of scanner findings the
+  quality gate considers (clusters.json). An agent run (C2) predicts each report entry whose
+  verdict is TP. NEEDS_REVIEW is never a detection: the strict view counts it as an FP, the
+  lenient view ignores it (spec 5.3).
 - A prediction matches a ground-truth vulnerability when one of its locations is in the same
   file with lines within +-3 of the vulnerable range (or of one of the truth's `also` ranges:
-  other places where the same bug can be pinned, e.g. source and sink; still one bug) and in the same CWE family (or names one
+  other places where the same bug can be pinned, e.g. source and sink; still one bug) and in
+  the same CWE family (or names one
   of its scanner `rules`, or, for an agent finding, one of the business rules R-xx the bug
   violates: the CWE of a logic bug is a matter of judgement, the broken rules are listed in
   the ground truth); a DAST prediction matches on route (`METHOD /template`) and family.
@@ -41,7 +42,8 @@ from types import SimpleNamespace
 
 import scenario as sc
 import yaml
-from run import RESULTS, _load_gate
+from common import RESULTS
+from common import load_gate as _load_gate
 from secagent.context.sarif import cwe_group
 
 SCAN_VIEWS = ("C1", "C1+DAST")
@@ -248,6 +250,8 @@ def collect(scan: Path, baseline: Path, scenarios: list[sc.Scenario], configs: l
     runs = {c: RESULTS / "runs" / scan.name / c for c in configs}
     reps = {c: sorted({int(d.name[3:]) for d in runs[c].glob("*/rep*")}) for c in configs}
     for s in scenarios:
+        if not (scan / s.id / "clusters.json").is_file():
+            raise EvaluateError(f"{s.id}: no collected scan in {scan}")
         views = _read(scan / s.id / "clusters.json")
         gate_view = _read(scan / s.id / "gate.json")
         for view in SCAN_VIEWS:
@@ -463,10 +467,10 @@ def main(argv: list[str] | None = None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--scan", required=True, help="fetched scan run id")
-    ap.add_argument("--baseline-run", help="scan run holding S00 (default: --scan)")
+    ap.add_argument("--scan", required=True, help="results folder, e.g. pr-<tag>")
+    ap.add_argument("--baseline-run", help="results folder holding S00 (default: --scan)")
     ap.add_argument("--select", default="test")
-    ap.add_argument("--configs", default="C2,C3,C4,C5")
+    ap.add_argument("--configs", default="C2")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     scan = RESULTS / "scans" / args.scan

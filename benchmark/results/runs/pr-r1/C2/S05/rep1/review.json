@@ -1,0 +1,19 @@
+{
+  "commit_id": "c4c7b258d84c8a241796696212547ede07a77e34",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "app/medicare/record/printing.py",
+      "line": 97,
+      "side": "RIGHT",
+      "body": "**secagent · TP · CRITICAL** — Server-Side Template Injection: bác sĩ tự viết template Jinja2 chạy trên Environment không sandbox\nCWE-1336\n\nNội dung mẫu do bác sĩ nhập (body: Form) được lưu rồi biên dịch bằng `_env.from_string(body)` với `Environment(autoescape=True)` thông thường (không phải SandboxedEnvironment). validate() chỉ kiểm tra cú pháp và độ dài. Jinja2 cho phép truy cập thuộc tính dunder (ví dụ `{{ patient.__class__.__init__.__globals__ }}` hay `cycler.__init__.__globals__.os.popen(...)`), nên tài khoản bác sĩ (hoặc phiên bị chiếm) có thể thực thi mã tùy ý trên server, đọc secret, DB, toàn bộ dữ liệu bệnh án.\n\n**Đề xuất sửa:** Trong app/medicare/record/printing.py dùng jinja2.sandbox.SandboxedEnvironment (hoặc ImmutableSandboxedEnvironment) với autoescape=True cho cả validate() và render_slip(); chỉ truyền dict/giá trị thuần như _context hiện có. Cân nhắc thay Jinja bằng cơ chế thay thế biến đơn giản (whitelist placeholder) và bắt lỗi SecurityError/runtime khi render để không trả 500."
+    },
+    {
+      "path": "app/medicare/templates/record/slip.html",
+      "line": 17,
+      "side": "RIGHT",
+      "body": "**secagent · TP · HIGH** — security.semgrep.medicare.jinja-safe-filter (semgrep)\nCWE-79\n\n`{{ slip | safe }}` chèn HTML do template của bác sĩ sinh ra; template là HTML tự do (kể cả <script>) do người dùng nhập và không được làm sạch, nên XSS lưu trữ thực sự (script chạy trong origin của ứng dụng, có thể dùng cho trang in mà bệnh nhân khác cũng mở nếu mẫu được dùng chung/bị mở rộng). Ngoài ra nó đi cùng lỗi SSTI.\n\n**Đề xuất sửa:** Không dùng |safe trên HTML do người dùng soạn: làm sạch đầu ra bằng allowlist (ví dụ bleach/nh3 chỉ cho thẻ và style an toàn) trước khi render, hoặc chỉ cho sửa các trường văn bản/escape toàn bộ; thêm CSP chặn script inline cho route /records/{id}/print."
+    }
+  ],
+  "body": "<!-- secagent-review:c4c7b258d84c8a241796696212547ede07a77e34 -->\nAI Security Agent nêu 2 lỗi tại dòng code của PR này; xem cách sửa trong từng comment."
+}
