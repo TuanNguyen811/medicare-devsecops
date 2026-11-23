@@ -276,7 +276,7 @@ Phiên bản ZAP ghim bằng digest image trong `security/tool-versions.env` (`Z
 
 ### 4.2 Định dạng SARIF của DAST
 
-- Tên công cụ (tên file) là `zap`, nằm trong danh sách `<tool>` của Hợp đồng 2 (`docs/superpowers/plans/2026-11-07-00-roadmap.md`).
+- Tên công cụ (tên file) là `zap`, nằm trong danh sách `<tool>` của Hợp đồng 2 (`docs/plans/2026-11-07-00-roadmap.md`).
 - `ruleId` = pluginId của ZAP. Mức độ ghi vào `properties.security-severity` để gate đọc như các công cụ khác: risk High → 8.0, Medium → 5.0, Low → 2.0, lấy mức cao nhất mà bất kỳ vai trò nào thấy. Cảnh báo Informational bị bỏ.
 - Vị trí: `artifactLocation.uri = "dast:<METHOD> <đường dẫn mẫu>"`, ví dụ `dast:GET /patients/search`, `startLine` để trống. Finding id = `zap:<pluginId>:dast:<METHOD> <đường dẫn mẫu>:0`.
 - `properties`: `cwe`, `roles` (các vai trò thấy lỗi), `evidence`, `param`.
@@ -338,7 +338,7 @@ Agent dùng mô hình **review một lượt**: chỉ có một phiên Agent duy
 }
 ```
 
-`report.json` gồm danh sách kết luận như trên (cộng `finding_ids` của cụm) và `meta` (chế độ LLM, model thật, số lượt gọi, token, thời gian, chi phí quy đổi). Lược đồ đầy đủ là Hợp đồng 3 trong `docs/superpowers/plans/2026-11-07-00-roadmap.md`.
+`report.json` gồm danh sách kết luận như trên (cộng `finding_ids` của cụm) và `meta` (chế độ LLM, model thật, số lượt gọi, token, thời gian, chi phí quy đổi). Lược đồ đầy đủ là Hợp đồng 3 trong `docs/plans/2026-11-07-00-roadmap.md`.
 
 ### 5.4 Chế độ chạy và cấu hình
 
@@ -671,4 +671,4 @@ Precision, Recall, F1 (chặt và lỏng) · Recall theo nhóm pattern/logic và
 | E5 | Quy tắc R-16–R-19 và tag `v0.3-baseline`; chế độ `claude-mcp` và chuyển report lên PR; benchmark 35 PR thật và kết quả | `plans/2026-11-22-E5-benchmark.md` | #12, #13, #19, #21, #26, #40, #46, #82 |
 | E6 | Tài liệu, PR trưng bày `[Demo 1]`–`[Demo 5]`, báo cáo đồ án | — | #20, #22–#25 (để mở) |
 
-Lộ trình và các hợp đồng giao tiếp giữa các phần: `docs/superpowers/plans/2026-11-07-00-roadmap.md`. PR sửa `.github/`, `security/` hoặc `agent/` cần label `security-reviewed` của người review trước khi merge.
+Lộ trình và các hợp đồng giao tiếp giữa các phần: `docs/plans/2026-11-07-00-roadmap.md`. PR sửa `.github/`, `security/` hoặc `agent/` cần label `security-reviewed` của người review trước khi merge.

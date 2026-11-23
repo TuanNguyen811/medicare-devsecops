@@ -1,7 +1,5 @@
 # Kế hoạch B: Pipeline DevSecOps (GitHub Actions + công cụ quét + quality gate)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Xây pipeline DevSecOps "truyền thống" trên GitHub Actions cho repo `medicare-devsecops`:
 - Mỗi PR chạy SAST (Semgrep, CodeQL, Bandit), SCA (Trivy), Secret Scan (Gitleaks), IaC Scan (Checkov + zizmor), xuất SARIF và quyết định chặn hay cho qua bằng quality gate.
 - Mỗi lần merge vào `main` thì quét toàn bộ, quét Docker image, tạo SBOM, đẩy image lên GHCR và chạy staging tạm thời.
@@ -14,9 +12,9 @@
 
 **Tech Stack:** GitHub Actions, Semgrep, CodeQL (`github/codeql-action`), Bandit, Trivy, Gitleaks, Checkov, zizmor, actionlint, pre-commit, Terraform (chỉ để quét), Kubernetes manifest (chỉ để quét), Docker/GHCR. Python 3.12 + pytest cho gate.
 
-**Spec:** `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md` (mục 1, 3). Hợp đồng giao tiếp: `docs/superpowers/plans/2026-11-07-00-roadmap.md` (Hợp đồng 2: SARIF, `report.json`, finding id, quy tắc gate).
+**Spec:** `docs/specs/2026-11-07-devsecops-ai-agent-design.md` (mục 1, 3). Hợp đồng giao tiếp: `docs/plans/2026-11-07-00-roadmap.md` (Hợp đồng 2: SARIF, `report.json`, finding id, quy tắc gate).
 
-> **Trạng thái:** đã thực hiện xong (PR #3; tag `v0.2-baseline`). Các giai đoạn sau mở rộng pipeline này: C thêm job Agent và chế độ gate `ai-assisted`; E2 thêm DAST (job `dast-zap`, `dast`, gate bắt buộc `dast` thành công) và nới mục tiêu thời gian lên ≤ 15 phút; E3 thêm bước cosign ký image vào job `image` của `main-ci`. Pipeline hiện hành: `docs/pipeline.md`; thiết kế: `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md`.
+> **Trạng thái:** đã thực hiện xong (PR #3; tag `v0.2-baseline`). Các giai đoạn sau mở rộng pipeline này: C thêm job Agent và chế độ gate `ai-assisted`; E2 thêm DAST (job `dast-zap`, `dast`, gate bắt buộc `dast` thành công) và nới mục tiêu thời gian lên ≤ 15 phút; E3 thêm bước cosign ký image vào job `image` của `main-ci`. Pipeline hiện hành: `docs/pipeline.md`; thiết kế: `docs/specs/2026-11-07-devsecops-ai-agent-design.md`.
 
 ## Global Constraints
 

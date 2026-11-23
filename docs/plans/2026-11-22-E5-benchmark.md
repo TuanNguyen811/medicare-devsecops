@@ -1,7 +1,5 @@
 # Giai đoạn 5: Benchmark Implementation Plan
 
-> **For agentic workers:** Native (Claude tự làm, review toàn nhánh bằng Opus ở cuối mỗi PR). Steps use checkbox (`- [ ]`) syntax.
-
 **Goal:** đo bằng số liệu xem AI agent bổ sung được gì so với chỉ dùng công cụ quét, để trả lời RQ1–RQ3 của spec (mục 8.1).
 
 **Architecture:**
@@ -11,7 +9,7 @@
 
 **Tech Stack:** GitHub Actions (CodeQL, Semgrep, Bandit, Trivy, Gitleaks, Checkov, zizmor, ZAP); Claude Code CLI 2.1.330 (`claude-sonnet-5-5`); `gh` CLI; Python 3.12 thư viện chuẩn, pydantic (đã có trong `agent/`) và PyYAML.
 
-**Spec:** `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md` mục 8 (RQ 8.1, chấm điểm 8.6, chống thiên vị 8.8) và mục 9 (hạn chế).
+**Spec:** `docs/specs/2026-11-07-devsecops-ai-agent-design.md` mục 8 (RQ 8.1, chấm điểm 8.6, chống thiên vị 8.8) và mục 9 (hạn chế).
 
 ## Global Constraints
 

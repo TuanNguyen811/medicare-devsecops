@@ -6,7 +6,7 @@ Agent tự xây dựng bằng Function Calling, dùng để review bảo mật P
 2. **Săn thêm** lỗ hổng mà công cụ quét bỏ sót trong phần code PR thay đổi: phân quyền, IDOR, fail-open, vi phạm quy tắc R-01..R-19.
 3. **Đề xuất cách sửa** bằng lời cho mỗi lỗi thật. Agent chỉ đọc, không sinh code: lập trình viên đọc báo cáo và tự sửa, quality gate chặn merge tới khi lỗi được xử lý.
 
-Thiết kế nằm ở spec mục 5 (`docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md`). Giao diện với pipeline là Hợp đồng 2 (`docs/superpowers/plans/2026-11-07-00-roadmap.md`).
+Thiết kế nằm ở spec mục 5 (`docs/specs/2026-11-07-devsecops-ai-agent-design.md`). Giao diện với pipeline là Hợp đồng 2 (`docs/plans/2026-11-07-00-roadmap.md`).
 
 ## Cài đặt và chạy thử trên máy
 

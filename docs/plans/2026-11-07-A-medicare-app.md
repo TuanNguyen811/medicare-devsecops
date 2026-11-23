@@ -1,16 +1,14 @@
 # Kế hoạch A: Ứng dụng MediCare HMS (bản sạch)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Xây dựng hệ thống quản lý bệnh viện MediCare HMS: viết đúng chuẩn bảo mật, có kiểm thử phân quyền, chạy được bằng `docker compose`. Đây là ứng dụng mục tiêu cho pipeline DevSecOps và AI Agent.
 
 **Architecture:** FastAPI render HTML bằng Jinja2, cộng một vài API JSON chỉ đọc dưới `/api/v1`. SQLAlchemy 2 (đồng bộ) trên PostgreSQL, migration bằng Alembic. Xác thực bằng session cookie có ký (Starlette `SessionMiddleware`) và CSRF token. Phân quyền theo vai trò ở route (`require_roles`), phân quyền theo đối tượng tập trung ở `medicare/policy.py`. Code chia theo module tính năng.
 
 **Tech Stack:** Python 3.12, uv, FastAPI, Jinja2, SQLAlchemy 2, psycopg 3, Alembic, argon2-cffi, pydantic-settings, Faker; pytest, httpx, testcontainers[postgres], ruff.
 
-**Spec:** `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md` (mục 2). Hợp đồng giao tiếp: `docs/superpowers/plans/2026-11-07-00-roadmap.md` (Hợp đồng 1).
+**Spec:** `docs/specs/2026-11-07-devsecops-ai-agent-design.md` (mục 2). Hợp đồng giao tiếp: `docs/plans/2026-11-07-00-roadmap.md` (Hợp đồng 1).
 
-> **Trạng thái:** đã thực hiện xong (PR #1, #2; tag `v0.1-baseline`). Giai đoạn E4 thêm metrics Prometheus vào app; giai đoạn E5 thêm quy tắc R-16–R-19 (tag `v0.3-baseline`). Thiết kế hiện hành: `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md`.
+> **Trạng thái:** đã thực hiện xong (PR #1, #2; tag `v0.1-baseline`). Giai đoạn E4 thêm metrics Prometheus vào app; giai đoạn E5 thêm quy tắc R-16–R-19 (tag `v0.3-baseline`). Thiết kế hiện hành: `docs/specs/2026-11-07-devsecops-ai-agent-design.md`.
 
 ## Global Constraints
 

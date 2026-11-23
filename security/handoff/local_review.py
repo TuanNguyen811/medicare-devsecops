@@ -198,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--hide", action="append", default=[], metavar="DIR",
                     help="leave DIR (or a file) out of the checkout the agent reads. For a "
                          "benchmark scenario opened as a PR, hide the answer key: benchmark, "
-                         "docs/benchmark-results.md and docs/superpowers")
+                         "docs/benchmark-results.md, docs/specs and docs/plans")
     ap.add_argument("--benchmark-view", action="store_true",
                     help="for a benchmark scenario opened as a PR: show the agent exactly what "
                          "the benchmark showed it (see benchmark_view); needs PyYAML")

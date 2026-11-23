@@ -1,7 +1,5 @@
 # Giai đoạn 3: Ký image và deploy về Kubernetes trên máy Implementation Plan
 
-> **For agentic workers:** Native (Claude tự làm, review toàn nhánh ở cuối). Steps use checkbox (`- [ ]`) syntax.
-
 **Goal:**
 - `main-ci` ký image keyless bằng cosign và gắn SBOM CycloneDX attestation.
 - `deploy/pull-deploy.sh` kéo bản `main` mới nhất về cụm Kubernetes của Docker Desktop: kiểm tra chữ ký, apply, smoke test, lỗi thì rollback; với cờ `--dast` thì ZAP quét bản vừa deploy.
@@ -16,9 +14,9 @@
 
 **Tech Stack:** cosign v3.1.4, Kyverno v1.20.0 (`ImageValidatingPolicy`, `policies.kyverno.io/v1`, vì bản 1.20 chặn tạo policy kiểu cũ), kustomize (`kubectl -k`), Docker Desktop Kubernetes (kind, 1 node).
 
-**Spec:** `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md` mục 6.
+**Spec:** `docs/specs/2026-11-07-devsecops-ai-agent-design.md` mục 6.
 
-> **Trạng thái:** đã thực hiện xong (PR #10). Cách dùng hiện hành: `deploy/README.md`; thiết kế: `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md` mục 6.
+> **Trạng thái:** đã thực hiện xong (PR #10). Cách dùng hiện hành: `deploy/README.md`; thiết kế: `docs/specs/2026-11-07-devsecops-ai-agent-design.md` mục 6.
 
 ## Global Constraints
 

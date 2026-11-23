@@ -1,6 +1,6 @@
 # Kết quả benchmark: AI Security Agent trên 35 Pull Request thật
 
-Tài liệu này báo cáo kết quả đo AI Security Agent (`secagent`) trong pipeline DevSecOps của MediCare HMS. Mỗi kịch bản là một Pull Request thật trên GitHub, đi qua pipeline thật và quality gate thật. Thiết kế benchmark nằm ở [spec mục 8](superpowers/specs/2026-11-07-devsecops-ai-agent-design.md). Bảng số liệu do `benchmark/evaluate.py` sinh ra nằm ở [`benchmark/results/summary/pr-r1-test/results.md`](../benchmark/results/summary/pr-r1-test/results.md) (tập test) và [`pr-r1-dev/results.md`](../benchmark/results/summary/pr-r1-dev/results.md) (tập dev).
+Tài liệu này báo cáo kết quả đo AI Security Agent (`secagent`) trong pipeline DevSecOps của MediCare HMS. Mỗi kịch bản là một Pull Request thật trên GitHub, đi qua pipeline thật và quality gate thật. Thiết kế benchmark nằm ở [spec mục 8](specs/2026-11-07-devsecops-ai-agent-design.md). Bảng số liệu do `benchmark/evaluate.py` sinh ra nằm ở [`benchmark/results/summary/pr-r1-test/results.md`](../benchmark/results/summary/pr-r1-test/results.md) (tập test) và [`pr-r1-dev/results.md`](../benchmark/results/summary/pr-r1-dev/results.md) (tập dev).
 
 ## Tóm tắt
 

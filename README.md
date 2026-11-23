@@ -311,7 +311,7 @@ và precision từ 0,43 lên 0,84
 
 ## Tài liệu thiết kế
 
-- Thiết kế (toàn bộ dự án): [`docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md`](docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md)
+- Thiết kế (toàn bộ dự án): [`docs/specs/2026-11-07-devsecops-ai-agent-design.md`](docs/specs/2026-11-07-devsecops-ai-agent-design.md)
 
 ## Cho lập trình viên
 
