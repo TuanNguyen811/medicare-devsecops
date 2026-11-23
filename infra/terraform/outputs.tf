@@ -7,3 +7,8 @@ output "imaging_bucket" {
   description = "Bucket storing medical imaging files"
   value       = aws_s3_bucket.imaging.bucket
 }
+
+output "backup_bucket" {
+  description = "Bucket receiving the nightly PostgreSQL dumps"
+  value       = aws_s3_bucket.backups.bucket
+}

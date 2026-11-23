@@ -1,0 +1,60 @@
+# Nightly PostgreSQL dump to the S3 bucket "medicare-<env>-db-backups" (infra/terraform).
+# Connection settings and AWS credentials come from the Secret "medicare-backup", mounted as files.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: medicare-db-backup
+  namespace: medicare
+  labels:
+    app: medicare-backup
+spec:
+  schedule: "30 18 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: medicare-backup
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            fsGroup: 0
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              image: ghcr.io/tuannguyen811/medicare-backup@sha256:0000000000000000000000000000000000000000000000000000000000000000
+              imagePullPolicy: Always
+              args: ["--bucket", "medicare-staging-db-backups", "--keep-days", "35"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              volumeMounts:
+                - name: work
+                  mountPath: /backup
+                - name: credentials
+                  mountPath: /run/secrets/backup
+                  readOnly: true
+          volumes:
+            - name: work
+              emptyDir:
+                sizeLimit: 2Gi
+            - name: credentials
+              secret:
+                secretName: medicare-backup
