@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+from medicare.announcement.router import router as announcement_router
 from medicare.appointment.router import router as appointment_router
 from medicare.audit.router import router as audit_router
 from medicare.auth.admin_router import router as admin_router
@@ -67,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(billing_router)
     app.include_router(admin_router)
     app.include_router(audit_router)
+    app.include_router(announcement_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:
