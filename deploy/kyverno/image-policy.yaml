@@ -1,4 +1,4 @@
-# Admission control for the local cluster (spec addendum 6.2). In namespace medicare:
+# Admission control for the local cluster (spec 6.2). In namespace medicare:
 #   - allowlist: every image of a pod (containers, init and ephemeral containers) is either a
 #     MediCare image referenced by digest, or exactly the pinned PostgreSQL image. Anything else
 #     is denied, including alternate spellings of the registry (ghcr.io:443/..., upper case);

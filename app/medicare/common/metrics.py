@@ -1,4 +1,4 @@
-"""Prometheus metrics (spec addendum 7.1), served on a separate port, never on the app port.
+"""Prometheus metrics (spec 7.1), served on a separate port, never on the app port.
 
 Labels never carry PII (R-10): routes are path templates, user ids are internal numbers.
 """

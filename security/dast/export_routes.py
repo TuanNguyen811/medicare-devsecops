@@ -1,4 +1,4 @@
-"""Export the app's OpenAPI document and a route → handler map for DAST (spec addendum 5.1).
+"""Export the app's OpenAPI document and a route → handler map for DAST (spec 4.1).
 
 The live app keeps /openapi.json disabled; this builds the same schema in-process instead.
 Run with the app's environment (inside the app container in CI):

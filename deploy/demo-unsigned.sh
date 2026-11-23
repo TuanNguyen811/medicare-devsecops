@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Demo: the cluster refuses a MediCare image that main-ci did not sign on main (spec addendum 6.4).
+# Demo: the cluster refuses a MediCare image that main-ci did not sign on main (spec 6.4).
 #
 #   bash deploy/demo-unsigned.sh [image@sha256:...]
 #

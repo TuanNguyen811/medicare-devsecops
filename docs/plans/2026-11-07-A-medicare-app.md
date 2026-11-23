@@ -1,14 +1,14 @@
 # Kế hoạch A: Ứng dụng MediCare HMS (bản sạch)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Xây dựng hệ thống quản lý bệnh viện MediCare HMS: viết đúng chuẩn bảo mật, có kiểm thử phân quyền, chạy được bằng `docker compose`. Đây là ứng dụng mục tiêu cho pipeline DevSecOps và AI Agent.
 
 **Architecture:** FastAPI render HTML bằng Jinja2, cộng một vài API JSON chỉ đọc dưới `/api/v1`. SQLAlchemy 2 (đồng bộ) trên PostgreSQL, migration bằng Alembic. Xác thực bằng session cookie có ký (Starlette `SessionMiddleware`) và CSRF token. Phân quyền theo vai trò ở route (`require_roles`), phân quyền theo đối tượng tập trung ở `medicare/policy.py`. Code chia theo module tính năng.
 
 **Tech Stack:** Python 3.12, uv, FastAPI, Jinja2, SQLAlchemy 2, psycopg 3, Alembic, argon2-cffi, pydantic-settings, Faker; pytest, httpx, testcontainers[postgres], ruff.
 
-**Spec:** `docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md` (mục 2). Hợp đồng giao tiếp: `docs/superpowers/plans/2026-11-07-00-roadmap.md` (Hợp đồng 1).
+**Spec:** `docs/specs/2026-11-07-devsecops-ai-agent-design.md` (mục 2). Hợp đồng giao tiếp: `docs/plans/2026-11-07-00-roadmap.md` (Hợp đồng 1).
+
+> **Trạng thái:** đã thực hiện xong (PR #1, #2; tag `v0.1-baseline`). Giai đoạn E4 thêm metrics Prometheus vào app; giai đoạn E5 thêm quy tắc R-16–R-19 (tag `v0.3-baseline`). Thiết kế hiện hành: `docs/specs/2026-11-07-devsecops-ai-agent-design.md`.
 
 ## Global Constraints
 
@@ -112,11 +112,11 @@ docs/security-requirements.md
 **Interfaces:**
 - Produces: `Settings` (pydantic-settings, đọc biến môi trường không có tiền tố): `env: Literal["development","test","production"] = "development"`, `database_url: str`, `secret_key: SecretStr` (bắt buộc, `min_length=32`), `session_max_age: int = 28800`. Hàm `create_app(settings: Settings | None = None) -> FastAPI`, với `settings=None` thì đọc `Settings()`. Gắn `app.state.settings`.
 
-- [ ] **Step 1: Khởi tạo project**
+- [x] **Step 1: Khởi tạo project**
 
 `uv init --app --name medicare app`, sau đó `uv add fastapi "uvicorn[standard]" jinja2 python-multipart itsdangerous "sqlalchemy>=2" "psycopg[binary]" alembic argon2-cffi pydantic-settings faker` và `uv add --dev pytest httpx "testcontainers[postgres]" ruff`. Trong `pyproject.toml`: `requires-python = ">=3.12,<3.13"`, `[tool.pytest.ini_options] testpaths=["tests"]`, `[tool.ruff] line-length = 100`.
 
-- [ ] **Step 2: Viết test thất bại** trong `app/tests/test_health.py`
+- [x] **Step 2: Viết test thất bại** trong `app/tests/test_health.py`
 
 ```python
 from fastapi.testclient import TestClient
@@ -143,10 +143,10 @@ def test_secret_key_min_length():
         Settings(database_url="postgresql+psycopg://u:p@h/db", secret_key="short")
 ```
 
-- [ ] **Step 3: Chạy** `uv run pytest tests/test_health.py -v`. Kỳ vọng: FAIL (`ModuleNotFoundError: medicare.config`).
-- [ ] **Step 4: Cài đặt** `Settings` và `create_app` có route `GET /health` → `{"status": "ok"}`. `.env.example` gồm `SECRET_KEY=change-me-change-me-change-me-32ch`, `DATABASE_URL=postgresql+psycopg://medicare:change-me@db:5432/medicare`, `ENV=development`, `DEMO_PASSWORD=change-me`.
-- [ ] **Step 5: Chạy** `uv run pytest -v && uv run ruff check`. Kỳ vọng: 3 passed, ruff không báo lỗi.
-- [ ] **Step 6: Commit** `feat(app): khung FastAPI, cấu hình và /health`
+- [x] **Step 3: Chạy** `uv run pytest tests/test_health.py -v`. Kỳ vọng: FAIL (`ModuleNotFoundError: medicare.config`).
+- [x] **Step 4: Cài đặt** `Settings` và `create_app` có route `GET /health` → `{"status": "ok"}`. `.env.example` gồm `SECRET_KEY=change-me-change-me-change-me-32ch`, `DATABASE_URL=postgresql+psycopg://medicare:change-me@db:5432/medicare`, `ENV=development`, `DEMO_PASSWORD=change-me`.
+- [x] **Step 5: Chạy** `uv run pytest -v && uv run ruff check`. Kỳ vọng: 3 passed, ruff không báo lỗi.
+- [x] **Step 6: Commit** `feat(app): khung FastAPI, cấu hình và /health`
 
 ---
 
@@ -169,7 +169,7 @@ def test_secret_key_min_length():
   - `tests/factories.py`: `TEST_PASSWORD = "Passw0rd!"`. Các hàm `make_department(db, code="NOI") -> Department`, `make_user(db, role: Role, *, department=None, patient=None, username=None) -> User`, `make_patient(db, *, department=None, attending=None, insurance_number="DN4010123456789") -> Patient`, `make_record(db, patient, doctor) -> MedicalRecord`, `make_medicine(db, price=10000) -> Medicine`. Mỗi hàm `flush()` rồi trả về đối tượng, tự sinh giá trị unique nếu không truyền.
   - `tests/conftest.py`: fixture `db` (Session trong transaction, tự rollback sau mỗi test), `app` (`create_app` với `env="test"`, override `get_db` trả về `db`), `client` (`TestClient(app, raise_server_exceptions=False)`), và helper `csrf_token(client, path="/login") -> str`, `login(client, user) -> None`.
 
-- [ ] **Step 1: Viết test thất bại** `app/tests/test_models.py`
+- [x] **Step 1: Viết test thất bại** `app/tests/test_models.py`
 
 ```python
 from sqlalchemy.exc import IntegrityError
@@ -200,9 +200,9 @@ def test_active_slot_unique_but_cancelled_allows_rebook(db):
 
 (import `text` từ `sqlalchemy`.)
 
-- [ ] **Step 2: Chạy** `uv run pytest tests/test_models.py -v`. Kỳ vọng: FAIL (thiếu module).
-- [ ] **Step 3: Cài đặt** `db.py`, các model, `alembic.ini` và `migrations/env.py` (đọc URL từ `config.get_main_option("sqlalchemy.url")`, nếu trống thì đọc biến môi trường `DATABASE_URL`; `target_metadata = Base.metadata`, import mọi module models). Tạo `0001_initial.py` bằng `alembic revision --autogenerate` rồi **tự thêm** partial index (`postgresql_where=text("status <> 'CANCELLED'")`) nếu autogenerate bỏ sót.
-- [ ] **Step 4: Cài đặt** `conftest.py`. Đây là phần hạ tầng mà test không tự quyết định được:
+- [x] **Step 2: Chạy** `uv run pytest tests/test_models.py -v`. Kỳ vọng: FAIL (thiếu module).
+- [x] **Step 3: Cài đặt** `db.py`, các model, `alembic.ini` và `migrations/env.py` (đọc URL từ `config.get_main_option("sqlalchemy.url")`, nếu trống thì đọc biến môi trường `DATABASE_URL`; `target_metadata = Base.metadata`, import mọi module models). Tạo `0001_initial.py` bằng `alembic revision --autogenerate` rồi **tự thêm** partial index (`postgresql_where=text("status <> 'CANCELLED'")`) nếu autogenerate bỏ sót.
+- [x] **Step 4: Cài đặt** `conftest.py`. Đây là phần hạ tầng mà test không tự quyết định được:
 
 ```python
 @pytest.fixture(scope="session")
@@ -226,8 +226,8 @@ def db(engine):
 
 `csrf_token` lấy giá trị từ thẻ `<meta name="csrf-token" content="...">` của trang `path` bằng regex. `login` gọi `POST /login` với `username`, `TEST_PASSWORD`, `csrf_token`, rồi `assert r.status_code == 303`. (Hai helper này dùng được từ Task 3.)
 
-- [ ] **Step 5: Chạy** `uv run pytest -v`. Kỳ vọng: tất cả PASS (Docker phải đang chạy).
-- [ ] **Step 6: Commit** `feat(app): data model, migration 0001 và hạ tầng test Postgres`
+- [x] **Step 5: Chạy** `uv run pytest -v`. Kỳ vọng: tất cả PASS (Docker phải đang chạy).
+- [x] **Step 6: Commit** `feat(app): data model, migration 0001 và hạ tầng test Postgres`
 
 ---
 
@@ -249,7 +249,7 @@ def db(engine):
   - Route: `GET /login`, `POST /login` (thành công → `session.clear()`, đặt `user_id` và CSRF mới, 303 về `/`; thất bại → 200 với thông báo chung "Tên đăng nhập hoặc mật khẩu không đúng"), `POST /logout` (xóa session, 303 về `/login`), `GET /` (trang chủ theo vai trò, cần đăng nhập), `GET/POST /account/password` (đổi mật khẩu, phải nhập đúng mật khẩu cũ, mật khẩu mới ≥ 10 ký tự).
   - `SessionMiddleware(secret_key, session_cookie="medicare_session", max_age=settings.session_max_age, same_site="lax", https_only=settings.env == "production")`.
 
-- [ ] **Step 1: Viết test thất bại** `app/tests/test_auth.py`
+- [x] **Step 1: Viết test thất bại** `app/tests/test_auth.py`
 
 ```python
 def test_login_success_redirects_home(client, db):
@@ -303,7 +303,7 @@ def test_password_hash_is_argon2(db):
 
 (`/api/v1/appointments` được tạo ở Task 6. Đến lúc đó test này chỉ yêu cầu 401 cho đường dẫn `/api/` chưa xác thực. Cài `LoginRequired` sao cho mọi đường dẫn `/api/*` không có session đều trả 401 trước khi route được tìm tới, hoặc tạm đánh dấu test này `xfail` đến Task 6.)
 
-- [ ] **Step 2: Viết test thất bại** `app/tests/test_errors.py`
+- [x] **Step 2: Viết test thất bại** `app/tests/test_errors.py`
 
 ```python
 def test_unhandled_error_is_generic(app, client, caplog):
@@ -320,10 +320,10 @@ def test_404_page_generic(client):
     assert r.status_code == 404 and "Traceback" not in r.text
 ```
 
-- [ ] **Step 3: Chạy** `uv run pytest tests/test_auth.py tests/test_errors.py -v`. Kỳ vọng: FAIL.
-- [ ] **Step 4: Cài đặt** các module trong `common/`, `auth/router.py` và các template nền theo mục "Thiết kế giao diện": `base.html` (thanh trên, menu trái theo vai trò, breadcrumb, khu flash message, footer DEMO), `login.html`, `error.html`, `home.html`, cùng `static/css/app.css` (mount `/static`) và các filter `date_vn`, `datetime_vn`, `vnd`. Bootstrap 5 và Bootstrap Icons tải qua CDN jsDelivr, có `integrity` (SRI) và `crossorigin="anonymous"`. Thêm test `test_vnd_filter`: `vnd(Decimal("230000")) == "230.000 ₫"` và `test_date_vn_filter`: `date_vn(date(2026, 1, 5)) == "05/01/2026"`.
-- [ ] **Step 5: Chạy** `uv run pytest -v`. Kỳ vọng: tất cả PASS.
-- [ ] **Step 6: Commit** `feat(app): xác thực session, CSRF, khóa tài khoản, xử lý lỗi chung`
+- [x] **Step 3: Chạy** `uv run pytest tests/test_auth.py tests/test_errors.py -v`. Kỳ vọng: FAIL.
+- [x] **Step 4: Cài đặt** các module trong `common/`, `auth/router.py` và các template nền theo mục "Thiết kế giao diện": `base.html` (thanh trên, menu trái theo vai trò, breadcrumb, khu flash message, footer DEMO), `login.html`, `error.html`, `home.html`, cùng `static/css/app.css` (mount `/static`) và các filter `date_vn`, `datetime_vn`, `vnd`. Bootstrap 5 và Bootstrap Icons tải qua CDN jsDelivr, có `integrity` (SRI) và `crossorigin="anonymous"`. Thêm test `test_vnd_filter`: `vnd(Decimal("230000")) == "230.000 ₫"` và `test_date_vn_filter`: `date_vn(date(2026, 1, 5)) == "05/01/2026"`.
+- [x] **Step 5: Chạy** `uv run pytest -v`. Kỳ vọng: tất cả PASS.
+- [x] **Step 6: Commit** `feat(app): xác thực session, CSRF, khóa tài khoản, xử lý lỗi chung`
 
 ---
 
@@ -345,7 +345,7 @@ def test_404_page_generic(client):
     - `can_view_identifiers(user, patient) -> bool`: R-11
     - `can_cancel_appointment(user, appt) -> bool`: R-13
 
-- [ ] **Step 1: Viết `docs/security-requirements.md`**: phần giới thiệu, ma trận phân quyền (vai trò × tài nguyên × hành động), và các quy tắc với tiêu đề `### R-xx: <tên>` (đúng Hợp đồng 1), nguyên văn như sau:
+- [x] **Step 1: Viết `docs/security-requirements.md`**: phần giới thiệu, ma trận phân quyền (vai trò × tài nguyên × hành động), và các quy tắc với tiêu đề `### R-xx: <tên>` (đúng Hợp đồng 1), nguyên văn như sau:
   - R-01 Bệnh nhân chỉ xem được hồ sơ, bệnh án, đơn thuốc, hóa đơn, lịch hẹn của chính mình.
   - R-02 Bác sĩ xem được bệnh án của bệnh nhân thuộc khoa mình hoặc do mình phụ trách. Chỉ bác sĩ phụ trách (`attending_doctor_id`) được tạo hoặc sửa bệnh án.
   - R-03 Chỉ bác sĩ phụ trách được kê đơn. Y tá chỉ xem đơn của bệnh nhân thuộc khoa mình.
@@ -361,7 +361,7 @@ def test_404_page_generic(client):
   - R-13 Không đặt lịch hẹn trong quá khứ. Một bác sĩ không có hai lịch hẹn còn hiệu lực trùng giờ. Bệnh nhân chỉ được hủy lịch của chính mình khi lịch đang ở trạng thái REQUESTED.
   - R-14 Server không dùng đường dẫn file hay URL do người dùng cung cấp mà chưa đối chiếu với danh sách cho phép (allowlist).
   - R-15 Đối tượng không tồn tại và đối tượng không có quyền truy cập đều trả về 404 giống hệt nhau.
-- [ ] **Step 2: Viết test thất bại** `test_validators.py`:
+- [x] **Step 2: Viết test thất bại** `test_validators.py`:
 
 ```python
 @pytest.mark.parametrize("code,rate", [("DN1010123456789","1.00"),("DN3010123456789","0.95"),
@@ -391,10 +391,10 @@ def test_national_id():
 ("PATIENT","self","can_view_invoice",True), ("NURSE","same_dept","can_view_invoice",False),
 ```
 
-- [ ] **Step 3: Chạy** `uv run pytest tests/test_policy.py tests/test_validators.py -v`. Kỳ vọng: FAIL.
-- [ ] **Step 4: Cài đặt** `validators.py` và `policy.py`. Docstring mỗi hàm `can_*` ghi mã R-xx.
-- [ ] **Step 5: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
-- [ ] **Step 6: Commit** `feat(app): quy tắc bảo mật R-01..R-15, policy và validators`
+- [x] **Step 3: Chạy** `uv run pytest tests/test_policy.py tests/test_validators.py -v`. Kỳ vọng: FAIL.
+- [x] **Step 4: Cài đặt** `validators.py` và `policy.py`. Docstring mỗi hàm `can_*` ghi mã R-xx.
+- [x] **Step 5: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
+- [x] **Step 6: Commit** `feat(app): quy tắc bảo mật R-01..R-15, policy và validators` (R-16–R-19 được thêm ở giai đoạn E5)
 
 ---
 
@@ -415,7 +415,7 @@ def test_national_id():
   - `GET /api/v1/patients/{id}` → JSON `{id, code, full_name, date_of_birth, national_id, insurance_number, department_id}`, trong đó hai trường định danh được che theo R-11.
   - Mã bệnh nhân sinh tự động `BN` + số 6 chữ số.
 
-- [ ] **Step 1: Viết test thất bại** `test_patient.py`:
+- [x] **Step 1: Viết test thất bại** `test_patient.py`:
 
 ```python
 def test_receptionist_creates_patient(client, db):
@@ -465,10 +465,10 @@ def test_search_with_sql_metacharacters_is_safe(client, db):
     assert client.get("/patients", params={"q": "' OR 1=1 --"}).status_code == 200
 ```
 
-- [ ] **Step 2: Chạy** `uv run pytest tests/test_patient.py -v`. Kỳ vọng: FAIL.
-- [ ] **Step 3: Cài đặt** schemas (Pydantic, kiểm tra định dạng bằng `validators`), service, router và template. Lỗi validate → hiển thị lại form với 400 và thông báo tiếng Việt chứa tên trường ("CCCD", "Mã BHYT").
-- [ ] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
-- [ ] **Step 5: Commit** `feat(app): module bệnh nhân với phân quyền theo đối tượng và che định danh`
+- [x] **Step 2: Chạy** `uv run pytest tests/test_patient.py -v`. Kỳ vọng: FAIL.
+- [x] **Step 3: Cài đặt** schemas (Pydantic, kiểm tra định dạng bằng `validators`), service, router và template. Lỗi validate → hiển thị lại form với 400 và thông báo tiếng Việt chứa tên trường ("CCCD", "Mã BHYT").
+- [x] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
+- [x] **Step 5: Commit** `feat(app): module bệnh nhân với phân quyền theo đối tượng và che định danh`
 
 ---
 
@@ -488,7 +488,7 @@ def test_search_with_sql_metacharacters_is_safe(client, db):
   - `GET /api/v1/appointments`: danh sách JSON của chính người gọi.
   - Giờ hẹn phải là mốc 30 phút (phút = 0 hoặc 30), sai thì 400.
 
-- [ ] **Step 1: Viết test thất bại**:
+- [x] **Step 1: Viết test thất bại**:
 
 ```python
 def test_patient_books_own_appointment(client, db): ...   # 303, status REQUESTED
@@ -502,10 +502,10 @@ def test_api_lists_only_own(client, db): ...  # JSON không chứa id lịch c�
 
 Mỗi test ghi rõ dữ liệu (dùng factories, `scheduled_at` = ngày mai lúc 09:00 UTC) và assert mã trạng thái như comment ở trên.
 
-- [ ] **Step 2: Chạy** `uv run pytest tests/test_appointment.py -v`. Kỳ vọng: FAIL.
-- [ ] **Step 3: Cài đặt** service, router, template.
-- [ ] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS. Bỏ `xfail` ở `test_anonymous_html_redirects_and_api_401` nếu đã đặt ở Task 3.
-- [ ] **Step 5: Commit** `feat(app): module lịch hẹn, chống đặt trùng ở tầng DB`
+- [x] **Step 2: Chạy** `uv run pytest tests/test_appointment.py -v`. Kỳ vọng: FAIL.
+- [x] **Step 3: Cài đặt** service, router, template.
+- [x] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS. Bỏ `xfail` ở `test_anonymous_html_redirects_and_api_401` nếu đã đặt ở Task 3.
+- [x] **Step 5: Commit** `feat(app): module lịch hẹn, chống đặt trùng ở tầng DB`
 
 ---
 
@@ -527,7 +527,7 @@ Mỗi test ghi rõ dữ liệu (dùng factories, `scheduled_at` = ngày mai lúc
   - `GET /api/v1/records/{id}`
   - `notes` hiển thị dạng văn bản đã escape, giữ xuống dòng bằng CSS `white-space: pre-wrap` (không dùng `|safe`).
 
-- [ ] **Step 1: Viết test thất bại**:
+- [x] **Step 1: Viết test thất bại**:
 
 ```python
 def test_attending_doctor_creates_record_and_audit_logged(client, db): ...
@@ -544,10 +544,10 @@ def test_record_creation_does_not_log_pii(client, db, caplog):
     # → "Ung thư phổi" not in caplog.text và patient.national_id not in caplog.text
 ```
 
-- [ ] **Step 2: Chạy** `uv run pytest tests/test_record.py -v`. Kỳ vọng: FAIL.
-- [ ] **Step 3: Cài đặt** `audit/service.py`, `record/*`, template. IP lấy từ `request.client.host`.
-- [ ] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
-- [ ] **Step 5: Commit** `feat(app): module bệnh án với audit log (R-02, R-05, R-12)`
+- [x] **Step 2: Chạy** `uv run pytest tests/test_record.py -v`. Kỳ vọng: FAIL.
+- [x] **Step 3: Cài đặt** `audit/service.py`, `record/*`, template. IP lấy từ `request.client.host`.
+- [x] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
+- [x] **Step 5: Commit** `feat(app): module bệnh án với audit log (R-02, R-05, R-12)`
 
 ---
 
@@ -564,7 +564,7 @@ def test_record_creation_does_not_log_pii(client, db, caplog):
   - `GET /prescriptions/{id}`: người xem được bệnh án tương ứng.
   - `GET /admin/medicines`, `POST /admin/medicines` (ADMIN).
 
-- [ ] **Step 1: Viết test thất bại**:
+- [x] **Step 1: Viết test thất bại**:
 
 ```python
 def test_attending_doctor_prescribes(client, db): ...  # 303; CREATE_PRESCRIPTION được ghi audit
@@ -576,10 +576,10 @@ def test_prescription_total(db):
 def test_admin_adds_medicine_and_doctor_cannot(client, db): ...  # ADMIN 303; DOCTOR 403
 ```
 
-- [ ] **Step 2: Chạy** `uv run pytest tests/test_prescription.py -v`. Kỳ vọng: FAIL.
-- [ ] **Step 3: Cài đặt** service, router, template.
-- [ ] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
-- [ ] **Step 5: Commit** `feat(app): danh mục thuốc và kê đơn (R-03)`
+- [x] **Step 2: Chạy** `uv run pytest tests/test_prescription.py -v`. Kỳ vọng: FAIL.
+- [x] **Step 3: Cài đặt** service, router, template.
+- [x] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
+- [x] **Step 5: Commit** `feat(app): danh mục thuốc và kê đơn (R-03)`
 
 ---
 
@@ -602,7 +602,7 @@ def test_admin_adds_medicine_and_doctor_cannot(client, db): ...  # ADMIN 303; DO
   - `POST /invoices/{id}/pay` (RECEPTIONIST)
   - Lễ tân tạo hóa đơn **không** cần quyền xem bệnh án: service truy vấn record theo id, không qua `get_record_for`, và không ghi audit `VIEW_RECORD`.
 
-- [ ] **Step 1: Viết test thất bại**:
+- [x] **Step 1: Viết test thất bại**:
 
 ```python
 def test_invoice_with_80_percent_coverage(client, db):
@@ -616,10 +616,10 @@ def test_receptionist_invoice_does_not_expose_diagnosis(client, db):
     # trang /invoices/{id} không chứa diagnosis_text của bệnh án
 ```
 
-- [ ] **Step 2: Chạy** `uv run pytest tests/test_billing.py -v`. Kỳ vọng: FAIL.
-- [ ] **Step 3: Cài đặt** service, router, template.
-- [ ] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
-- [ ] **Step 5: Commit** `feat(app): viện phí và tính BHYT ở server (R-04)`
+- [x] **Step 2: Chạy** `uv run pytest tests/test_billing.py -v`. Kỳ vọng: FAIL.
+- [x] **Step 3: Cài đặt** service, router, template.
+- [x] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
+- [x] **Step 5: Commit** `feat(app): viện phí và tính BHYT ở server (R-04)`
 
 ---
 
@@ -635,7 +635,7 @@ def test_receptionist_invoice_does_not_expose_diagnosis(client, db):
   - `GET /admin/audit?record_id=&page=` (50 dòng mỗi trang, mới nhất trước)
   - Tất cả chỉ dành cho ADMIN. Không có route nào sửa hoặc xóa `AuditLog` (R-06).
 
-- [ ] **Step 1: Viết test thất bại**:
+- [x] **Step 1: Viết test thất bại**:
 
 ```python
 def test_admin_creates_doctor_requires_department(client, db): ...  # thiếu department → 400
@@ -648,10 +648,10 @@ def test_no_mutating_audit_routes(app):
     assert not any("audit" in p for p in paths)
 ```
 
-- [ ] **Step 2: Chạy** `uv run pytest tests/test_admin.py -v`. Kỳ vọng: FAIL.
-- [ ] **Step 3: Cài đặt** router và template.
-- [ ] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
-- [ ] **Step 5: Commit** `feat(app): quản trị tài khoản và xem audit log (R-06)`
+- [x] **Step 2: Chạy** `uv run pytest tests/test_admin.py -v`. Kỳ vọng: FAIL.
+- [x] **Step 3: Cài đặt** router và template.
+- [x] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS.
+- [x] **Step 5: Commit** `feat(app): quản trị tài khoản và xem audit log (R-06)`
 
 ---
 
@@ -667,7 +667,7 @@ def test_no_mutating_audit_routes(app):
   - Image: base `python:3.12-slim`, `uv` copy từ `ghcr.io/astral-sh/uv`, cài bằng `uv sync --frozen --no-dev`, **chạy bằng user không phải root** (`USER app`), có `HEALTHCHECK` gọi `/health`. Entrypoint chạy `alembic upgrade head` rồi `uvicorn medicare.main:create_app --factory --host 0.0.0.0 --port 8000`.
   - Compose: service `db` (`postgres:16-alpine`, healthcheck `pg_isready`, volume có tên) và `app` (build `../app`, `env_file: ../app/.env`, `depends_on: db: condition: service_healthy`, cổng `8000:8000`).
 
-- [ ] **Step 1: Viết test thất bại** `test_seed.py`:
+- [x] **Step 1: Viết test thất bại** `test_seed.py`:
 
 ```python
 def test_seed_counts_and_idempotent_users(db):
@@ -680,8 +680,8 @@ def test_seed_refuses_outside_development(monkeypatch):
     assert main() == 1
 ```
 
-- [ ] **Step 2: Chạy** `uv run pytest tests/test_seed.py -v`. Kỳ vọng: FAIL.
-- [ ] **Step 3: Cài đặt** `seed.py`, Dockerfile, entrypoint, compose, `README.md` (hướng dẫn: copy `.env.example` thành `.env`, `docker compose -f infra/docker-compose.yml up -d --build`, seed bằng `docker compose ... exec app python -m medicare.seed`, đăng nhập bằng `bacsi1`).
-- [ ] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS toàn bộ.
-- [ ] **Step 5: Kiểm tra end-to-end:** `docker compose -f infra/docker-compose.yml up -d --build`, sau đó `curl -fsS localhost:8000/health`. Kỳ vọng: `{"status":"ok"}`. Seed xong, đăng nhập `bacsi1` trên trình duyệt và xem được danh sách bệnh nhân khoa mình. Chạy `docker compose ... exec app whoami`, kỳ vọng `app`.
-- [ ] **Step 6: Commit** `feat(app): dữ liệu mẫu, Dockerfile chạy non-root, docker compose`
+- [x] **Step 2: Chạy** `uv run pytest tests/test_seed.py -v`. Kỳ vọng: FAIL.
+- [x] **Step 3: Cài đặt** `seed.py`, Dockerfile, entrypoint, compose, `README.md` (hướng dẫn: copy `.env.example` thành `.env`, `docker compose -f infra/docker-compose.yml up -d --build`, seed bằng `docker compose ... exec app python -m medicare.seed`, đăng nhập bằng `bacsi1`).
+- [x] **Step 4: Chạy** `uv run pytest -v`. Kỳ vọng: PASS toàn bộ.
+- [x] **Step 5: Kiểm tra end-to-end:** `docker compose -f infra/docker-compose.yml up -d --build`, sau đó `curl -fsS localhost:8000/health`. Kỳ vọng: `{"status":"ok"}`. Seed xong, đăng nhập `bacsi1` trên trình duyệt và xem được danh sách bệnh nhân khoa mình. Chạy `docker compose ... exec app whoami`, kỳ vọng `app`.
+- [x] **Step 6: Commit** `feat(app): dữ liệu mẫu, Dockerfile chạy non-root, docker compose`

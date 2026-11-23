@@ -38,6 +38,7 @@ import yaml
 HERE = Path(__file__).resolve().parent
 SCENARIOS = HERE / "scenarios"
 BASE_FILE = HERE / "BASE_COMMIT"
+# Paths as they are in BASE_COMMIT (the design docs lived in docs/superpowers at that commit).
 SANITIZED = ("docs/superpowers", "agent", "benchmark", "docs/baseline-scan.md", "docs/pipeline.md",
              "infra/README.md", "deploy/README.md")
 # Exact edits of the base tree; a missing `old` text is an error, so nothing slips through when

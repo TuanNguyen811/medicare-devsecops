@@ -6,7 +6,7 @@ Agent tự xây dựng bằng Function Calling, dùng để review bảo mật P
 2. **Săn thêm** lỗ hổng mà công cụ quét bỏ sót trong phần code PR thay đổi: phân quyền, IDOR, fail-open, vi phạm quy tắc R-01..R-19.
 3. **Đề xuất cách sửa** bằng lời cho mỗi lỗi thật. Agent chỉ đọc, không sinh code: lập trình viên đọc báo cáo và tự sửa, quality gate chặn merge tới khi lỗi được xử lý.
 
-Thiết kế nằm ở spec mục 4 (`docs/superpowers/specs/2026-11-07-devsecops-ai-agent-design.md`) và spec bổ sung mục 4 (`docs/superpowers/specs/2026-11-21-ops-dast-benchmark-design.md`). Giao diện với pipeline là Hợp đồng 2 (`docs/superpowers/plans/2026-11-07-00-roadmap.md`).
+Thiết kế nằm ở spec mục 5 (`docs/specs/2026-11-07-devsecops-ai-agent-design.md`). Giao diện với pipeline là Hợp đồng 2 (`docs/plans/2026-11-07-00-roadmap.md`).
 
 ## Cài đặt và chạy thử trên máy
 
@@ -79,7 +79,7 @@ secagent/mcp_bridge.py (MCP stdio) ── socket 127.0.0.1, token riêng của p
 
 | File | Nội dung |
 |---|---|
-| `report.json` | Kết luận cho từng cụm phát hiện, theo đúng schema spec 4.3 cộng `finding_ids`. Quality gate đọc file này |
+| `report.json` | Kết luận cho từng cụm phát hiện, theo đúng schema spec mục 5.3 cộng `finding_ids`. Quality gate đọc file này |
 | `report.md` | Comment báo cáo trên PR (tiếng Việt) |
 | `agent.sarif` | Lỗ hổng do Agent tự tìm, upload lên tab Security (category `ai-agent`) |
 | `review.json` | Review với comment tại dòng lỗi (dòng PR thêm vào): vấn đề và cách sửa |
@@ -117,7 +117,7 @@ Với `claude-mcp`, mỗi lượt bổ sung (chạm giới hạn, hỏi lại c�
   - `claude-mcp` không bao giờ chạy trên CI. GitHub không giữ thông tin đăng nhập Claude nào.
 - **Bằng chứng cho FP.** Kết luận `FP` phải trích ít nhất một đoạn mã thật (≥ 10 ký tự) tại vị trí phát hiện (±20 dòng) hoặc trong file liên quan theo luồng dữ liệu; với phát hiện SCA thì chỉ cần trích được mã thật, ví dụ nơi import. Không đạt thì kết luận thành `NEEDS_REVIEW`.
 - **Chỉ thẩm định phát hiện trong phần PR thay đổi**, đúng tập mà quality gate xét, và xét phát hiện nghiêm trọng nhất trước.
-- **Dữ liệu gửi đi.** Code của PR được gửi cho nhà cung cấp LLM của chế độ đã chọn; cần cân nhắc điều này trong môi trường bệnh viện thật (spec mục 5.7).
+- **Dữ liệu gửi đi.** Code của PR được gửi cho nhà cung cấp LLM của chế độ đã chọn; cần cân nhắc điều này trong môi trường bệnh viện thật (spec mục 9).
 
 ## Phát triển
 

@@ -1,4 +1,4 @@
-"""Phase 2: deterministic checks after the review session (spec 4.1).
+"""Phase 2: deterministic checks after the review session (spec 5.1).
 
 - Coverage: clusters without a verdict get one follow-up request; still missing → NEEDS_REVIEW.
 - Anti-hallucination: cited evidence must exist in the repository; otherwise → NEEDS_REVIEW.

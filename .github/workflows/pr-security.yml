@@ -273,7 +273,7 @@ jobs:
           sarif_file: sarif/zizmor.sarif
           category: zizmor
 
-  # DAST (spec addendum 5): the PR's build runs on the runner, ZAP scans it once per role,
+  # DAST (spec 4): the PR's build runs on the runner, ZAP scans it once per role,
   # logged in as that role's demo account. No secret is referenced: the
   # database password, SECRET_KEY and DEMO_PASSWORD are generated here and never printed.
   dast-zap:

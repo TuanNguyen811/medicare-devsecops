@@ -1,7 +1,5 @@
 # Giai đoạn 4: Giám sát Implementation Plan
 
-> **For agentic workers:** Native (Claude tự làm, review toàn nhánh ở cuối). Steps use checkbox (`- [ ]`) syntax.
-
 **Goal:**
 - App xuất metrics Prometheus ở cổng riêng.
 - Prometheus, Alertmanager, Grafana chạy trong cụm của Docker Desktop, được `pull-deploy.sh` apply.
@@ -18,7 +16,7 @@
 
 **Tech Stack:** prometheus-client 0.26, Prometheus v3.16.0, Alertmanager v0.35.0, Grafana 13.3.1 (ghim digest).
 
-**Spec:** `docs/superpowers/specs/2026-11-21-ops-dast-benchmark-design.md` mục 7 (các quyết định khi làm ở 7.4).
+**Spec:** `docs/specs/2026-11-07-devsecops-ai-agent-design.md` mục 7 (các quyết định khi làm ở 7.4).
 
 ## Global Constraints
 

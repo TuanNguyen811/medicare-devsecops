@@ -1,4 +1,4 @@
-"""Phase 1: the single-pass review session (spec 4.1) driven by function calling.
+"""Phase 1: the single-pass review session (spec 5.1) driven by function calling.
 
 One session per batch of at most `batch_size` clusters; only the first batch hunts for new
 vulnerabilities. A session ends when the model calls `finish`, or at the step limit, where one

@@ -1,4 +1,4 @@
-"""LLM mode `claude-mcp` (spec addendum 4.2): Claude Code on this machine is the model.
+"""LLM mode `claude-mcp` (spec 5.5): Claude Code on this machine is the model.
 
 secagent keeps the review session: tool registry, submissions, trace, budgets. Each session runs
 one `claude -p` process that sees no built-in tool at all (`--tools ""`), only the session's
