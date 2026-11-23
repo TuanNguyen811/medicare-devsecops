@@ -15,6 +15,24 @@ from medicare.record.models import MedicalRecord
 ENTITY = "prescription"
 MAX_ITEMS = 20
 
+# Ward templates for common orders on rounds: (label, [(medicine code, quantity, dosage)]).
+QUICK_TEMPLATES = {
+    "ha-sot": ("Hạ sốt", [
+        ("PARA500", 10, "Uống 1 viên khi sốt trên 38,5°C, cách nhau ít nhất 4 giờ"),
+    ]),
+    "tieu-chay": ("Tiêu chảy cấp", [
+        ("ORS", 6, "Pha 1 gói với 200 ml nước, uống sau mỗi lần đi ngoài"),
+        ("SMEC", 6, "Uống 1 gói x 3 lần/ngày"),
+    ]),
+    "di-ung": ("Dị ứng nhẹ", [
+        ("LORA10", 5, "Uống 1 viên buổi tối"),
+    ]),
+    "da-day": ("Đau dạ dày", [
+        ("OMEP20", 14, "Uống 1 viên trước ăn sáng 30 phút"),
+        ("DOMP10", 9, "Uống 1 viên x 3 lần/ngày trước ăn"),
+    ]),
+}
+
 
 class PrescriptionError(ValueError):
     """Invalid prescription or medicine data; the message is user-facing."""
@@ -40,6 +58,42 @@ def create_prescription(
     ip: str | None,
 ) -> Prescription:
     record = get_record_for_prescribing(db, user, record_id)
+    return _save_prescription(db, user, record, items, note, ip)
+
+
+def quick_prescribe(
+    db: Session, user: User, record_id: int, template_key: str, ip: str | None
+) -> Prescription:
+    """One-click prescription from a ward template, for orders given on rounds."""
+    record = db.get(MedicalRecord, record_id)
+    if record is None:
+        raise NotFound
+    if not policy.can_view_record(user, db.get(Patient, record.patient_id)):
+        metrics.authz_denied("prescription")
+        raise NotFound
+    template = QUICK_TEMPLATES.get(template_key)
+    if template is None:
+        raise PrescriptionError("Đơn mẫu không tồn tại")
+    label, lines = template
+    items = []
+    for code, quantity, dosage in lines:
+        medicine_id = db.scalar(
+            select(Medicine.id).where(Medicine.code == code, Medicine.is_active.is_(True))
+        )
+        if medicine_id is None:
+            raise PrescriptionError(f"Đơn mẫu {label}: thuốc {code} không còn trong danh mục")
+        items.append((medicine_id, quantity, dosage))
+    return _save_prescription(db, user, record, items, f"Đơn mẫu: {label}", ip)
+
+
+def _save_prescription(
+    db: Session,
+    user: User,
+    record: MedicalRecord,
+    items: list[tuple[int, int, str]],
+    note: str,
+    ip: str | None,
+) -> Prescription:
     if not items:
         raise PrescriptionError("Đơn thuốc phải có ít nhất một thuốc")
     if len(items) > MAX_ITEMS:

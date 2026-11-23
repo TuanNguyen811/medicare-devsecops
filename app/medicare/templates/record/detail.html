@@ -20,6 +20,24 @@
     </dl>
   </div>
 </div>
+{% if can_quick_prescribe %}
+<div class="card mc-card mt-3">
+  <div class="card-header">Kê đơn nhanh theo đơn mẫu</div>
+  <div class="card-body">
+    <form class="row g-2 align-items-center" method="post" action="/records/{{ record.id }}/prescriptions/quick">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-sm-6">
+        <select class="form-select form-select-sm" name="template">
+          {% for key, (label, lines) in quick_templates.items() %}
+          <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-lightning"></i> Kê đơn</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
 <div class="card mc-card mt-3">
   <div class="card-header">Đơn thuốc</div>
   <ul class="list-group list-group-flush">
