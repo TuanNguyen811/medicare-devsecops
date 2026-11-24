@@ -9,6 +9,7 @@ from medicare.appointment.models import Appointment, AppointmentStatus
 from medicare.auth.models import Role, User
 from medicare.common import metrics
 from medicare.common.errors import Conflict, NotFound
+from medicare.department.models import Department
 from medicare.patient.models import Patient
 from medicare.patient.service import get_patient_for
 
@@ -59,6 +60,19 @@ def bookable_doctors(db: Session) -> list[User]:
         .where(User.role == Role.DOCTOR, User.is_active.is_(True))
         .order_by(User.full_name)
     )
+    return list(db.scalars(stmt).unique())
+
+
+def doctor_directory(db: Session, department_id: int | None = None) -> list[User]:
+    """Active doctors ordered by department then name, optionally for one department."""
+    stmt = (
+        select(User)
+        .outerjoin(Department, User.department_id == Department.id)
+        .where(User.role == Role.DOCTOR, User.is_active.is_(True))
+        .order_by(Department.name.nulls_last(), Department.id, User.full_name, User.id)
+    )
+    if department_id is not None:
+        stmt = stmt.where(User.department_id == department_id)
     return list(db.scalars(stmt).unique())
 
 

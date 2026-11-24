@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Danh sách bác sĩ{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Danh sách bác sĩ</h1>
+<div class="card mc-card">
+  <div class="card-body pb-0">
+    <form class="row g-2 mb-3" method="get" action="/appointments/doctors">
+      <div class="col-sm-5 col-lg-3">
+        <select class="form-select form-select-sm" name="department_id" aria-label="Khoa">
+          <option value="">Tất cả các khoa</option>
+          {% for d in departments %}
+          <option value="{{ d.id }}"{% if selected_department == d.id %} selected{% endif %}>{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-funnel"></i> Lọc</button></div>
+      <div class="col-auto align-self-center small text-secondary">{{ total }} bác sĩ</div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead><tr><th>Bác sĩ</th><th class="text-end"></th></tr></thead>
+      {% for dept, members in groups %}
+      <tbody>
+        <tr class="table-light"><th colspan="2">{{ dept.name if dept else "Chưa phân khoa" }}</th></tr>
+        {% for doctor in members %}
+        <tr data-doctor-row>
+          <td>{{ doctor.full_name }}</td>
+          <td class="text-end">
+            {% if can_book %}<a class="btn btn-outline-primary btn-sm" href="/appointments/new?doctor_id={{ doctor.id }}"><i class="bi bi-calendar-plus"></i> Đặt lịch</a>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% else %}
+      <tbody><tr><td colspan="2" class="text-center text-secondary py-3">Không có bác sĩ</td></tr></tbody>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

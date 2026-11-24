@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from itertools import groupby
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
@@ -13,15 +14,17 @@ from medicare.auth.models import Role, User
 from medicare.common.auth import get_current_user, require_roles
 from medicare.common.csrf import verify_csrf
 from medicare.common.errors import Conflict
-from medicare.common.ids import ObjectId
+from medicare.common.ids import ObjectId, parse_id
 from medicare.common.templating import flash, render
 from medicare.db import get_db
+from medicare.department.models import Department
 from medicare.patient.models import Patient
 
 router = APIRouter()
 
 booker_user = require_roles(Role.PATIENT, Role.RECEPTIONIST)
 receptionist_user = require_roles(Role.RECEPTIONIST)
+directory_user = require_roles(Role.ADMIN, Role.RECEPTIONIST)
 
 STATUS_LABELS = {
     "REQUESTED": ("Chờ duyệt", "warning"),
@@ -63,19 +66,43 @@ def list_appointments(
             "status_labels": STATUS_LABELS,
             "can_book": user.role in (Role.PATIENT, Role.RECEPTIONIST),
             "can_confirm": user.role == Role.RECEPTIONIST,
+            "can_view_doctors": user.role in (Role.ADMIN, Role.RECEPTIONIST),
             "breadcrumbs": [("Trang chủ", "/"), ("Lịch hẹn", None)],
         },
     )
+
+
+@router.get("/appointments/doctors")
+def doctor_directory(
+    request: Request,
+    department_id: str = "",
+    user: User = Depends(directory_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    selected = parse_id(department_id)
+    doctors = service.doctor_directory(db, selected)
+    groups = [(dept, list(members))
+              for dept, members in groupby(doctors, key=lambda d: d.department)]
+    return render(request, "appointment/doctors.html", {
+        "groups": groups,
+        "total": len(doctors),
+        "departments": db.scalars(select(Department).order_by(Department.name)).all(),
+        "selected_department": selected,
+        "can_book": user.role == Role.RECEPTIONIST,
+        "breadcrumbs": [*_CRUMBS, ("Danh sách bác sĩ", None)],
+    })
 
 
 @router.get("/appointments/new")
 def new_appointment_form(
     request: Request,
     patient_id: str = "",
+    doctor_id: str = "",
     user: User = Depends(booker_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    return _form_page(request, db, user, values={"patient_id": patient_id})
+    values = {"patient_id": patient_id, "doctor_id": parse_id(doctor_id) or ""}
+    return _form_page(request, db, user, values=values)
 
 
 @router.post("/appointments", dependencies=[Depends(verify_csrf)])
